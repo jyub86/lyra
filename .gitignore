@@ -8,6 +8,9 @@ data/worship.db-shm
 data/worship.db-wal
 data/uploads/
 
+# Source content (copyrighted: 개역개정 / 새찬송가 / 교독문) — not distributed
+data/source/
+
 # OS / editor
 .DS_Store
 *.log

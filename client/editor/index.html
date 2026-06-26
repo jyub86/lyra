@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sunday Worship — 편집</title>
+  <link rel="stylesheet" href="/shared/styles/slide.css" />
+  <link rel="stylesheet" href="/editor/editor.css" />
+</head>
+<body>
+  <header class="topbar">
+    <strong class="brand">Sunday Worship</strong>
+    <select id="service-select" title="예배 덱 선택"></select>
+    <button id="new-service">+ 새 예배</button>
+    <span class="spacer"></span>
+    <label class="theme-pick">테마
+      <select id="theme-select"></select>
+    </label>
+    <a id="open-presenter" href="/presenter" target="_blank" rel="noopener">발표 화면 ↗</a>
+  </header>
+
+  <main class="layout">
+    <!-- 좌: 씬/슬라이드 트리 -->
+    <aside class="col tree">
+      <div class="col-head">
+        <span>순서</span>
+        <button id="add-scene" class="mini">+ 씬</button>
+      </div>
+      <div id="scene-list" class="scene-list"></div>
+    </aside>
+
+    <!-- 중: 미리보기 -->
+    <section class="col canvas">
+      <div class="canvas-wrap">
+        <div id="preview" class="slide-layers"></div>
+      </div>
+      <div class="canvas-bar">
+        <button id="prev-slide">◀</button>
+        <span id="slide-pos" class="slide-pos">—</span>
+        <button id="next-slide">▶</button>
+        <span class="spacer"></span>
+        <button id="present-here" title="이 슬라이드를 발표 화면에 띄움">발표로 보내기</button>
+        <button id="del-slide" class="danger">슬라이드 삭제</button>
+      </div>
+    </section>
+
+    <!-- 우: 추가 / 검사기 -->
+    <aside class="col panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="add">추가</button>
+        <button class="tab" data-tab="inspect">검사기</button>
+      </div>
+      <div id="tab-add" class="tab-body">
+        <label>대상 씬
+          <select id="target-scene"></select>
+        </label>
+        <label>슬라이드 종류
+          <select id="add-type">
+            <option value="title">타이틀</option>
+            <option value="section">순서 구분</option>
+            <option value="bible">성경 본문</option>
+            <option value="hymn">찬송가</option>
+            <option value="responsive_reading">교독문</option>
+            <option value="praise">찬양(가사)</option>
+            <option value="announcement">광고</option>
+            <option value="blank">빈 화면</option>
+          </select>
+        </label>
+        <div id="add-fields" class="fields"></div>
+        <button id="add-slide-btn" class="primary">슬라이드 추가</button>
+        <p id="add-msg" class="msg"></p>
+      </div>
+      <div id="tab-inspect" class="tab-body" hidden>
+        <div id="inspect-empty" class="muted">슬라이드를 선택하세요.</div>
+        <div id="inspect-body" hidden>
+          <label>종류 <input id="insp-type" readonly /></label>
+          <label>data (JSON)
+            <textarea id="insp-data" rows="8" spellcheck="false"></textarea>
+          </label>
+          <label>배경
+            <select id="insp-bg-type">
+              <option value="theme">테마 기본</option>
+              <option value="color">색</option>
+              <option value="gradient">그라데이션</option>
+              <option value="image">이미지 URL</option>
+              <option value="video">영상 URL</option>
+            </select>
+          </label>
+          <div id="insp-bg-fields" class="fields"></div>
+          <button id="insp-save" class="primary">변경 저장</button>
+          <p id="insp-msg" class="msg"></p>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script type="module" src="/editor/editor.js"></script>
+</body>
+</html>

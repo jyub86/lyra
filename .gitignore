@@ -1,0 +1,13 @@
+node_modules/
+bun.lock
+bun.lockb
+
+# Runtime data (generated)
+data/worship.db
+data/worship.db-shm
+data/worship.db-wal
+data/uploads/
+
+# OS / editor
+.DS_Store
+*.log

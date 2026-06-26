@@ -1,0 +1,72 @@
+/* Shared slide rendering styles (editor preview + presenter). 16:9, cqw-sized. */
+
+.slide-layers {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  container-type: size;
+  font-family: var(--font-family, sans-serif);
+  color: var(--text, #fff);
+  background: #000;
+}
+
+.layer-bg, .layer-content, .layer-overlays {
+  position: absolute;
+  inset: 0;
+}
+.layer-bg { z-index: 0; }
+.layer-content { z-index: 1; display: flex; }
+.layer-overlays { z-index: 2; pointer-events: none; }
+
+.bg-video {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+.bg-dim { position: absolute; inset: 0; }
+
+/* content box: centered, with comfortable padding */
+.content {
+  margin: auto;
+  width: 86%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  text-align: center;
+  line-height: var(--line-height, 1.5);
+  font-weight: var(--weight, 600);
+}
+
+.title { font-size: var(--title-size, 5cqw); font-weight: 800; }
+.subtitle { font-size: var(--label-size, 1.8cqw); color: var(--muted); }
+.section-label { font-size: calc(var(--title-size, 5cqw) * 0.8); color: var(--accent); font-weight: 800; }
+
+.ref-label { font-size: var(--label-size, 1.8cqw); color: var(--accent); margin-bottom: 0.3em; }
+.bible-body { font-size: var(--body-size, 3.2cqw); }
+.verse { display: inline; }
+.verse-no { font-size: 0.55em; color: var(--accent); vertical-align: super; margin-right: 0.1em; }
+
+.hymn-head { display: flex; gap: 0.5em; align-items: baseline; font-size: var(--label-size, 1.8cqw); color: var(--muted); }
+.hymn-no { color: var(--accent); }
+.praise-title { font-size: var(--label-size, 1.8cqw); color: var(--muted); }
+.verse-label { font-size: var(--label-size, 1.8cqw); color: var(--accent); }
+.lyric-body { font-size: var(--body-size, 3.2cqw); }
+.lyric-body .line { margin: 0.1em 0; }
+
+.reading-body { font-size: calc(var(--body-size, 3.2cqw) * 0.92); width: 100%; }
+.reading-seg { margin: 0.35em 0; }
+.reading-seg .role-tag {
+  display: inline-block; font-size: 0.5em; padding: 0.15em 0.6em; border-radius: 1em;
+  margin-right: 0.5em; vertical-align: middle; font-weight: 700;
+}
+.role-leader .role-tag { background: var(--leader); color: #000; }
+.role-congregation .role-tag { background: var(--congregation); color: #000; }
+.role-unison { color: var(--accent); font-weight: 800; }
+.role-unison .role-tag { background: var(--accent); color: #000; }
+
+.announce-list { font-size: calc(var(--body-size, 3.2cqw) * 0.78); text-align: left; list-style: disc; padding-left: 1.2em; }
+.announce-list li { margin: 0.25em 0; }
+
+.overlay { position: absolute; transform: translate(-50%, -50%); }

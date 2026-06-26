@@ -1,0 +1,20 @@
+{
+  "id": "dark-blue",
+  "name": "다크 블루",
+  "background": { "type": "gradient", "from": "#1a1a2e", "to": "#16213e", "angle": 135 },
+  "colors": {
+    "text": "#ffffff",
+    "accent": "#7aa2f7",
+    "muted": "#c0caf5",
+    "leader": "#7aa2f7",
+    "congregation": "#e0af68"
+  },
+  "font": {
+    "family": "'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif",
+    "title_size": 5.0,
+    "body_size": 3.2,
+    "label_size": 1.8,
+    "line_height": 1.5,
+    "weight": 600
+  }
+}

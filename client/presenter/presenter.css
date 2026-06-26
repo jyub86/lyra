@@ -1,0 +1,22 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+
+.screen {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: #000;
+}
+/* Fit a 16:9 slide to the screen with letterboxing; on a 16:9 display it fills. */
+#stage {
+  width: min(100vw, 177.78vh);
+  height: auto;
+}
+.blackout { position: fixed; inset: 0; background: #000; z-index: 10; }
+
+.hint {
+  position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+  color: rgba(255,255,255,.35); font: 13px/1 system-ui, sans-serif;
+  background: rgba(0,0,0,.4); padding: 6px 12px; border-radius: 999px;
+  transition: opacity .4s; pointer-events: none;
+}
+.hint.fade { opacity: 0; }

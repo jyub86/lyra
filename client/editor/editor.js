@@ -1,6 +1,6 @@
 // 편집 UI 컨트롤러. 예배(순서) > 슬라이드 평면 구조. 모든 동작은 Tool 호출.
 import { callTool, loadTheme, uploadFile, BUILTIN_THEMES } from "/shared/api.js";
-import { renderSlideWithLayers } from "/shared/layer-renderer.js";
+import { renderSlideWithLayers, renderElements } from "/shared/layer-renderer.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -13,12 +13,14 @@ const state = {
   selectedSet: new Set(), // multi-selection
   anchor: null,         // range-select anchor (shift+click)
   mode: "list",         // "list" | "tiles"
+  editEl: null,         // selected free-element index within the primary slide
 };
 
 function setSingleSelection(id) {
   state.selected = id;
   state.anchor = id;
   state.selectedSet = new Set(id ? [id] : []);
+  state.editEl = null;
 }
 
 const slides = () => state.service?.slides || [];
@@ -87,6 +89,7 @@ function wireDrag(el) {
 
 // List-row click with multi-select (plain / ⌘·Ctrl toggle / Shift range).
 function onRowClick(s, e) {
+  state.editEl = null;
   const ids = slides().map((x) => x.id);
   if (e.shiftKey && state.anchor && ids.includes(state.anchor)) {
     const a = ids.indexOf(state.anchor), b = ids.indexOf(s.id);
@@ -159,7 +162,7 @@ function render() {
   $("view-tiles").classList.toggle("active", state.mode === "tiles");
   $("order-count").textContent = state.service ? `${slides().length}장` : "";
   if (state.mode === "tiles") renderTiles();
-  else { renderList(); renderPreview(); renderInspector(); }
+  else { renderList(); renderPreview(); renderInspector(); renderDesignPanel(); renderTemplatePanel(); }
 }
 
 function selectedSlide() {
@@ -192,6 +195,7 @@ function renderPreview() {
   const prev = $("preview");
   if (!slide) { prev.replaceChildren(); $("slide-pos").textContent = "—"; return; }
   renderSlideWithLayers(prev, slide, state.theme);
+  renderEditLayer();
   const idx = slides().findIndex((s) => s.id === slide.id);
   const n = state.selectedSet.size;
   $("slide-pos").textContent = n > 1 ? `${n}개 선택됨 · 드래그로 함께 이동` : `${idx + 1} / ${slides().length}`;
@@ -202,6 +206,224 @@ function navSlide(delta) {
   const next = slides()[idx + delta];
   if (next) { state.selected = next.id; render(); }
 }
+
+// ===== free-element canvas editing (Google-Slides-like) =====
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+const els = () => selectedSlide()?.overlays || [];
+
+// Interactive handle layer over #preview: select / move / resize elements.
+function renderEditLayer() {
+  const pv = $("preview");
+  if (!pv) return;
+  let layer = pv.querySelector(":scope > .edit-layer");
+  if (state.mode !== "list" || !selectedSlide()) { layer?.remove(); return; }
+  if (!layer) {
+    layer = elx("div", "edit-layer");
+    layer.addEventListener("mousedown", (e) => { if (e.target === layer) selectEl(null); });
+    pv.appendChild(layer);
+  }
+  layer.replaceChildren();
+  els().forEach((el, i) => {
+    const h = elx("div", "eh" + (i === state.editEl ? " sel" : ""));
+    h.style.left = (el.x ?? 0.4) * 100 + "%";
+    h.style.top = (el.y ?? 0.4) * 100 + "%";
+    h.style.width = (el.w ?? 0.2) * 100 + "%";
+    h.style.height = (el.h ?? 0.12) * 100 + "%";
+    h.addEventListener("mousedown", (e) => startMove(e, i));
+    if (i === state.editEl) {
+      for (const pos of ["nw", "ne", "sw", "se"]) {
+        const k = elx("div", "handle " + pos);
+        k.addEventListener("mousedown", (e) => startResize(e, i, pos));
+        h.appendChild(k);
+      }
+    }
+    layer.appendChild(h);
+  });
+}
+
+// Lightweight repaint during drag (no background rebuild → no video reload).
+function repaintEls() {
+  const ov = $("preview")?.querySelector(":scope > .layer-overlays");
+  if (ov) renderElements(ov, els());
+  renderEditLayer();
+}
+
+function selectEl(i) {
+  state.editEl = i;
+  if (i != null) showTab("design");
+  renderEditLayer();
+  renderDesignPanel();
+}
+
+function startMove(e, i) {
+  if (e.button !== 0) return;
+  e.preventDefault(); e.stopPropagation();
+  if (state.editEl !== i) selectEl(i);
+  const rect = $("preview").getBoundingClientRect();
+  const el = els()[i];
+  const sx = e.clientX, sy = e.clientY, ox = el.x ?? 0.4, oy = el.y ?? 0.4;
+  const mv = (ev) => {
+    el.x = clamp01(ox + (ev.clientX - sx) / rect.width);
+    el.y = clamp01(oy + (ev.clientY - sy) / rect.height);
+    repaintEls();
+  };
+  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); commitEls(); };
+  document.addEventListener("mousemove", mv);
+  document.addEventListener("mouseup", up);
+}
+
+function startResize(e, i, pos) {
+  e.preventDefault(); e.stopPropagation();
+  const rect = $("preview").getBoundingClientRect();
+  const el = els()[i];
+  const sx = e.clientX, sy = e.clientY;
+  const o = { x: el.x ?? 0.4, y: el.y ?? 0.4, w: el.w ?? 0.2, h: el.h ?? 0.12 };
+  const mv = (ev) => {
+    const dx = (ev.clientX - sx) / rect.width, dy = (ev.clientY - sy) / rect.height;
+    if (pos.includes("e")) el.w = Math.max(0.03, o.w + dx);
+    if (pos.includes("s")) el.h = Math.max(0.03, o.h + dy);
+    if (pos.includes("w")) { el.w = Math.max(0.03, o.w - dx); el.x = o.x + dx; }
+    if (pos.includes("n")) { el.h = Math.max(0.03, o.h - dy); el.y = o.y + dy; }
+    repaintEls();
+  };
+  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); commitEls(); };
+  document.addEventListener("mousemove", mv);
+  document.addEventListener("mouseup", up);
+}
+
+async function commitEls() {
+  const slide = selectedSlide();
+  if (!slide) return;
+  await callTool("set_slide_overlays", { slide_id: slide.id, overlays: slide.overlays || [] });
+  await refresh();
+}
+
+const ADD_DEFAULTS = {
+  text: () => ({ type: "text", x: 0.34, y: 0.42, w: 0.32, h: 0.12, text: "텍스트", size: 4, color: "#ffffff", align: "center", weight: 600 }),
+  rect: () => ({ type: "shape", shape: "rect", x: 0.4, y: 0.4, w: 0.2, h: 0.16, fill: "#7aa2f7", stroke: "#ffffff", stroke_width: 0, radius: 6 }),
+  ellipse: () => ({ type: "shape", shape: "ellipse", x: 0.4, y: 0.4, w: 0.18, h: 0.18, fill: "#7aa2f7", stroke: "#ffffff", stroke_width: 0 }),
+  line: () => ({ type: "shape", shape: "line", x: 0.3, y: 0.5, w: 0.4, h: 0.02, stroke: "#ffffff", stroke_width: 3 }),
+};
+
+async function addElement(kind, extra) {
+  const slide = selectedSlide();
+  if (!slide) { msg("add-msg", "슬라이드를 먼저 선택하세요.", true); return; }
+  const el = kind === "image" ? { type: "image", x: 0.35, y: 0.32, w: 0.3, h: 0.3, ...extra } : ADD_DEFAULTS[kind]();
+  slide.overlays = [...(slide.overlays || []), el];
+  state.editEl = slide.overlays.length - 1;
+  await commitEls();
+  selectEl(state.editEl);
+}
+
+function deleteEl(i) {
+  const slide = selectedSlide();
+  if (!slide || i == null) return;
+  slide.overlays = (slide.overlays || []).filter((_, j) => j !== i);
+  state.editEl = null;
+  commitEls();
+}
+
+function moveElZ(i, toFront) {
+  const slide = selectedSlide();
+  const arr = slide?.overlays;
+  if (!arr || i == null) return;
+  const [el] = arr.splice(i, 1);
+  if (toFront) { arr.push(el); state.editEl = arr.length - 1; }
+  else { arr.unshift(el); state.editEl = 0; }
+  commitEls();
+}
+
+// ----- 디자인 패널 (content style + selected element props) -----
+function renderDesignPanel() {
+  const slide = selectedSlide();
+  const style = slide?.data?.style || {};
+  $("cs-scale").value = style.scale ?? 1;
+  $("cs-scale-v").textContent = Number(style.scale ?? 1).toFixed(2) + "×";
+  $("cs-color").value = style.color || "#ffffff";
+  $("cs-align").value = style.align || "center";
+
+  const empty = $("el-empty"), body = $("el-props");
+  const el = state.editEl != null ? els()[state.editEl] : null;
+  if (!el) { empty.hidden = false; body.hidden = true; return; }
+  empty.hidden = true; body.hidden = false;
+  body.replaceChildren();
+
+  // field that edits el[field]; live on input, persist on change
+  const field = (label, type, fieldName, opts = {}) => {
+    const wrap = elx("label", null, label);
+    let input;
+    if (type === "textarea") { input = document.createElement("textarea"); input.rows = 2; input.value = el[fieldName] ?? ""; }
+    else if (type === "select") {
+      input = document.createElement("select");
+      for (const [v, t] of opts.options) { const o = document.createElement("option"); o.value = v; o.textContent = t; input.appendChild(o); }
+      input.value = el[fieldName] ?? opts.options[0][0];
+    } else {
+      input = document.createElement("input"); input.type = type;
+      if (type === "range") { input.min = opts.min; input.max = opts.max; input.step = opts.step; }
+      input.value = el[fieldName] ?? opts.def ?? "";
+    }
+    const apply = (commit) => {
+      let v = input.value;
+      if (type === "range" || opts.num) v = Number(v);
+      el[fieldName] = v;
+      repaintEls();
+      if (commit) commitEls();
+    };
+    input.addEventListener("input", () => apply(false));
+    input.addEventListener("change", () => apply(true));
+    wrap.appendChild(input);
+    body.appendChild(wrap);
+    return input;
+  };
+
+  if (el.type === "text") {
+    field("내용", "textarea", "text");
+    field("글자 크기", "range", "size", { min: 1.5, max: 12, step: 0.25, num: true });
+    field("색", "color", "color", { def: "#ffffff" });
+    field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
+    field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
+  } else if (el.type === "shape") {
+    if (el.shape !== "line") {
+      field("채움색", "color", "fill", { def: "#7aa2f7" });
+      field("테두리색", "color", "stroke", { def: "#ffffff" });
+      field("테두리 두께", "range", "stroke_width", { min: 0, max: 12, step: 1, num: true });
+      if (el.shape === "rect") field("모서리", "range", "radius", { min: 0, max: 40, step: 1, num: true });
+    } else {
+      field("선 색", "color", "stroke", { def: "#ffffff" });
+      field("선 두께", "range", "stroke_width", { min: 1, max: 14, step: 1, num: true });
+    }
+  } else if (el.type === "image") {
+    body.appendChild(elx("p", "muted", "이미지는 캔버스에서 드래그·크기조절하세요."));
+  }
+
+  const actions = elx("div", "el-actions");
+  const front = elx("button", "mini", "맨 앞으로"); front.onclick = () => moveElZ(state.editEl, true);
+  const back = elx("button", "mini", "맨 뒤로"); back.onclick = () => moveElZ(state.editEl, false);
+  const del = elx("button", "mini danger", "삭제"); del.onclick = () => deleteEl(state.editEl);
+  actions.append(front, back, del);
+  body.appendChild(actions);
+}
+
+// content (가사/본문) style: live on input, persist on change
+function applyContentStyleEdit(commit) {
+  const slide = selectedSlide();
+  if (!slide) return;
+  const style = { scale: Number($("cs-scale").value), color: $("cs-color").value, align: $("cs-align").value };
+  slide.data = { ...slide.data, style };
+  $("cs-scale-v").textContent = style.scale.toFixed(2) + "×";
+  renderPreview();
+  if (commit) callTool("update_slide", { slide_id: slide.id, fields: { data: slide.data } }).then(() => refresh());
+}
+function resetContentStyle() {
+  const slide = selectedSlide();
+  if (!slide) return;
+  const data = { ...slide.data }; delete data.style;
+  slide.data = data;
+  callTool("update_slide", { slide_id: slide.id, fields: { data } }).then(() => refresh());
+}
+
+function renderTemplatePanel() { /* implemented in P3 */ }
+
 
 // ---------- tiles ----------
 function renderTiles() {
@@ -405,15 +627,12 @@ async function importService(file) {
 function msg(id, text, err) { const el = $(id); if (!el) return; el.textContent = text; el.className = "msg" + (err ? " err" : ""); }
 
 // ---------- wire ----------
+function showTab(name) {
+  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
+  document.querySelectorAll(".tab-body").forEach((b) => { b.hidden = b.id !== "tab-" + name; });
+}
 function initTabs() {
-  document.querySelectorAll(".tab").forEach((t) => {
-    t.onclick = () => {
-      document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
-      t.classList.add("active");
-      $("tab-add").hidden = t.dataset.tab !== "add";
-      $("tab-inspect").hidden = t.dataset.tab !== "inspect";
-    };
-  });
+  document.querySelectorAll(".tab").forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
 }
 
 function init() {
@@ -432,6 +651,44 @@ function init() {
   $("present-here").onclick = presentHere;
   $("insp-bg-type").onchange = () => renderBgFields(selectedSlide()?.background);
   $("insp-save").onclick = saveInspector;
+
+  // element toolbar + design panel
+  document.querySelectorAll(".canvas-tools [data-add]").forEach((b) => {
+    b.onclick = () => (b.dataset.add === "image" ? $("el-image-file").click() : addElement(b.dataset.add));
+  });
+  $("el-image-file").onchange = async (e) => {
+    if (!e.target.files[0]) return;
+    try { const { url } = await uploadFile(e.target.files[0]); await addElement("image", { url }); }
+    catch (err) { msg("add-msg", err.message, true); }
+    e.target.value = "";
+  };
+  $("cs-scale").addEventListener("input", () => applyContentStyleEdit(false));
+  $("cs-scale").addEventListener("change", () => applyContentStyleEdit(true));
+  $("cs-color").addEventListener("input", () => applyContentStyleEdit(false));
+  $("cs-color").addEventListener("change", () => applyContentStyleEdit(true));
+  $("cs-align").addEventListener("change", () => applyContentStyleEdit(true));
+  $("cs-reset").onclick = resetContentStyle;
+  // keyboard: Delete removes selected element, arrows nudge
+  document.addEventListener("keydown", (e) => {
+    if (state.mode !== "list" || state.editEl == null) return;
+    const tag = document.activeElement?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    const el = els()[state.editEl];
+    if (!el) return;
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteEl(state.editEl); }
+    else if (e.key.startsWith("Arrow")) {
+      e.preventDefault();
+      const d = 0.005;
+      if (e.key === "ArrowLeft") el.x = clamp01((el.x ?? 0.4) - d);
+      if (e.key === "ArrowRight") el.x = clamp01((el.x ?? 0.4) + d);
+      if (e.key === "ArrowUp") el.y = clamp01((el.y ?? 0.4) - d);
+      if (e.key === "ArrowDown") el.y = clamp01((el.y ?? 0.4) + d);
+      repaintEls();
+      clearTimeout(window.__nudgeT);
+      window.__nudgeT = setTimeout(commitEls, 300);
+    }
+  });
+
   $("export-btn").onclick = exportService;
   $("import-btn").onclick = () => $("import-file").click();
   $("import-file").onchange = (e) => e.target.files[0] && importService(e.target.files[0]);

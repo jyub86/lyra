@@ -53,24 +53,65 @@ export function renderBackground(bgEl, bg) {
   }
 }
 
-function renderOverlays(root, overlays) {
+// Position a free element by its 0..1 box. Width/height optional (legacy text
+// overlays had only x,y) — then the box hugs its content, centered on x,y.
+function placeElement(n, el) {
+  const hasBox = el.w != null || el.h != null;
+  n.style.left = (el.x ?? 0.5) * 100 + "%";
+  n.style.top = (el.y ?? 0.5) * 100 + "%";
+  if (hasBox) {
+    n.style.width = (el.w ?? 0.3) * 100 + "%";
+    n.style.height = (el.h ?? 0.15) * 100 + "%";
+    n.style.transform = "none";
+  } else {
+    n.style.transform = "translate(-50%, -50%)"; // legacy center anchor
+  }
+}
+
+// Render the free-element layer (generalized overlays): text boxes, shapes, images.
+export function renderElements(root, elements) {
   root.replaceChildren();
-  for (const o of overlays || []) {
-    const n = document.createElement(o.type === "image" ? "img" : "div");
-    n.className = "overlay";
-    n.style.left = (o.x ?? 0.5) * 100 + "%";
-    n.style.top = (o.y ?? 0.5) * 100 + "%";
-    if (o.type === "image") {
-      n.src = o.url;
-      n.style.width = (o.scale ?? 0.1) * 100 + "%";
+  for (const el of elements || []) {
+    let n;
+    if (el.type === "image") {
+      n = document.createElement("img");
+      n.className = "el el-image";
+      n.src = el.url;
+    } else if (el.type === "shape") {
+      n = document.createElement("div");
+      n.className = "el el-shape el-" + (el.shape || "rect");
+      n.style.background = el.shape === "line" ? "transparent" : (el.fill || "transparent");
+      const sw = el.stroke_width ?? (el.shape === "line" ? 2 : 0);
+      if (el.shape === "line") {
+        n.style.borderTop = `${sw / 10}cqw solid ${el.stroke || "#fff"}`;
+      } else if (sw) {
+        n.style.border = `${sw / 10}cqw solid ${el.stroke || "#fff"}`;
+      }
+      if (el.shape === "ellipse") n.style.borderRadius = "50%";
+      else if (el.radius) n.style.borderRadius = (el.radius / 10) + "cqw";
     } else {
-      n.textContent = o.text || "";
-      n.style.fontSize = (o.size ?? 24) / 10 + "cqw";
-      n.style.color = o.color || "var(--text)";
-      n.style.textAlign = o.align || "center";
+      n = document.createElement("div");
+      n.className = "el el-text";
+      n.textContent = el.text ?? "";
+      n.style.fontSize = (el.size ?? 4) + "cqw";
+      n.style.color = el.color || "var(--text)";
+      n.style.textAlign = el.align || "center";
+      n.style.fontWeight = el.weight || 600;
     }
+    placeElement(n, el);
     root.appendChild(n);
   }
+}
+
+// Per-slide content style override (gasa/bible etc.): font scale, color, align.
+function applyContentStyle(contentEl, style) {
+  contentEl.style.removeProperty("--content-scale");
+  contentEl.style.removeProperty("text-align");
+  contentEl.style.removeProperty("--text");
+  if (!style) return;
+  if (style.scale) contentEl.style.setProperty("--content-scale", style.scale);
+  if (style.color) contentEl.style.setProperty("--text", style.color);
+  if (style.align) contentEl.style.textAlign = style.align;
 }
 
 export function renderSlideWithLayers(container, slide, theme) {
@@ -89,7 +130,8 @@ export function renderSlideWithLayers(container, slide, theme) {
   const bg = slide.background ?? (theme && theme.background) ?? { type: "color", value: "#000" };
   renderBackground(bgEl, bg);
   renderSlide(contentEl, slide, theme);
-  renderOverlays(overlayEl, slide.overlays || []);
+  applyContentStyle(contentEl, slide.data?.style);
+  renderElements(overlayEl, slide.overlays || []);
 }
 
 function mk(cls) {

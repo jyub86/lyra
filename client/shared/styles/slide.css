@@ -39,23 +39,24 @@
   font-weight: var(--weight, 600);
 }
 
-.title { font-size: var(--title-size, 5cqw); font-weight: 800; }
-.subtitle { font-size: var(--label-size, 1.8cqw); color: var(--muted); }
-.section-label { font-size: calc(var(--title-size, 5cqw) * 0.8); color: var(--accent); font-weight: 800; }
+/* content font sizes are multiplied by the per-slide --content-scale (default 1) */
+.title { font-size: calc(var(--title-size, 5cqw) * var(--content-scale, 1)); font-weight: 800; }
+.subtitle { font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--muted); }
+.section-label { font-size: calc(var(--title-size, 5cqw) * 0.8 * var(--content-scale, 1)); color: var(--accent); font-weight: 800; }
 
-.ref-label { font-size: var(--label-size, 1.8cqw); color: var(--accent); margin-bottom: 0.3em; }
-.bible-body { font-size: var(--body-size, 3.2cqw); }
+.ref-label { font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--accent); margin-bottom: 0.3em; }
+.bible-body { font-size: calc(var(--body-size, 3.2cqw) * var(--content-scale, 1)); }
 .verse { display: inline; }
 .verse-no { font-size: 0.55em; color: var(--accent); vertical-align: super; margin-right: 0.1em; }
 
-.hymn-head { display: flex; gap: 0.5em; align-items: baseline; font-size: var(--label-size, 1.8cqw); color: var(--muted); }
+.hymn-head { display: flex; gap: 0.5em; align-items: baseline; font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--muted); }
 .hymn-no { color: var(--accent); }
-.praise-title { font-size: var(--label-size, 1.8cqw); color: var(--muted); }
-.verse-label { font-size: var(--label-size, 1.8cqw); color: var(--accent); }
-.lyric-body { font-size: var(--body-size, 3.2cqw); }
+.praise-title { font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--muted); }
+.verse-label { font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--accent); }
+.lyric-body { font-size: calc(var(--body-size, 3.2cqw) * var(--content-scale, 1)); }
 .lyric-body .line { margin: 0.1em 0; }
 
-.reading-body { font-size: calc(var(--body-size, 3.2cqw) * 0.92); width: 100%; }
+.reading-body { font-size: calc(var(--body-size, 3.2cqw) * 0.92 * var(--content-scale, 1)); width: 100%; }
 .reading-seg { margin: 0.35em 0; }
 .reading-seg .role-tag {
   display: inline-block; font-size: 0.5em; padding: 0.15em 0.6em; border-radius: 1em;
@@ -66,7 +67,15 @@
 .role-unison { color: var(--accent); font-weight: 800; }
 .role-unison .role-tag { background: var(--accent); color: #000; }
 
-.announce-list { font-size: calc(var(--body-size, 3.2cqw) * 0.78); text-align: left; list-style: disc; padding-left: 1.2em; }
+.announce-list { font-size: calc(var(--body-size, 3.2cqw) * 0.78 * var(--content-scale, 1)); text-align: left; list-style: disc; padding-left: 1.2em; }
 .announce-list li { margin: 0.25em 0; }
 
-.overlay { position: absolute; transform: translate(-50%, -50%); }
+/* ===== free elements (text boxes / shapes / images) ===== */
+.el { position: absolute; box-sizing: border-box; }
+.el-text {
+  display: flex; flex-direction: column; justify-content: center;
+  line-height: 1.2; word-break: break-word; white-space: pre-wrap; overflow: hidden;
+}
+.el-image { object-fit: contain; }
+.el-shape { }
+.el-ellipse { border-radius: 50%; }

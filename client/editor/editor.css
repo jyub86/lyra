@@ -56,6 +56,33 @@ a { color: var(--accent); text-decoration: none; }
 .canvas-bar { display: flex; align-items: center; gap: 8px; }
 .slide-pos { color: var(--muted); min-width: 120px; text-align: center; }
 
+/* element add toolbar */
+.canvas-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.canvas-tools .ct-label { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.canvas-tools button { padding: 5px 9px; font-size: 12px; }
+
+/* interactive edit layer over the preview */
+.edit-layer { position: absolute; inset: 0; z-index: 5; }
+.eh { position: absolute; box-sizing: border-box; cursor: move; border: 1px solid transparent; }
+.eh:hover { border-color: rgba(122,162,247,.5); }
+.eh.sel { border: 1px solid var(--accent); }
+.eh .handle { position: absolute; width: 10px; height: 10px; background: var(--accent); border: 1px solid #0b0e14; border-radius: 2px; }
+.eh .handle.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+.eh .handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+.eh .handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+.eh .handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+
+/* design + template panels */
+.section-title { color: var(--muted); font-size: 12px; margin: 6px 0 4px; font-weight: 700; }
+.tab-body hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+.el-actions { display: flex; gap: 6px; margin-top: 10px; }
+.el-actions button { flex: 1; }
+.tpl-list { display: flex; flex-direction: column; gap: 6px; }
+.tpl-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+.tpl-row .tpl-name { flex: 1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tpl-row .tpl-name:hover { color: var(--accent); }
+.tpl-row button { padding: 2px 7px; font-size: 11px; }
+
 .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
 .tab { flex: 1; background: var(--panel2); }
 .tab.active { background: var(--accent); color: #0b0e14; font-weight: 700; border-color: var(--accent); }

@@ -69,5 +69,6 @@ export async function loadTools() {
     import("./search.tools.js"),
     import("./present.tools.js"),
     import("./media.tools.js"),
+    import("./template.tools.js"),
   ]);
 }

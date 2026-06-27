@@ -14,6 +14,7 @@ const state = {
   anchor: null,         // range-select anchor (shift+click)
   mode: "list",         // "list" | "tiles"
   editEl: null,         // selected free-element index within the primary slide
+  templates: [],        // design templates (cached)
 };
 
 function setSingleSelection(id) {
@@ -422,7 +423,70 @@ function resetContentStyle() {
   callTool("update_slide", { slide_id: slide.id, fields: { data } }).then(() => refresh());
 }
 
-function renderTemplatePanel() { /* implemented in P3 */ }
+// ===== 디자인 템플릿 =====
+function slideDesign(slide) {
+  return { template_type: slide.template_type, data: slide.data, background: slide.background, overlays: slide.overlays };
+}
+
+async function loadTemplates() {
+  state.templates = await callTool("list_templates").catch(() => []);
+  renderTemplatePanel();
+}
+
+function renderTemplatePanel() {
+  const list = $("tpl-list");
+  if (!list) return;
+  list.replaceChildren();
+  if (!state.templates?.length) { list.appendChild(elx("p", "muted", "저장된 템플릿이 없습니다. 슬라이드를 꾸미고 저장하세요.")); return; }
+  for (const t of state.templates) {
+    const row = elx("div", "tpl-row");
+    const name = elx("span", "tpl-name", t.name);
+    name.title = "클릭하면 현재 예배에 삽입";
+    name.onclick = () => applyTemplate(t.id);
+    const upd = elx("button", "mini", "업데이트"); upd.title = "현재 슬라이드 디자인으로 덮어쓰기"; upd.onclick = () => updateTemplate(t.id);
+    const ren = elx("button", "mini", "이름"); ren.onclick = () => renameTemplate(t.id, t.name);
+    const del = elx("button", "mini danger", "✕"); del.onclick = () => deleteTemplate(t.id);
+    row.append(name, upd, ren, del);
+    list.appendChild(row);
+  }
+}
+
+async function saveCurrentAsTemplate() {
+  const slide = selectedSlide();
+  if (!slide) { msg("tpl-msg", "슬라이드를 먼저 선택하세요.", true); return; }
+  const name = prompt("템플릿 이름", slide.data?.title || slide.data?.label || "새 템플릿");
+  if (!name) return;
+  await callTool("save_template", { name, slide: slideDesign(slide) });
+  msg("tpl-msg", `“${name}” 저장됨`);
+  await loadTemplates();
+}
+async function applyTemplate(id) {
+  if (!state.serviceId) return;
+  const { slide_id } = await callTool("apply_template", { template_id: id, service_id: state.serviceId });
+  await refresh();
+  setSingleSelection(slide_id);
+  render();
+  msg("tpl-msg", "현재 예배 끝에 삽입됨");
+}
+async function updateTemplate(id) {
+  const slide = selectedSlide();
+  if (!slide) { msg("tpl-msg", "덮어쓸 디자인(슬라이드)을 선택하세요.", true); return; }
+  if (!confirm("현재 슬라이드 디자인으로 이 템플릿을 덮어쓸까요?")) return;
+  await callTool("update_template", { template_id: id, slide: slideDesign(slide) });
+  msg("tpl-msg", "템플릿 업데이트됨");
+  await loadTemplates();
+}
+async function renameTemplate(id, cur) {
+  const name = prompt("새 이름", cur);
+  if (!name) return;
+  await callTool("update_template", { template_id: id, name });
+  await loadTemplates();
+}
+async function deleteTemplate(id) {
+  if (!confirm("이 템플릿을 삭제할까요?")) return;
+  await callTool("delete_template", { template_id: id });
+  await loadTemplates();
+}
 
 
 // ---------- tiles ----------
@@ -692,7 +756,9 @@ function init() {
   $("export-btn").onclick = exportService;
   $("import-btn").onclick = () => $("import-file").click();
   $("import-file").onchange = (e) => e.target.files[0] && importService(e.target.files[0]);
+  $("tpl-save").onclick = saveCurrentAsTemplate;
   loadServices();
+  loadTemplates();
 }
 
 init();

@@ -461,13 +461,16 @@ function renderTemplatePanel() {
     if (t.kind !== lastKind) { list.appendChild(elx("div", "tpl-group", t.kind === "builtin" ? "기본 종류" : "내 템플릿")); lastKind = t.kind; }
     const row = elx("div", "tpl-row");
     const name = elx("span", "tpl-name", t.name);
-    name.title = "클릭하면 디자인 불러와서 편집";
+    name.title = "클릭하면 디자인 편집";
     name.onclick = () => editTemplate(t.id);
-    const save = elx("button", "mini", "이 디자인"); save.title = "현재 선택 슬라이드의 디자인을 이 템플릿에 저장"; save.onclick = () => updateTemplate(t.id);
+    const acts = elx("div", "tpl-acts");
+    const edit = elx("button", "mini accent", "✎ 편집"); edit.title = "디자인 불러와서 편집"; edit.onclick = () => editTemplate(t.id);
+    const stamp = elx("button", "mini", "이 디자인"); stamp.title = "현재 선택 슬라이드의 디자인을 이 템플릿에 저장"; stamp.onclick = () => updateTemplate(t.id);
     const ren = elx("button", "mini", "이름"); ren.onclick = () => renameTemplate(t.id, t.name);
-    const last = elx("button", "mini" + (t.kind === "builtin" ? "" : " danger"), t.kind === "builtin" ? "초기화" : "✕");
+    const last = elx("button", "mini" + (t.kind === "builtin" ? "" : " danger"), t.kind === "builtin" ? "초기화" : "삭제");
     last.onclick = () => (t.kind === "builtin" ? resetTemplate(t.id) : deleteTemplate(t.id));
-    row.append(name, save, ren, last);
+    acts.append(edit, stamp, ren, last);
+    row.append(name, acts);
     list.appendChild(row);
   }
 }

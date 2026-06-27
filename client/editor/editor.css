@@ -84,10 +84,12 @@ a { color: var(--accent); text-decoration: none; }
 .el-actions button { flex: 1; }
 .tpl-list { display: flex; flex-direction: column; gap: 5px; }
 .tpl-group { color: var(--muted); font-size: 11px; font-weight: 700; margin: 10px 0 1px; }
-.tpl-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
-.tpl-row .tpl-name { flex: 1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tpl-row { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 7px 9px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+.tpl-row .tpl-name { cursor: pointer; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tpl-row .tpl-name:hover { color: var(--accent); }
-.tpl-row button { padding: 2px 7px; font-size: 11px; }
+.tpl-acts { display: flex; gap: 4px; }
+.tpl-acts button { flex: 1; padding: 3px 4px; font-size: 11px; }
+.tpl-acts .accent { background: var(--accent); color: #0b0e14; border-color: var(--accent); font-weight: 700; }
 
 .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
 .tab { flex: 1; background: var(--panel2); }

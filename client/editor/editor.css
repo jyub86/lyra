@@ -71,7 +71,9 @@ textarea { resize: vertical; }
 .tiles-hint { margin: 4px 0 14px; }
 .tile-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 16px; }
 .tile { background: var(--panel); border: 2px solid var(--line); border-radius: 8px; overflow: hidden; cursor: grab; transition: border-color .12s; }
+.tile { user-select: none; }
 .tile.sel { border-color: var(--accent); }
+.tile.primary { box-shadow: 0 0 0 3px rgba(122, 162, 247, .4); }
 .tile.drag-over { border-color: var(--accent); border-style: dashed; }
 .tile .thumb { width: 100%; }
 .tile .thumb .slide-layers { border-radius: 0; }

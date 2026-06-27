@@ -208,14 +208,15 @@ function renderTiles() {
   const grid = $("tile-grid");
   grid.innerHTML = "";
   slides().forEach((s, i) => {
-    const tile = elx("div", "tile" + (s.id === state.selected ? " sel" : ""));
+    const sel = state.selectedSet.has(s.id);
+    const tile = elx("div", "tile" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : ""));
     tile.draggable = true;
     tile.dataset.id = s.id;
     const cap = elx("div", "cap");
     cap.innerHTML = `<span class="num">${i + 1}</span><span class="badge">${s.template_type}</span><span class="label">${slideLabel(s)}</span><button class="del danger">✕</button>`;
     cap.querySelector(".del").onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
     tile.append(buildThumb(s), cap);
-    tile.onclick = () => { setSingleSelection(s.id); state.mode = "list"; render(); };
+    tile.onclick = (e) => onRowClick(s, e);   // same multi-select model as the list
     tile.ondblclick = () => presentIndex(i);
     wireDrag(tile);
     grid.appendChild(tile);

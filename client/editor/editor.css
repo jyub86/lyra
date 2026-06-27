@@ -35,9 +35,11 @@ a { color: var(--accent); text-decoration: none; }
 .col-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; color: var(--muted); position: sticky; top: 0; background: var(--panel); z-index: 1; }
 
 .slide-list { padding: 0 8px 24px; }
-.slide-row { display: flex; gap: 8px; align-items: center; padding: 6px 8px; margin: 4px 0; border: 1px solid transparent; border-radius: 7px; background: var(--panel2); cursor: grab; }
+.list-hint { padding: 8px 8px 6px; margin: 0; font-size: 11px; line-height: 1.4; }
+.slide-row { display: flex; gap: 8px; align-items: center; padding: 6px 8px; margin: 4px 0; border: 1px solid transparent; border-radius: 7px; background: var(--panel2); cursor: grab; user-select: none; }
 .slide-row:hover { border-color: var(--line); }
-.slide-row.sel { border-color: var(--accent); }
+.slide-row.sel { border-color: var(--accent); background: #1b2236; }
+.slide-row.primary { box-shadow: inset 3px 0 0 var(--accent); }
 .slide-row.drag-over { border-color: var(--accent); border-style: dashed; }
 .slide-row .num { color: var(--muted); font-size: 11px; min-width: 16px; text-align: right; }
 .slide-row .thumb { flex: 0 0 84px; width: 84px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; pointer-events: none; }

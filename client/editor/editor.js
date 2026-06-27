@@ -7,11 +7,19 @@ const $ = (id) => document.getElementById(id);
 const state = {
   services: [],
   serviceId: null,
-  service: null,   // get_service (flat slides[])
+  service: null,        // get_service (flat slides[])
   theme: null,
-  selected: null,  // slide id
-  mode: "list",    // "list" | "tiles"
+  selected: null,       // primary slide id (preview/inspector)
+  selectedSet: new Set(), // multi-selection
+  anchor: null,         // range-select anchor (shift+click)
+  mode: "list",         // "list" | "tiles"
 };
+
+function setSingleSelection(id) {
+  state.selected = id;
+  state.anchor = id;
+  state.selectedSet = new Set(id ? [id] : []);
+}
 
 const slides = () => state.service?.slides || [];
 function slideLabel(s) {
@@ -43,7 +51,23 @@ function buildThumb(s) {
   return t;
 }
 
+// Compute the new id order when the dragged item (and, if it's part of a
+// multi-selection, the whole selected group) is dropped before `targetId`.
+// The group keeps its relative order. Returns null if dropping into the group.
+function groupOrderFor(targetId) {
+  const ids = slides().map((s) => s.id);
+  const group = (state.selectedSet.has(dragId) && state.selectedSet.size > 1)
+    ? ids.filter((id) => state.selectedSet.has(id))
+    : [dragId];
+  if (group.includes(targetId)) return null;
+  const set = new Set(group);
+  const rest = ids.filter((id) => !set.has(id));
+  const at = rest.indexOf(targetId);
+  return [...rest.slice(0, at), ...group, ...rest.slice(at)];
+}
+
 // Shared HTML5 drag-to-reorder for any element carrying dataset.id (rows & tiles).
+// Multi-selection aware: dragging a selected row moves the whole selection.
 let dragId = null;
 function wireDrag(el) {
   el.addEventListener("dragstart", (e) => { dragId = el.dataset.id; e.dataTransfer.effectAllowed = "move"; });
@@ -52,15 +76,32 @@ function wireDrag(el) {
   el.addEventListener("drop", async (e) => {
     e.preventDefault();
     el.classList.remove("drag-over");
-    const targetId = el.dataset.id;
-    if (!dragId || dragId === targetId) return;
-    const ids = slides().map((x) => x.id);
-    ids.splice(ids.indexOf(dragId), 1);
-    ids.splice(ids.indexOf(targetId), 0, dragId); // drop before target
-    await callTool("reorder_slides", { service_id: state.serviceId, ordered_slide_ids: ids });
+    if (!dragId) return;
+    const newIds = groupOrderFor(el.dataset.id);
     dragId = null;
+    if (!newIds) return;
+    await callTool("reorder_slides", { service_id: state.serviceId, ordered_slide_ids: newIds });
     await refresh();
   });
+}
+
+// List-row click with multi-select (plain / ⌘·Ctrl toggle / Shift range).
+function onRowClick(s, e) {
+  const ids = slides().map((x) => x.id);
+  if (e.shiftKey && state.anchor && ids.includes(state.anchor)) {
+    const a = ids.indexOf(state.anchor), b = ids.indexOf(s.id);
+    const [lo, hi] = a < b ? [a, b] : [b, a];
+    state.selectedSet = new Set(ids.slice(lo, hi + 1));
+    state.selected = s.id;
+  } else if (e.metaKey || e.ctrlKey) {
+    if (state.selectedSet.has(s.id)) state.selectedSet.delete(s.id);
+    else state.selectedSet.add(s.id);
+    state.selected = s.id;
+    state.anchor = s.id;
+  } else {
+    setSingleSelection(s.id);
+  }
+  render();
 }
 
 // ---------- service / theme ----------
@@ -84,14 +125,16 @@ async function selectService(id) {
   state.service = await callTool("get_service", { service_id: id });
   state.theme = await loadTheme(state.service.theme_id);
   $("theme-select").value = state.service.theme_id;
-  state.selected = slides()[0]?.id || null;
+  setSingleSelection(slides()[0]?.id || null);
   render();
 }
 
 async function refresh() {
-  const keep = state.selected;
   state.service = await callTool("get_service", { service_id: state.serviceId });
-  if (!slides().some((s) => s.id === keep)) state.selected = slides()[0]?.id || null;
+  const exist = new Set(slides().map((s) => s.id));
+  state.selectedSet = new Set([...state.selectedSet].filter((id) => exist.has(id)));
+  if (!exist.has(state.selected)) state.selected = slides()[0]?.id || null;
+  if (state.selected && state.selectedSet.size === 0) state.selectedSet.add(state.selected);
   render();
 }
 
@@ -127,8 +170,10 @@ function renderList() {
   const root = $("slide-list");
   root.innerHTML = "";
   if (!state.service) { root.innerHTML = '<p class="muted" style="padding:12px">예배 순서가 없습니다. “+ 새 예배”로 시작하세요.</p>'; return; }
+  root.appendChild(elx("p", "list-hint muted", "드래그로 이동 · ⌘/Ctrl·Shift 클릭으로 여러 개 선택해 함께 이동"));
   slides().forEach((s, i) => {
-    const row = elx("div", "slide-row" + (s.id === state.selected ? " sel" : ""));
+    const sel = state.selectedSet.has(s.id);
+    const row = elx("div", "slide-row" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : ""));
     row.draggable = true;
     row.dataset.id = s.id;
     const meta = elx("div", "row-meta");
@@ -136,7 +181,7 @@ function renderList() {
     const del = elx("button", "del danger", "✕");
     del.onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
     row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, del);
-    row.onclick = () => { state.selected = s.id; render(); };
+    row.onclick = (e) => onRowClick(s, e);
     wireDrag(row);
     root.appendChild(row);
   });
@@ -148,7 +193,8 @@ function renderPreview() {
   if (!slide) { prev.replaceChildren(); $("slide-pos").textContent = "—"; return; }
   renderSlideWithLayers(prev, slide, state.theme);
   const idx = slides().findIndex((s) => s.id === slide.id);
-  $("slide-pos").textContent = `${idx + 1} / ${slides().length}`;
+  const n = state.selectedSet.size;
+  $("slide-pos").textContent = n > 1 ? `${n}개 선택됨 · 드래그로 함께 이동` : `${idx + 1} / ${slides().length}`;
 }
 
 function navSlide(delta) {
@@ -169,7 +215,7 @@ function renderTiles() {
     cap.innerHTML = `<span class="num">${i + 1}</span><span class="badge">${s.template_type}</span><span class="label">${slideLabel(s)}</span><button class="del danger">✕</button>`;
     cap.querySelector(".del").onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
     tile.append(buildThumb(s), cap);
-    tile.onclick = () => { state.selected = s.id; state.mode = "list"; render(); };
+    tile.onclick = () => { setSingleSelection(s.id); state.mode = "list"; render(); };
     tile.ondblclick = () => presentIndex(i);
     wireDrag(tile);
     grid.appendChild(tile);
@@ -308,7 +354,16 @@ async function saveInspector() {
 // ---------- mutations ----------
 async function removeSlide(id) {
   await callTool("remove_slide", { slide_id: id });
+  state.selectedSet.delete(id);
   if (state.selected === id) state.selected = null;
+  await refresh();
+}
+async function deleteSelected() {
+  const ids = [...state.selectedSet];
+  if (!ids.length) return;
+  if (ids.length > 1 && !confirm(`${ids.length}개 슬라이드를 삭제할까요?`)) return;
+  for (const id of ids) await callTool("remove_slide", { slide_id: id });
+  state.selectedSet.clear(); state.selected = null; state.anchor = null;
   await refresh();
 }
 async function newService() {
@@ -372,7 +427,7 @@ function init() {
   $("add-slide-btn").onclick = addSlide;
   $("prev-slide").onclick = () => navSlide(-1);
   $("next-slide").onclick = () => navSlide(1);
-  $("del-slide").onclick = () => state.selected && removeSlide(state.selected);
+  $("del-slide").onclick = deleteSelected;
   $("present-here").onclick = presentHere;
   $("insp-bg-type").onchange = () => renderBgFields(selectedSlide()?.background);
   $("insp-save").onclick = saveInspector;

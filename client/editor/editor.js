@@ -20,6 +20,49 @@ function slideLabel(s) {
     (d.lines && d.lines[0]) || (d.items && d.items[0]) || s.template_type;
 }
 
+function elx(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+// A mini live preview of a slide (shared by list rows and tiles).
+// Video backgrounds are swapped for a placeholder to avoid many <video> elements.
+function thumbSlide(s) {
+  if (s.background?.type === "video") {
+    return { ...s, background: { type: "gradient", from: "#1f2933", to: "#0b0e14", angle: 135 } };
+  }
+  return s;
+}
+function buildThumb(s) {
+  const t = elx("div", "thumb");
+  const stage = elx("div", "slide-layers");
+  t.appendChild(stage);
+  renderSlideWithLayers(stage, thumbSlide(s), state.theme);
+  return t;
+}
+
+// Shared HTML5 drag-to-reorder for any element carrying dataset.id (rows & tiles).
+let dragId = null;
+function wireDrag(el) {
+  el.addEventListener("dragstart", (e) => { dragId = el.dataset.id; e.dataTransfer.effectAllowed = "move"; });
+  el.addEventListener("dragover", (e) => { e.preventDefault(); el.classList.add("drag-over"); });
+  el.addEventListener("dragleave", () => el.classList.remove("drag-over"));
+  el.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    el.classList.remove("drag-over");
+    const targetId = el.dataset.id;
+    if (!dragId || dragId === targetId) return;
+    const ids = slides().map((x) => x.id);
+    ids.splice(ids.indexOf(dragId), 1);
+    ids.splice(ids.indexOf(targetId), 0, dragId); // drop before target
+    await callTool("reorder_slides", { service_id: state.serviceId, ordered_slide_ids: ids });
+    dragId = null;
+    await refresh();
+  });
+}
+
 // ---------- service / theme ----------
 async function loadServices(selectId) {
   state.services = await callTool("list_services");
@@ -85,19 +128,16 @@ function renderList() {
   root.innerHTML = "";
   if (!state.service) { root.innerHTML = '<p class="muted" style="padding:12px">예배 순서가 없습니다. “+ 새 예배”로 시작하세요.</p>'; return; }
   slides().forEach((s, i) => {
-    const row = document.createElement("div");
-    row.className = "slide-row" + (s.id === state.selected ? " sel" : "");
-    row.innerHTML =
-      `<span class="num">${i + 1}</span><span class="badge">${s.template_type}</span>` +
-      `<span class="label">${slideLabel(s)}</span>` +
-      `<span class="acts"><button data-a="up">▲</button><button data-a="down">▼</button><button data-a="del" class="danger">✕</button></span>`;
-    row.onclick = (e) => {
-      const a = e.target.dataset.a;
-      if (a === "up") return moveSlide(s.id, -1);
-      if (a === "down") return moveSlide(s.id, 1);
-      if (a === "del") return removeSlide(s.id);
-      state.selected = s.id; render();
-    };
+    const row = elx("div", "slide-row" + (s.id === state.selected ? " sel" : ""));
+    row.draggable = true;
+    row.dataset.id = s.id;
+    const meta = elx("div", "row-meta");
+    meta.append(elx("span", "badge", s.template_type), elx("span", "label", slideLabel(s)));
+    const del = elx("button", "del danger", "✕");
+    del.onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
+    row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, del);
+    row.onclick = () => { state.selected = s.id; render(); };
+    wireDrag(row);
     root.appendChild(row);
   });
 }
@@ -118,60 +158,21 @@ function navSlide(delta) {
 }
 
 // ---------- tiles ----------
-// Avoid spawning many <video> elements in thumbnails: swap video bg for a hint.
-function thumbSlide(s) {
-  if (s.background?.type === "video") {
-    return { ...s, background: { type: "gradient", from: "#1f2933", to: "#0b0e14", angle: 135 } };
-  }
-  return s;
-}
-
 function renderTiles() {
   const grid = $("tile-grid");
   grid.innerHTML = "";
   slides().forEach((s, i) => {
-    const tile = document.createElement("div");
-    tile.className = "tile" + (s.id === state.selected ? " sel" : "");
+    const tile = elx("div", "tile" + (s.id === state.selected ? " sel" : ""));
     tile.draggable = true;
     tile.dataset.id = s.id;
-
-    const thumb = document.createElement("div");
-    thumb.className = "thumb";
-    const stage = document.createElement("div");
-    stage.className = "slide-layers";
-    thumb.appendChild(stage);
-    renderSlideWithLayers(stage, thumbSlide(s), state.theme);
-
-    const cap = document.createElement("div");
-    cap.className = "cap";
+    const cap = elx("div", "cap");
     cap.innerHTML = `<span class="num">${i + 1}</span><span class="badge">${s.template_type}</span><span class="label">${slideLabel(s)}</span><button class="del danger">✕</button>`;
     cap.querySelector(".del").onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
-
-    tile.append(thumb, cap);
+    tile.append(buildThumb(s), cap);
     tile.onclick = () => { state.selected = s.id; state.mode = "list"; render(); };
     tile.ondblclick = () => presentIndex(i);
-    wireTileDrag(tile);
+    wireDrag(tile);
     grid.appendChild(tile);
-  });
-}
-
-let dragId = null;
-function wireTileDrag(tile) {
-  tile.addEventListener("dragstart", () => { dragId = tile.dataset.id; });
-  tile.addEventListener("dragover", (e) => { e.preventDefault(); tile.classList.add("drag-over"); });
-  tile.addEventListener("dragleave", () => tile.classList.remove("drag-over"));
-  tile.addEventListener("drop", async (e) => {
-    e.preventDefault();
-    tile.classList.remove("drag-over");
-    const targetId = tile.dataset.id;
-    if (!dragId || dragId === targetId) return;
-    const ids = slides().map((s) => s.id);
-    const from = ids.indexOf(dragId);
-    ids.splice(from, 1);
-    ids.splice(ids.indexOf(targetId), 0, dragId);
-    await callTool("reorder_slides", { service_id: state.serviceId, ordered_slide_ids: ids });
-    dragId = null;
-    await refresh();
   });
 }
 
@@ -305,15 +306,6 @@ async function saveInspector() {
 }
 
 // ---------- mutations ----------
-async function moveSlide(id, delta) {
-  const ids = slides().map((s) => s.id);
-  const i = ids.indexOf(id);
-  const j = i + delta;
-  if (j < 0 || j >= ids.length) return;
-  [ids[i], ids[j]] = [ids[j], ids[i]];
-  await callTool("reorder_slides", { service_id: state.serviceId, ordered_slide_ids: ids });
-  await refresh();
-}
 async function removeSlide(id) {
   await callTool("remove_slide", { slide_id: id });
   if (state.selected === id) state.selected = null;

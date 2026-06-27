@@ -28,9 +28,21 @@ function setSingleSelection(id) {
 
 const slides = () => state.service?.slides || [];
 function slideLabel(s) {
-  const d = s.data || {};
-  return d.title || d.ref || d.label || (d.segments && d.segments[0]?.text) ||
-    (d.lines && d.lines[0]) || (d.items && d.items[0]) || s.template_type;
+  for (const e of s.elements || []) {
+    if (e.type === "text" && e.text) return e.text.split("\n")[0];
+    if (e.type === "bible") return e.content?.ref || "성경 본문";
+    if (e.type === "hymn") return e.content?.title || "찬송가";
+    if (e.type === "reading") return e.content?.title || "교독문";
+  }
+  return (s.elements || [])[0] ? (s.elements[0].type) : "빈 화면";
+}
+const KIND_LABEL = { bible: "성경", hymn: "찬송", reading: "교독", text: "텍스트", shape: "도형", image: "이미지" };
+function slideKind(s) {
+  const els = s.elements || [];
+  const content = els.find((e) => ["bible", "hymn", "reading"].includes(e.type));
+  if (content) return KIND_LABEL[content.type];
+  if (!els.length) return "빈";
+  return KIND_LABEL[els[0].type] || els[0].type;
 }
 
 function elx(tag, cls, text) {
@@ -195,7 +207,7 @@ function renderList() {
     row.draggable = true;
     row.dataset.id = s.id;
     const meta = elx("div", "row-meta");
-    meta.append(elx("span", "badge", s.template_type), elx("span", "label", slideLabel(s)));
+    meta.append(elx("span", "badge", slideKind(s)), elx("span", "label", slideLabel(s)));
     const del = elx("button", "del danger", "✕");
     del.onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
     row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, del);
@@ -224,7 +236,7 @@ function navSlide(delta) {
 
 // ===== free-element canvas editing (Google-Slides-like) =====
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
-const els = () => selectedSlide()?.overlays || [];
+const els = () => selectedSlide()?.elements || [];
 
 // Interactive handle layer over #preview: select / move / resize elements.
 function renderEditLayer() {
@@ -258,7 +270,7 @@ function renderEditLayer() {
 
 // Lightweight repaint during drag (no background rebuild → no video reload).
 function repaintEls() {
-  const ov = $("preview")?.querySelector(":scope > .layer-overlays");
+  const ov = $("preview")?.querySelector(":scope > .layer-elements");
   if (ov) renderElements(ov, els());
   renderEditLayer();
 }
@@ -310,7 +322,7 @@ async function commitEls() {
   if (state.editingTemplate) { repaintEls(); return; } // draft: local only
   const slide = selectedSlide();
   if (!slide) return;
-  await callTool("set_slide_overlays", { slide_id: slide.id, overlays: slide.overlays || [] });
+  await callTool("set_slide_elements", { slide_id: slide.id, elements: slide.elements || [] });
   await refresh();
 }
 
@@ -319,14 +331,18 @@ const ADD_DEFAULTS = {
   rect: () => ({ type: "shape", shape: "rect", x: 0.4, y: 0.4, w: 0.2, h: 0.16, fill: "#7aa2f7", stroke: "#ffffff", stroke_width: 0, radius: 6 }),
   ellipse: () => ({ type: "shape", shape: "ellipse", x: 0.4, y: 0.4, w: 0.18, h: 0.18, fill: "#7aa2f7", stroke: "#ffffff", stroke_width: 0 }),
   line: () => ({ type: "shape", shape: "line", x: 0.3, y: 0.5, w: 0.4, h: 0.02, stroke: "#ffffff", stroke_width: 3 }),
+  // content elements: added empty → user fills params in the design panel + 다시 가져오기
+  bible: () => ({ type: "bible", x: 0.1, y: 0.25, w: 0.8, h: 0.5, size: 3.2, align: "center", weight: 600, line_height: 1.5, show_numbers: true, params: {}, content: null }),
+  hymn: () => ({ type: "hymn", x: 0.1, y: 0.25, w: 0.8, h: 0.5, size: 3.2, align: "center", weight: 600, params: {}, content: null }),
+  reading: () => ({ type: "reading", x: 0.08, y: 0.2, w: 0.84, h: 0.6, size: 2.9, align: "center", weight: 600, params: {}, content: null }),
 };
 
 async function addElement(kind, extra) {
   const slide = selectedSlide();
   if (!slide) { msg("add-msg", "슬라이드를 먼저 선택하세요.", true); return; }
   const el = kind === "image" ? { type: "image", x: 0.35, y: 0.32, w: 0.3, h: 0.3, ...extra } : ADD_DEFAULTS[kind]();
-  slide.overlays = [...(slide.overlays || []), el];
-  state.editEl = slide.overlays.length - 1;
+  slide.elements = [...(slide.elements || []), el];
+  state.editEl = slide.elements.length - 1;
   await commitEls();
   selectEl(state.editEl);
 }
@@ -334,14 +350,14 @@ async function addElement(kind, extra) {
 function deleteEl(i) {
   const slide = selectedSlide();
   if (!slide || i == null) return;
-  slide.overlays = (slide.overlays || []).filter((_, j) => j !== i);
+  slide.elements = (slide.elements || []).filter((_, j) => j !== i);
   state.editEl = null;
   commitEls();
 }
 
 function moveElZ(i, toFront) {
   const slide = selectedSlide();
-  const arr = slide?.overlays;
+  const arr = slide?.elements;
   if (!arr || i == null) return;
   const [el] = arr.splice(i, 1);
   if (toFront) { arr.push(el); state.editEl = arr.length - 1; }
@@ -349,15 +365,14 @@ function moveElZ(i, toFront) {
   commitEls();
 }
 
-// ----- 디자인 패널 (content style + selected element props) -----
-function renderDesignPanel() {
-  const slide = selectedSlide();
-  const style = slide?.data?.style || {};
-  $("cs-scale").value = style.scale ?? 1;
-  $("cs-scale-v").textContent = Number(style.scale ?? 1).toFixed(2) + "×";
-  $("cs-color").value = style.color || "#ffffff";
-  $("cs-align").value = style.align || "center";
+// ----- 디자인 패널 (선택한 요소 속성) -----
+const CONTENT_PARAMS = {
+  bible: [["책(이름/약칭)", "book", "text"], ["장", "chapter", "int"], ["시작 절", "verse_start", "int"], ["끝 절", "verse_end", "int"]],
+  hymn: [["찬송가 번호", "number", "int"], ["절(선택)", "verse_no", "int"]],
+  reading: [["교독문 번호", "number", "int"]],
+};
 
+function renderDesignPanel() {
   const empty = $("el-empty"), body = $("el-props");
   const el = state.editEl != null ? els()[state.editEl] : null;
   if (!el) { empty.hidden = false; body.hidden = true; return; }
@@ -369,6 +384,7 @@ function renderDesignPanel() {
     const wrap = elx("label", null, label);
     let input;
     if (type === "textarea") { input = document.createElement("textarea"); input.rows = 2; input.value = el[fieldName] ?? ""; }
+    else if (type === "check") { input = document.createElement("input"); input.type = "checkbox"; input.checked = el[fieldName] !== false; }
     else if (type === "select") {
       input = document.createElement("select");
       for (const [v, t] of opts.options) { const o = document.createElement("option"); o.value = v; o.textContent = t; input.appendChild(o); }
@@ -379,9 +395,7 @@ function renderDesignPanel() {
       input.value = el[fieldName] ?? opts.def ?? "";
     }
     const apply = (commit) => {
-      let v = input.value;
-      if (type === "range" || opts.num) v = Number(v);
-      el[fieldName] = v;
+      el[fieldName] = type === "check" ? input.checked : (type === "range" || opts.num ? Number(input.value) : input.value);
       repaintEls();
       if (commit) commitEls();
     };
@@ -389,7 +403,6 @@ function renderDesignPanel() {
     input.addEventListener("change", () => apply(true));
     wrap.appendChild(input);
     body.appendChild(wrap);
-    return input;
   };
 
   if (el.type === "text") {
@@ -410,6 +423,23 @@ function renderDesignPanel() {
     }
   } else if (el.type === "image") {
     body.appendChild(elx("p", "muted", "이미지는 캔버스에서 드래그·크기조절하세요."));
+  } else if (["bible", "hymn", "reading"].includes(el.type)) {
+    field("글자 크기", "range", "size", { min: 1.5, max: 10, step: 0.25, num: true, def: 3.2 });
+    field("색", "color", "color", { def: "#ffffff" });
+    field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
+    field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
+    if (el.type === "bible") field("절 번호 표시", "check", "show_numbers");
+    body.appendChild(elx("div", "section-title", "내용 (params)"));
+    for (const [label, name, ptype] of CONTENT_PARAMS[el.type]) {
+      const wrap = elx("label", null, label);
+      const input = document.createElement("input");
+      input.type = ptype === "int" ? "number" : "text";
+      input.value = el.params?.[name] ?? "";
+      input.onchange = () => { el.params = { ...(el.params || {}), [name]: ptype === "int" ? Number(input.value) : input.value }; };
+      wrap.appendChild(input); body.appendChild(wrap);
+    }
+    const refetch = elx("button", "mini accent", "다시 가져오기"); refetch.onclick = () => fetchContentElement(state.editEl);
+    body.appendChild(refetch);
   }
 
   const actions = elx("div", "el-actions");
@@ -420,28 +450,32 @@ function renderDesignPanel() {
   body.appendChild(actions);
 }
 
-// content (가사/본문) style: live on input, persist on change
-function applyContentStyleEdit(commit) {
-  const slide = selectedSlide();
-  if (!slide) return;
-  const style = { scale: Number($("cs-scale").value), color: $("cs-color").value, align: $("cs-align").value };
-  slide.data = { ...slide.data, style };
-  $("cs-scale-v").textContent = style.scale.toFixed(2) + "×";
-  renderPreview();
-  if (commit && !state.editingTemplate) callTool("update_slide", { slide_id: slide.id, fields: { data: slide.data } }).then(() => refresh());
-}
-function resetContentStyle() {
-  const slide = selectedSlide();
-  if (!slide) return;
-  const data = { ...slide.data }; delete data.style;
-  slide.data = data;
-  if (state.editingTemplate) { renderPreview(); renderDesignPanel(); }
-  else callTool("update_slide", { slide_id: slide.id, fields: { data } }).then(() => refresh());
+// re-fetch a content element's snapshot from its params via read tools
+async function fetchContentElement(i) {
+  const el = els()[i];
+  if (!el) return;
+  const p = el.params || {};
+  try {
+    if (el.type === "bible") {
+      const r = await callTool("get_bible_passage", { book: p.book, chapter: p.chapter, verse_start: p.verse_start, verse_end: p.verse_end });
+      const ref = `${r.short_name || r.book_name} ${p.chapter}:${p.verse_start}${p.verse_end > p.verse_start ? "-" + p.verse_end : ""}`;
+      el.content = { ref, verses: r.verses };
+    } else if (el.type === "hymn") {
+      const h = await callTool("get_hymn", { number: p.number });
+      const v = (h.verses || []).find((x) => x.verse_no === (p.verse_no || 1)) || h.verses?.[0];
+      el.content = { number: h.number, title: h.title, label: v?.label, lines: v?.lines || [] };
+    } else if (el.type === "reading") {
+      const rd = await callTool("get_reading", { number: p.number });
+      el.content = { number: rd.number, title: rd.title, segments: rd.segments };
+    }
+    repaintEls();
+    commitEls();
+  } catch (e) { alert("가져오기 실패: " + e.message); }
 }
 
 // ===== 디자인 템플릿 =====
 function slideDesign(slide) {
-  return { template_type: slide.template_type, data: slide.data, background: slide.background, overlays: slide.overlays };
+  return { background: slide.background, elements: slide.elements };
 }
 
 async function loadTemplates() {
@@ -478,7 +512,7 @@ function renderTemplatePanel() {
 async function saveCurrentAsTemplate() {
   const slide = serviceSlide();
   if (!slide) { msg("tpl-msg", "슬라이드를 먼저 선택하세요.", true); return; }
-  const name = prompt("새 디자인 템플릿 이름", slide.data?.title || slide.data?.label || "새 템플릿");
+  const name = prompt("새 디자인 템플릿 이름", slideLabel(slide) || "새 템플릿");
   if (!name) return;
   await callTool("save_template", { name, slide: slideDesign(slide) });
   msg("tpl-msg", `“${name}” 저장됨`);
@@ -488,7 +522,7 @@ async function updateTemplate(id) {
   const slide = serviceSlide();
   if (!slide) { msg("tpl-msg", "디자인 소스 슬라이드를 선택하세요.", true); return; }
   const t = state.templates.find((x) => x.id === id);
-  const what = t?.kind === "builtin" ? "이 종류의 디자인(배경·요소·콘텐츠 스타일)" : "이 템플릿";
+  const what = t?.kind === "builtin" ? "이 종류의 디자인(배경·요소 배치/스타일)" : "이 템플릿";
   if (!confirm(`현재 슬라이드 디자인으로 ${what}을 저장할까요?`)) return;
   await callTool("update_template", { template_id: id, slide: slideDesign(slide) });
   msg("tpl-msg", "디자인 저장됨");
@@ -513,31 +547,27 @@ async function deleteTemplate(id) {
 }
 
 // ----- 템플릿 디자인 불러와서 편집 -----
-const GEN_TYPE = { add_bible_slides: "bible", add_hymn_slides: "hymn", add_reading_slides: "responsive_reading", add_praise_slides: "praise", add_announcement_slide: "announcement" };
-// placeholder content so built-in (param-driven) templates show how the design looks
-const SAMPLE_DATA = {
-  title: { title: "제목", subtitle: "부제" },
-  section: { label: "순서 구분" },
-  bible: { ref: "요 3:16", chapter: 3, verses: [{ verse: 16, text: "하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니" }] },
+// sample content so built-in content elements / bound text show how the design looks
+const SAMPLE_CONTENT = {
+  bible: { ref: "요 3:16", verses: [{ verse: 16, text: "하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니" }] },
   hymn: { number: 1, title: "찬송 제목", label: "1절", lines: ["가사 첫째 줄", "가사 둘째 줄"] },
-  responsive_reading: { number: 1, title: "교독문", segments: [{ role: "leader", text: "인도자 본문" }, { role: "congregation", text: "회중 본문" }] },
-  praise: { title: "찬양 제목", label: "1절", lines: ["가사 첫째 줄", "가사 둘째 줄"] },
-  announcement: { title: "광고", items: ["광고 항목 1", "광고 항목 2"] },
-  blank: {},
+  reading: { number: 1, title: "교독문", segments: [{ role: "leader", text: "인도자 본문" }, { role: "congregation", text: "회중 본문" }] },
 };
+const SAMPLE_BIND = { title: "제목", subtitle: "부제", label: "순서 구분", lyrics: "가사 첫째 줄\n가사 둘째 줄", items: "광고 항목 1\n광고 항목 2" };
 
-// build an editable draft slide from a template (custom = its design; built-in =
-// sample content + the editable design wrapper)
+// build an editable draft slide from a template. custom = its design as-is;
+// built-in = element layout with sample content/text filled (bind kept).
 function draftFromTemplate(tpl) {
   const spec = tpl.spec || {};
-  if (tpl.kind === "custom") {
-    return { template_type: spec.template_type, data: structuredClone(spec.data || {}), background: spec.background ?? null, overlays: structuredClone(spec.overlays || []) };
-  }
-  const tt = spec.template_type || GEN_TYPE[spec.tool] || "title";
-  const design = spec.design || {};
-  const data = structuredClone(SAMPLE_DATA[tt] || {});
-  if (design.style) data.style = structuredClone(design.style);
-  return { template_type: tt, data, background: design.background ?? null, overlays: structuredClone(design.overlays || []) };
+  const elements = (spec.elements || []).map((e) => {
+    const c = structuredClone(e);
+    if (tpl.kind === "builtin") {
+      if (SAMPLE_CONTENT[e.type]) c.content = structuredClone(SAMPLE_CONTENT[e.type]);
+      else if (e.type === "text" && e.bind) c.text = SAMPLE_BIND[e.bind] ?? e.text ?? "";
+    }
+    return c;
+  });
+  return { background: spec.background ?? null, elements };
 }
 
 async function editTemplate(id) {
@@ -573,7 +603,7 @@ function renderTiles() {
     tile.draggable = true;
     tile.dataset.id = s.id;
     const cap = elx("div", "cap");
-    cap.innerHTML = `<span class="num">${i + 1}</span><span class="badge">${s.template_type}</span><span class="label">${slideLabel(s)}</span><button class="del danger">✕</button>`;
+    cap.innerHTML = `<span class="num">${i + 1}</span><span class="badge">${slideKind(s)}</span><span class="label">${slideLabel(s)}</span><button class="del danger">✕</button>`;
     cap.querySelector(".del").onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
     tile.append(buildThumb(s), cap);
     tile.onclick = (e) => onRowClick(s, e);   // same multi-select model as the list
@@ -621,10 +651,10 @@ function renderAddFields() {
       input = document.createElement("select");
       for (const v of def.enum) { const o = document.createElement("option"); o.value = o.textContent = v; input.appendChild(o); }
       if (def.default != null) input.value = def.default;
-    } else if (key === "sections" || key === "items" || def.type === "array") {
+    } else if (key === "lyrics" || key === "sections" || key === "items" || def.type === "array") {
       input = document.createElement("textarea");
-      input.rows = key === "sections" ? 5 : 3;
-      input.placeholder = key === "sections" ? "가사 한 줄씩" : key === "items" ? "항목 한 줄씩" : "쉼표로 구분";
+      input.rows = (key === "lyrics" || key === "sections") ? 5 : 3;
+      input.placeholder = (key === "lyrics" || key === "sections") ? "가사 한 줄씩" : key === "items" ? "항목 한 줄씩" : "쉼표로 구분";
     } else {
       input = document.createElement("input");
       input.type = (def.type === "integer" || def.type === "number") ? "number" : "text";
@@ -678,8 +708,6 @@ function renderInspector() {
   const empty = $("inspect-empty"), body = $("inspect-body");
   if (!slide) { empty.hidden = false; body.hidden = true; return; }
   empty.hidden = true; body.hidden = false;
-  $("insp-type").value = slide.template_type;
-  $("insp-data").value = JSON.stringify(slide.data, null, 2);
   $("insp-bg-type").value = slide.background?.type || "theme";
   renderBgFields(slide.background);
 }
@@ -733,17 +761,15 @@ async function saveInspector() {
   const slide = selectedSlide();
   if (!slide) return;
   try {
-    const data = JSON.parse($("insp-data").value);
     const bg = buildBackground();
     if (state.editingTemplate) {
-      slide.data = data; slide.background = bg;
-      renderPreview(); renderInspector();
+      slide.background = bg;
+      renderPreview();
     } else {
-      await callTool("update_slide", { slide_id: slide.id, fields: { data } });
       await callTool("set_slide_background", { slide_id: slide.id, background: bg });
       await refresh();
     }
-    msg("insp-msg", "저장됨");
+    msg("insp-msg", "배경 저장됨");
   } catch (e) { msg("insp-msg", e.message, true); }
 }
 
@@ -835,12 +861,6 @@ function init() {
     catch (err) { msg("add-msg", err.message, true); }
     e.target.value = "";
   };
-  $("cs-scale").addEventListener("input", () => applyContentStyleEdit(false));
-  $("cs-scale").addEventListener("change", () => applyContentStyleEdit(true));
-  $("cs-color").addEventListener("input", () => applyContentStyleEdit(false));
-  $("cs-color").addEventListener("change", () => applyContentStyleEdit(true));
-  $("cs-align").addEventListener("change", () => applyContentStyleEdit(true));
-  $("cs-reset").onclick = resetContentStyle;
   // keyboard: Delete removes selected element, arrows nudge
   document.addEventListener("keydown", (e) => {
     if (state.mode !== "list" || state.editEl == null) return;

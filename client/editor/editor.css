@@ -65,6 +65,7 @@ a { color: var(--accent); text-decoration: none; }
 .canvas-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .canvas-tools .ct-label { color: var(--muted); font-size: 12px; margin-right: 2px; }
 .canvas-tools button { padding: 5px 9px; font-size: 12px; }
+.canvas-tools .ct-sep { color: var(--line); margin: 0 2px; }
 
 /* interactive edit layer over the preview */
 .edit-layer { position: absolute; inset: 0; z-index: 5; }

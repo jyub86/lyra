@@ -4,7 +4,7 @@ import { register } from "./registry.js";
 import { ulid } from "../lib/ulid.js";
 import { nowIso, parseSlide } from "./_helpers.js";
 
-const SHARE_FORMAT = "worship-service/v1";
+const SHARE_FORMAT = "worship-service/v2";
 
 function slidesOf(db, serviceId) {
   return db.query("SELECT * FROM slides WHERE service_id = ? ORDER BY position").all(serviceId).map(parseSlide);
@@ -103,15 +103,14 @@ function writeService(db, meta, slides) {
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(id, meta.title, meta.date, meta.worship_part, meta.theme_id || "dark-blue", ts, ts);
     const insert = db.query(
-      `INSERT INTO slides (id, service_id, position, template_type, data, background, overlays, transition)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO slides (id, service_id, position, background, elements, transition)
+       VALUES (?, ?, ?, ?, ?, ?)`
     );
     slides.forEach((s, i) => {
       insert.run(
-        ulid(), id, i, s.template_type,
-        JSON.stringify(s.data ?? {}),
+        ulid(), id, i,
         s.background ? JSON.stringify(s.background) : null,
-        s.overlays ? JSON.stringify(s.overlays) : null,
+        JSON.stringify(s.elements ?? []),
         s.transition ?? "fade"
       );
     });
@@ -167,8 +166,8 @@ register({
   handler: ({ service_id }, { db }) => {
     const s = db.query("SELECT * FROM services WHERE id = ?").get(service_id);
     if (!s) throw new Error(`unknown service: ${service_id}`);
-    const slides = slidesOf(db, service_id).map(({ template_type, data, background, overlays, transition }) =>
-      ({ template_type, data, background, overlays: overlays?.length ? overlays : undefined, transition }));
+    const slides = slidesOf(db, service_id).map(({ background, elements, transition }) =>
+      ({ background, elements, transition }));
     return {
       format: SHARE_FORMAT,
       title: s.title, date: s.date, worship_part: s.worship_part, theme_id: s.theme_id,

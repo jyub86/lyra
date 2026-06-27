@@ -1,4 +1,4 @@
-/* Shared slide rendering styles (editor preview + presenter). 16:9, cqw-sized. */
+/* Shared slide rendering (v4): background + elements. 16:9, cqw-sized. */
 
 .slide-layers {
   position: relative;
@@ -11,71 +11,37 @@
   background: #000;
 }
 
-.layer-bg, .layer-content, .layer-overlays {
-  position: absolute;
-  inset: 0;
-}
+.layer-bg, .layer-elements { position: absolute; inset: 0; }
 .layer-bg { z-index: 0; }
-.layer-content { z-index: 1; display: flex; }
-.layer-overlays { z-index: 2; pointer-events: none; }
+.layer-elements { z-index: 1; }
 
-.bg-video {
-  width: 100%; height: 100%;
-  object-fit: cover;
-}
+.bg-video { width: 100%; height: 100%; object-fit: cover; }
 .bg-dim { position: absolute; inset: 0; }
 
-/* content box: centered, with comfortable padding */
-.content {
-  margin: auto;
-  width: 86%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6em;
-  text-align: center;
-  line-height: var(--line-height, 1.5);
-  font-weight: var(--weight, 600);
+/* ===== elements ===== */
+.el { position: absolute; box-sizing: border-box; line-height: 1.3; }
+.el-text, .el-content {
+  display: flex; flex-direction: column; justify-content: center;
+  word-break: break-word; white-space: pre-wrap; overflow: hidden;
 }
+.el-image { object-fit: contain; }
+.el-ellipse { border-radius: 50%; }
 
-/* content font sizes are multiplied by the per-slide --content-scale (default 1) */
-.title { font-size: calc(var(--title-size, 5cqw) * var(--content-scale, 1)); font-weight: 800; }
-.subtitle { font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--muted); }
-.section-label { font-size: calc(var(--title-size, 5cqw) * 0.8 * var(--content-scale, 1)); color: var(--accent); font-weight: 800; }
-
-.ref-label { font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--accent); margin-bottom: 0.3em; }
-.bible-body { font-size: calc(var(--body-size, 3.2cqw) * var(--content-scale, 1)); }
-.verse { display: inline; }
-.verse-no { font-size: 0.55em; color: var(--accent); vertical-align: super; margin-right: 0.1em; }
-
-.hymn-head { display: flex; gap: 0.5em; align-items: baseline; font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--muted); }
-.hymn-no { color: var(--accent); }
-.praise-title { font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--muted); }
-.verse-label { font-size: calc(var(--label-size, 1.8cqw) * var(--content-scale, 1)); color: var(--accent); }
-.lyric-body { font-size: calc(var(--body-size, 3.2cqw) * var(--content-scale, 1)); }
-.lyric-body .line { margin: 0.1em 0; }
-
-.reading-body { font-size: calc(var(--body-size, 3.2cqw) * 0.92 * var(--content-scale, 1)); width: 100%; }
-.reading-seg { margin: 0.35em 0; }
-.reading-seg .role-tag {
+/* content elements (bible / hymn / reading) — sized by element font-size (em-relative inside) */
+.el-content { white-space: normal; }
+.ce-ref { display: block; font-size: 0.5em; color: var(--accent); margin-bottom: 0.35em; }
+.ce-body { display: block; }
+.ce-verse-no { font-size: 0.55em; color: var(--accent); vertical-align: super; margin: 0 0.12em 0 0; }
+.ce-head { font-size: 0.5em; color: var(--muted); margin-bottom: 0.2em; }
+.ce-head .ce-no { color: var(--accent); }
+.ce-label { font-size: 0.55em; color: var(--accent); margin-bottom: 0.15em; }
+.ce-line { margin: 0.12em 0; }
+.ce-seg { margin: 0.32em 0; }
+.ce-tag {
   display: inline-block; font-size: 0.5em; padding: 0.15em 0.6em; border-radius: 1em;
   margin-right: 0.5em; vertical-align: middle; font-weight: 700;
 }
-.role-leader .role-tag { background: var(--leader); color: #000; }
-.role-congregation .role-tag { background: var(--congregation); color: #000; }
+.role-leader .ce-tag { background: var(--leader); color: #000; }
+.role-congregation .ce-tag { background: var(--congregation); color: #000; }
 .role-unison { color: var(--accent); font-weight: 800; }
-.role-unison .role-tag { background: var(--accent); color: #000; }
-
-.announce-list { font-size: calc(var(--body-size, 3.2cqw) * 0.78 * var(--content-scale, 1)); text-align: left; list-style: disc; padding-left: 1.2em; }
-.announce-list li { margin: 0.25em 0; }
-
-/* ===== free elements (text boxes / shapes / images) ===== */
-.el { position: absolute; box-sizing: border-box; }
-.el-text {
-  display: flex; flex-direction: column; justify-content: center;
-  line-height: 1.2; word-break: break-word; white-space: pre-wrap; overflow: hidden;
-}
-.el-image { object-fit: contain; }
-.el-shape { }
-.el-ellipse { border-radius: 50%; }
+.role-unison .ce-tag { background: var(--accent); color: #000; }

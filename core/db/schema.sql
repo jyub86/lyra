@@ -103,15 +103,14 @@ CREATE TABLE IF NOT EXISTS services (
   updated_at   TEXT NOT NULL
 );
 
+-- v4: 슬라이드 = background + elements(요소 캔버스). 타입/typed-data 제거.
 CREATE TABLE IF NOT EXISTS slides (
-  id            TEXT PRIMARY KEY,      -- ulid
-  service_id    TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
-  position      INTEGER NOT NULL,      -- 예배 순서 내 슬라이드 순번 (연속)
-  template_type TEXT NOT NULL,
-  data          TEXT NOT NULL,         -- JSON
-  background    TEXT,                  -- JSON (null = 테마 기본)
-  overlays      TEXT,                  -- JSON 배열
-  transition    TEXT DEFAULT 'fade'
+  id          TEXT PRIMARY KEY,        -- ulid
+  service_id  TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  position    INTEGER NOT NULL,        -- 예배 순서 내 슬라이드 순번 (연속)
+  background  TEXT,                    -- JSON (null = 테마 기본)
+  elements    TEXT NOT NULL DEFAULT '[]', -- JSON 배열: text/shape/image + bible/hymn/reading 콘텐츠 요소
+  transition  TEXT DEFAULT 'fade'
 );
 CREATE INDEX IF NOT EXISTS idx_slides_service ON slides(service_id, position);
 

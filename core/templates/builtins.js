@@ -1,34 +1,46 @@
-// Built-in templates = the slide kinds, represented as templates (design §7).
-// Each built-in carries a user-editable design wrapper ({background,style,overlays});
-// content comes from params at apply time. Seeded idempotently (INSERT OR IGNORE)
-// so user design edits survive restarts. list_templates orders by rowid → built-ins
-// appear first in this seed order, custom templates after.
+// Built-in templates = slide-kind element layouts (v4). Every template is an
+// element arrangement: spec = { background, elements:[...] }. Content elements
+// (bible/hymn/reading) carry no content here — content is fetched from params at
+// apply time and the design (their box/style + any decorations) is editable.
+// Text elements use `bind:"<param>"` to be filled from the add-form params.
+// Seeded idempotently (INSERT OR IGNORE); list_templates orders built-ins first.
 
-// generator built-ins reuse a content tool (params_schema derived from its schema)
+// generators: params_schema derived from the content tool's input_schema
 const GENERATORS = [
-  { id: "builtin-bible", name: "성경 본문", tool: "add_bible_slides" },
-  { id: "builtin-hymn", name: "찬송가", tool: "add_hymn_slides" },
-  { id: "builtin-reading", name: "교독문", tool: "add_reading_slides" },
-  { id: "builtin-praise", name: "찬양(가사)", tool: "add_praise_slides" },
-  { id: "builtin-announcement", name: "광고", tool: "add_announcement_slide" },
+  { id: "builtin-bible", name: "성경 본문", tool: "add_bible_slides",
+    elements: [{ type: "bible", x: 0.08, y: 0.2, w: 0.84, h: 0.6, size: 3.2, align: "center", weight: 600, line_height: 1.5, show_numbers: true }] },
+  { id: "builtin-hymn", name: "찬송가", tool: "add_hymn_slides",
+    elements: [{ type: "hymn", x: 0.1, y: 0.24, w: 0.8, h: 0.52, size: 3.2, align: "center", weight: 600 }] },
+  { id: "builtin-reading", name: "교독문", tool: "add_reading_slides",
+    elements: [{ type: "reading", x: 0.08, y: 0.18, w: 0.84, h: 0.64, size: 2.9, align: "center", weight: 600 }] },
 ];
 
-// static built-ins build slide data directly from params
+// statics: build slide data from params (text bound via `bind`)
 const STATICS = [
-  { id: "builtin-title", name: "타이틀", template_type: "title",
-    params_schema: { type: "object", properties: { title: { type: "string" }, subtitle: { type: "string" } }, required: ["title"] } },
-  { id: "builtin-section", name: "순서 구분", template_type: "section",
-    params_schema: { type: "object", properties: { label: { type: "string" } }, required: ["label"] } },
-  { id: "builtin-blank", name: "빈 화면", template_type: "blank",
-    params_schema: { type: "object", properties: {} } },
+  { id: "builtin-title", name: "타이틀",
+    params_schema: { type: "object", properties: { title: { type: "string" }, subtitle: { type: "string" } }, required: ["title"] },
+    elements: [
+      { type: "text", bind: "title", text: "제목", x: 0.1, y: 0.36, w: 0.8, h: 0.18, size: 7, align: "center", weight: 800 },
+      { type: "text", bind: "subtitle", text: "부제", x: 0.2, y: 0.58, w: 0.6, h: 0.08, size: 2.6, align: "center", weight: 600 },
+    ] },
+  { id: "builtin-section", name: "순서 구분",
+    params_schema: { type: "object", properties: { label: { type: "string" } }, required: ["label"] },
+    elements: [{ type: "text", bind: "label", text: "순서 구분", x: 0.1, y: 0.42, w: 0.8, h: 0.16, size: 5.5, align: "center", weight: 800 }] },
+  { id: "builtin-praise", name: "찬양(가사)",
+    params_schema: { type: "object", properties: { lyrics: { type: "string" }, lines_per_slide: { type: "integer", default: 2 } }, required: ["lyrics"] },
+    elements: [{ type: "text", bind: "lyrics", text: "가사", x: 0.1, y: 0.3, w: 0.8, h: 0.4, size: 3.4, align: "center", weight: 600 }] },
+  { id: "builtin-announcement", name: "광고",
+    params_schema: { type: "object", properties: { items: { type: "array", items: { type: "string" } } }, required: ["items"] },
+    elements: [{ type: "text", bind: "items", text: "광고", x: 0.12, y: 0.2, w: 0.76, h: 0.6, size: 2.8, align: "left", weight: 600 }] },
+  { id: "builtin-blank", name: "빈 화면",
+    params_schema: { type: "object", properties: {} },
+    elements: [] },
 ];
 
-// desired display order
 const ORDER = [
   "builtin-title", "builtin-section", "builtin-bible", "builtin-hymn",
   "builtin-reading", "builtin-praise", "builtin-announcement", "builtin-blank",
 ];
-
 export const BUILTIN_IDS = new Set(ORDER);
 
 function paramsFromTool(schema) {
@@ -38,18 +50,11 @@ function paramsFromTool(schema) {
   return s;
 }
 
-// getTool: registry.get — used to derive generator params_schema from the content tool.
 export function seedBuiltins(db, getTool) {
   const defs = {};
-  for (const g of GENERATORS) {
-    defs[g.id] = { name: g.name, params_schema: paramsFromTool(getTool(g.tool)?.input_schema), spec: { tool: g.tool, design: {} } };
-  }
-  for (const s of STATICS) {
-    defs[s.id] = { name: s.name, params_schema: s.params_schema, spec: { template_type: s.template_type, design: {} } };
-  }
-  const ins = db.prepare(
-    "INSERT OR IGNORE INTO templates (id,name,description,kind,produces,params_schema,spec) VALUES (?,?,?,?,?,?,?)"
-  );
+  for (const g of GENERATORS) defs[g.id] = { name: g.name, params_schema: paramsFromTool(getTool(g.tool)?.input_schema), spec: { background: null, elements: g.elements } };
+  for (const s of STATICS) defs[s.id] = { name: s.name, params_schema: s.params_schema, spec: { background: null, elements: s.elements } };
+  const ins = db.prepare("INSERT OR IGNORE INTO templates (id,name,description,kind,produces,params_schema,spec) VALUES (?,?,?,?,?,?,?)");
   for (const id of ORDER) {
     const t = defs[id];
     ins.run(id, t.name, "기본 슬라이드 종류", "builtin", "slides", JSON.stringify(t.params_schema), JSON.stringify(t.spec));

@@ -1,37 +1,32 @@
-// Slide tools — 슬라이드 추가/수정/삭제/순서변경/레이어 (design §8-2).
-// Slides belong directly to a Service in one flat ordered list (no Scene layer).
+// Slide tools (v4) — a slide is { background, elements:[] }. Elements are
+// text / shape / image / bible / hymn / reading (content elements). The editor
+// replaces the whole elements array (set_slide_elements); per-element edits are
+// done client-side. Slides belong directly to a Service in flat order.
 import { register } from "./registry.js";
 import { ulid } from "../lib/ulid.js";
 import {
   nextPosition, makeRoom, closeGap, applyOrder, parseSlide, touchService, serviceIdForSlide,
 } from "./_helpers.js";
 
-// Reusable insert used by add_slide AND the content/template tools.
-// `slide` = { template_type, data, background?, overlays?, transition? }.
-// Returns the new slide id. Caller owns the surrounding transaction when
-// inserting many slides at once.
+// Reusable insert used by add_slide AND apply_template / content tools.
+// `slide` = { background?, elements?, transition? }.
 export function insertSlide(db, serviceId, slide, position) {
   const id = ulid();
   let pos = position;
-  if (pos === undefined || pos === null) {
-    pos = nextPosition(db, "slides", "service_id", serviceId);
-  } else {
-    makeRoom(db, "slides", "service_id", serviceId, pos);
-  }
+  if (pos === undefined || pos === null) pos = nextPosition(db, "slides", "service_id", serviceId);
+  else makeRoom(db, "slides", "service_id", serviceId, pos);
   db.query(
-    `INSERT INTO slides (id, service_id, position, template_type, data, background, overlays, transition)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO slides (id, service_id, position, background, elements, transition)
+     VALUES (?, ?, ?, ?, ?, ?)`
   ).run(
-    id, serviceId, pos, slide.template_type,
-    JSON.stringify(slide.data ?? {}),
+    id, serviceId, pos,
     slide.background ? JSON.stringify(slide.background) : null,
-    slide.overlays ? JSON.stringify(slide.overlays) : null,
+    JSON.stringify(slide.elements ?? []),
     slide.transition ?? "fade"
   );
   return id;
 }
 
-// Insert an array of slides contiguously (at the end, or from `startPosition`).
 export function insertSlides(db, serviceId, slides, startPosition) {
   const ids = [];
   const tx = db.transaction(() => {
@@ -48,27 +43,23 @@ export function insertSlides(db, serviceId, slides, startPosition) {
 
 register({
   name: "add_slide",
-  description: "예배 순서에 슬라이드 하나를 추가한다. template_type과 data(JSON)는 필수, 배경/오버레이/전환은 선택. position 생략 시 맨 끝.",
+  description: "예배 순서에 슬라이드 하나를 추가한다. elements(요소 배열)/background/transition은 선택. position 생략 시 맨 끝.",
   input_schema: {
     type: "object",
     properties: {
       service_id: { type: "string" },
-      template_type: { type: "string", description: "title/section/hymn/praise/bible/responsive_reading/announcement 등" },
-      data: { type: "object" },
-      position: { type: "integer", description: "삽입 위치(0-base). 생략 시 맨 끝." },
+      elements: { type: "array", description: "요소 배열 (text/shape/image/bible/hymn/reading)" },
       background: { type: "object" },
-      overlays: { type: "array" },
       transition: { type: "string", default: "fade" },
+      position: { type: "integer" },
     },
-    required: ["service_id", "template_type", "data"],
+    required: ["service_id"],
   },
-  handler: ({ service_id, template_type, data, position, background, overlays, transition }, { db }) => {
-    if (!db.query("SELECT id FROM services WHERE id = ?").get(service_id)) {
-      throw new Error(`unknown service: ${service_id}`);
-    }
+  handler: ({ service_id, elements, background, transition, position }, { db }) => {
+    if (!db.query("SELECT id FROM services WHERE id = ?").get(service_id)) throw new Error(`unknown service: ${service_id}`);
     let id;
     const tx = db.transaction(() => {
-      id = insertSlide(db, service_id, { template_type, data, background, overlays, transition }, position);
+      id = insertSlide(db, service_id, { elements: elements ?? [], background, transition }, position);
       touchService(db, service_id);
     });
     tx();
@@ -78,22 +69,19 @@ register({
 
 register({
   name: "update_slide",
-  description: "슬라이드 필드를 수정한다. fields에 template_type/data/background/overlays/transition 일부를 넘긴다.",
+  description: "슬라이드 필드를 수정한다. fields에 elements/background/transition 일부.",
   input_schema: {
     type: "object",
     properties: { slide_id: { type: "string" }, fields: { type: "object" } },
     required: ["slide_id", "fields"],
   },
   handler: ({ slide_id, fields }, { db }) => {
-    const jsonCols = new Set(["data", "background", "overlays"]);
-    const allowed = ["template_type", "data", "background", "overlays", "transition"];
+    const jsonCols = new Set(["elements", "background"]);
+    const allowed = ["elements", "background", "transition"];
     const keys = Object.keys(fields).filter((k) => allowed.includes(k));
     if (keys.length === 0) throw new Error("no updatable fields provided");
     const set = keys.map((k) => `${k} = ?`).join(", ");
-    const vals = keys.map((k) => {
-      if (!jsonCols.has(k)) return fields[k];
-      return fields[k] == null ? null : JSON.stringify(fields[k]);
-    });
+    const vals = keys.map((k) => (jsonCols.has(k) ? (fields[k] == null ? null : JSON.stringify(fields[k])) : fields[k]));
     db.query(`UPDATE slides SET ${set} WHERE id = ?`).run(...vals, slide_id);
     touchService(db, serviceIdForSlide(db, slide_id));
     return { ok: true };
@@ -101,37 +89,30 @@ register({
 });
 
 register({
-  name: "set_slide_background",
-  description: "슬라이드 배경 레이어를 설정한다. background=null이면 테마 기본 배경을 사용한다.",
+  name: "set_slide_elements",
+  description: "슬라이드의 요소 배열 전체를 설정한다.",
   input_schema: {
     type: "object",
-    properties: {
-      slide_id: { type: "string" },
-      background: { type: "object", description: "{type:color|image|video|gradient,...} 또는 null" },
-    },
-    required: ["slide_id"],
+    properties: { slide_id: { type: "string" }, elements: { type: "array" } },
+    required: ["slide_id", "elements"],
   },
-  handler: ({ slide_id, background }, { db }) => {
-    db.query("UPDATE slides SET background = ? WHERE id = ?")
-      .run(background == null ? null : JSON.stringify(background), slide_id);
+  handler: ({ slide_id, elements }, { db }) => {
+    db.query("UPDATE slides SET elements = ? WHERE id = ?").run(JSON.stringify(elements), slide_id);
     touchService(db, serviceIdForSlide(db, slide_id));
     return { ok: true };
   },
 });
 
 register({
-  name: "set_slide_overlays",
-  description: "슬라이드 오버레이(추가 텍스트/이미지) 레이어 배열을 설정한다.",
+  name: "set_slide_background",
+  description: "슬라이드 배경을 설정한다. null이면 테마 기본.",
   input_schema: {
     type: "object",
-    properties: {
-      slide_id: { type: "string" },
-      overlays: { type: "array", description: "오버레이 객체 배열" },
-    },
-    required: ["slide_id", "overlays"],
+    properties: { slide_id: { type: "string" }, background: { type: "object" } },
+    required: ["slide_id"],
   },
-  handler: ({ slide_id, overlays }, { db }) => {
-    db.query("UPDATE slides SET overlays = ? WHERE id = ?").run(JSON.stringify(overlays), slide_id);
+  handler: ({ slide_id, background }, { db }) => {
+    db.query("UPDATE slides SET background = ? WHERE id = ?").run(background == null ? null : JSON.stringify(background), slide_id);
     touchService(db, serviceIdForSlide(db, slide_id));
     return { ok: true };
   },
@@ -142,10 +123,7 @@ register({
   description: "예배 순서 내 슬라이드 순서를 명시한 ID 배열대로 재배열한다.",
   input_schema: {
     type: "object",
-    properties: {
-      service_id: { type: "string" },
-      ordered_slide_ids: { type: "array", items: { type: "string" } },
-    },
+    properties: { service_id: { type: "string" }, ordered_slide_ids: { type: "array", items: { type: "string" } } },
     required: ["service_id", "ordered_slide_ids"],
   },
   handler: ({ service_id, ordered_slide_ids }, { db }) => {

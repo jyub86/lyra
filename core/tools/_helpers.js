@@ -31,14 +31,13 @@ export function applyOrder(db, table, ids) {
   tx(ids);
 }
 
-// JSON columns on slides: data / background / overlays.
+// JSON columns on slides: background / elements (v4).
 export function parseSlide(row) {
   if (!row) return null;
   return {
     ...row,
-    data: row.data ? JSON.parse(row.data) : {},
     background: row.background ? JSON.parse(row.background) : null,
-    overlays: row.overlays ? JSON.parse(row.overlays) : [],
+    elements: row.elements ? JSON.parse(row.elements) : [],
   };
 }
 

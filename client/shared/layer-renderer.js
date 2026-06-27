@@ -1,6 +1,7 @@
-// Layer compositor (design §5, §12). background → content → overlays.
-// Shared by editor preview and presenter so they render identically.
-import { renderSlide } from "./slide-renderer.js";
+// Layer compositor (v4). A slide = background + elements. Every element
+// (text/shape/image + content elements bible/hymn/reading) is rendered here, so
+// editor preview, tiles, and presenter render identically. Content elements draw
+// their fetched `content` snapshot at the element's font size/color/align.
 
 export function applyTheme(root, theme) {
   const c = (theme && theme.colors) || {};
@@ -12,14 +13,8 @@ export function applyTheme(root, theme) {
   set("--leader", c.leader || c.accent || "#7aa2f7");
   set("--congregation", c.congregation || "#e0af68");
   set("--font-family", f.family || "sans-serif");
-  set("--title-size", (f.title_size || 5.0) + "cqw");
-  set("--body-size", (f.body_size || 3.2) + "cqw");
-  set("--label-size", (f.label_size || 1.8) + "cqw");
-  set("--line-height", f.line_height || 1.5);
-  set("--weight", f.weight || 600);
 }
 
-// Renders a background spec into `bgEl`. Video is wired in M8.
 export function renderBackground(bgEl, bg) {
   bgEl.replaceChildren();
   bgEl.style.cssText = "";
@@ -33,85 +28,97 @@ export function renderBackground(bgEl, bg) {
     bgEl.style.backgroundPosition = "center";
   } else if (bg.type === "video") {
     const v = document.createElement("video");
-    v.src = bg.url;
-    v.autoplay = true;
-    v.muted = bg.muted !== false; // muted by default → autoplay allowed
-    v.loop = bg.loop !== false;
-    v.playsInline = true;
+    v.src = bg.url; v.autoplay = true; v.muted = bg.muted !== false; v.loop = bg.loop !== false; v.playsInline = true;
     v.className = "bg-video";
     if (bg.playback_rate) v.playbackRate = bg.playback_rate;
-    bgEl.appendChild(v);
-    v.play?.().catch(() => {});
+    bgEl.appendChild(v); v.play?.().catch(() => {});
   }
-  // Readability dim over image/video.
   const dim = bg && bg.overlay_dim;
-  if (dim && dim > 0) {
-    const d = document.createElement("div");
-    d.className = "bg-dim";
-    d.style.background = `rgba(0,0,0,${dim})`;
-    bgEl.appendChild(d);
+  if (dim && dim > 0) { const d = document.createElement("div"); d.className = "bg-dim"; d.style.background = `rgba(0,0,0,${dim})`; bgEl.appendChild(d); }
+}
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+// ----- content element bodies (bible / hymn / reading) -----
+function renderBibleBody(root, c, showNumbers) {
+  if (c?.ref) root.appendChild(el("div", "ce-ref", c.ref));
+  const body = el("div", "ce-body");
+  for (const v of c?.verses || []) {
+    const row = el("span", "ce-verse");
+    if (showNumbers !== false) row.appendChild(el("sup", "ce-verse-no", String(v.verse)));
+    row.appendChild(el("span", null, (showNumbers !== false ? " " : "") + v.text));
+    body.appendChild(row);
+    body.appendChild(document.createTextNode(" "));
+  }
+  root.appendChild(body);
+}
+function renderHymnBody(root, c) {
+  const head = el("div", "ce-head");
+  if (c?.number) head.appendChild(el("span", "ce-no", `${c.number}장`));
+  if (c?.title) head.appendChild(el("span", null, " " + c.title));
+  root.appendChild(head);
+  if (c?.label) root.appendChild(el("div", "ce-label", c.label));
+  for (const line of c?.lines || []) root.appendChild(el("div", "ce-line", line));
+}
+function renderReadingBody(root, c) {
+  if (c?.title) root.appendChild(el("div", "ce-ref", `${c.number ? c.number + "번 " : ""}${c.title}`));
+  for (const seg of c?.segments || []) {
+    const row = el("div", `ce-seg role-${seg.role}`);
+    const tag = { leader: "인도자", congregation: "회중", unison: "다같이" }[seg.role];
+    if (tag) row.appendChild(el("span", "ce-tag", tag));
+    row.appendChild(el("span", null, seg.text));
+    root.appendChild(row);
   }
 }
 
-// Position a free element by its 0..1 box. Width/height optional (legacy text
-// overlays had only x,y) — then the box hugs its content, centered on x,y.
-function placeElement(n, el) {
-  const hasBox = el.w != null || el.h != null;
-  n.style.left = (el.x ?? 0.5) * 100 + "%";
-  n.style.top = (el.y ?? 0.5) * 100 + "%";
-  if (hasBox) {
-    n.style.width = (el.w ?? 0.3) * 100 + "%";
-    n.style.height = (el.h ?? 0.15) * 100 + "%";
-    n.style.transform = "none";
-  } else {
-    n.style.transform = "translate(-50%, -50%)"; // legacy center anchor
-  }
+function placeElement(n, e) {
+  n.style.left = (e.x ?? 0.4) * 100 + "%";
+  n.style.top = (e.y ?? 0.4) * 100 + "%";
+  n.style.width = (e.w ?? 0.3) * 100 + "%";
+  n.style.height = (e.h ?? 0.15) * 100 + "%";
 }
 
-// Render the free-element layer (generalized overlays): text boxes, shapes, images.
+// Render the elements layer.
 export function renderElements(root, elements) {
   root.replaceChildren();
-  for (const el of elements || []) {
+  for (const e of elements || []) {
     let n;
-    if (el.type === "image") {
+    if (e.type === "image") {
       n = document.createElement("img");
-      n.className = "el el-image";
-      n.src = el.url;
-    } else if (el.type === "shape") {
-      n = document.createElement("div");
-      n.className = "el el-shape el-" + (el.shape || "rect");
-      n.style.background = el.shape === "line" ? "transparent" : (el.fill || "transparent");
-      const sw = el.stroke_width ?? (el.shape === "line" ? 2 : 0);
-      if (el.shape === "line") {
-        n.style.borderTop = `${sw / 10}cqw solid ${el.stroke || "#fff"}`;
-      } else if (sw) {
-        n.style.border = `${sw / 10}cqw solid ${el.stroke || "#fff"}`;
-      }
-      if (el.shape === "ellipse") n.style.borderRadius = "50%";
-      else if (el.radius) n.style.borderRadius = (el.radius / 10) + "cqw";
+      n.className = "el el-image"; n.src = e.url; if (e.fit) n.style.objectFit = e.fit;
+    } else if (e.type === "shape") {
+      n = el("div", "el el-shape el-" + (e.shape || "rect"));
+      n.style.background = e.shape === "line" ? "transparent" : (e.fill || "transparent");
+      const sw = e.stroke_width ?? (e.shape === "line" ? 2 : 0);
+      if (e.shape === "line") n.style.borderTop = `${sw / 10}cqw solid ${e.stroke || "#fff"}`;
+      else if (sw) n.style.border = `${sw / 10}cqw solid ${e.stroke || "#fff"}`;
+      if (e.shape === "ellipse") n.style.borderRadius = "50%";
+      else if (e.radius) n.style.borderRadius = (e.radius / 10) + "cqw";
+    } else if (e.type === "bible" || e.type === "hymn" || e.type === "reading") {
+      n = el("div", "el el-content el-" + e.type);
+      n.style.fontSize = (e.size ?? 3.2) + "cqw";
+      if (e.color) n.style.color = e.color;
+      n.style.textAlign = e.align || "center";
+      n.style.fontWeight = e.weight || 600;
+      if (e.line_height) n.style.lineHeight = e.line_height;
+      if (e.type === "bible") renderBibleBody(n, e.content, e.show_numbers);
+      else if (e.type === "hymn") renderHymnBody(n, e.content);
+      else renderReadingBody(n, e.content);
     } else {
-      n = document.createElement("div");
-      n.className = "el el-text";
-      n.textContent = el.text ?? "";
-      n.style.fontSize = (el.size ?? 4) + "cqw";
-      n.style.color = el.color || "var(--text)";
-      n.style.textAlign = el.align || "center";
-      n.style.fontWeight = el.weight || 600;
+      n = el("div", "el el-text", e.text ?? "");
+      n.style.fontSize = (e.size ?? 4) + "cqw";
+      if (e.color) n.style.color = e.color;
+      n.style.textAlign = e.align || "center";
+      n.style.fontWeight = e.weight || 600;
     }
-    placeElement(n, el);
+    placeElement(n, e);
     root.appendChild(n);
   }
-}
-
-// Per-slide content style override (gasa/bible etc.): font scale, color, align.
-function applyContentStyle(contentEl, style) {
-  contentEl.style.removeProperty("--content-scale");
-  contentEl.style.removeProperty("text-align");
-  contentEl.style.removeProperty("--text");
-  if (!style) return;
-  if (style.scale) contentEl.style.setProperty("--content-scale", style.scale);
-  if (style.color) contentEl.style.setProperty("--text", style.color);
-  if (style.align) contentEl.style.textAlign = style.align;
 }
 
 export function renderSlideWithLayers(container, slide, theme) {
@@ -119,23 +126,15 @@ export function renderSlideWithLayers(container, slide, theme) {
   applyTheme(container, theme);
 
   let bgEl = container.querySelector(":scope > .layer-bg");
-  let contentEl = container.querySelector(":scope > .layer-content");
-  let overlayEl = container.querySelector(":scope > .layer-overlays");
+  let elemEl = container.querySelector(":scope > .layer-elements");
   if (!bgEl) {
     container.replaceChildren();
-    bgEl = mk("layer-bg"); contentEl = mk("layer-content"); overlayEl = mk("layer-overlays");
-    container.append(bgEl, contentEl, overlayEl);
+    bgEl = mk("layer-bg"); elemEl = mk("layer-elements");
+    container.append(bgEl, elemEl);
   }
-
   const bg = slide.background ?? (theme && theme.background) ?? { type: "color", value: "#000" };
   renderBackground(bgEl, bg);
-  renderSlide(contentEl, slide, theme);
-  applyContentStyle(contentEl, slide.data?.style);
-  renderElements(overlayEl, slide.overlays || []);
+  renderElements(elemEl, slide.elements || []);
 }
 
-function mk(cls) {
-  const n = document.createElement("div");
-  n.className = cls;
-  return n;
-}
+function mk(cls) { const n = document.createElement("div"); n.className = cls; return n; }

@@ -431,22 +431,26 @@ function slideDesign(slide) {
 async function loadTemplates() {
   state.templates = await callTool("list_templates").catch(() => []);
   renderTemplatePanel();
+  renderAddTypeSelect();
 }
 
+// management list: save current slide's design into a template, rename, reset/delete
 function renderTemplatePanel() {
   const list = $("tpl-list");
   if (!list) return;
   list.replaceChildren();
-  if (!state.templates?.length) { list.appendChild(elx("p", "muted", "저장된 템플릿이 없습니다. 슬라이드를 꾸미고 저장하세요.")); return; }
+  if (!state.templates?.length) { list.appendChild(elx("p", "muted", "템플릿이 없습니다.")); return; }
+  let lastKind = null;
   for (const t of state.templates) {
+    if (t.kind !== lastKind) { list.appendChild(elx("div", "tpl-group", t.kind === "builtin" ? "기본 종류" : "내 템플릿")); lastKind = t.kind; }
     const row = elx("div", "tpl-row");
     const name = elx("span", "tpl-name", t.name);
-    name.title = "클릭하면 현재 예배에 삽입";
-    name.onclick = () => applyTemplate(t.id);
-    const upd = elx("button", "mini", "업데이트"); upd.title = "현재 슬라이드 디자인으로 덮어쓰기"; upd.onclick = () => updateTemplate(t.id);
+    name.title = t.kind === "builtin" ? "기본 슬라이드 종류 (추가는 ‘추가’ 탭에서)" : "디자인 템플릿";
+    const save = elx("button", "mini", "이 디자인"); save.title = "현재 선택 슬라이드의 디자인을 이 템플릿에 저장"; save.onclick = () => updateTemplate(t.id);
     const ren = elx("button", "mini", "이름"); ren.onclick = () => renameTemplate(t.id, t.name);
-    const del = elx("button", "mini danger", "✕"); del.onclick = () => deleteTemplate(t.id);
-    row.append(name, upd, ren, del);
+    const last = elx("button", "mini" + (t.kind === "builtin" ? "" : " danger"), t.kind === "builtin" ? "초기화" : "✕");
+    last.onclick = () => (t.kind === "builtin" ? resetTemplate(t.id) : deleteTemplate(t.id));
+    row.append(name, save, ren, last);
     list.appendChild(row);
   }
 }
@@ -454,32 +458,32 @@ function renderTemplatePanel() {
 async function saveCurrentAsTemplate() {
   const slide = selectedSlide();
   if (!slide) { msg("tpl-msg", "슬라이드를 먼저 선택하세요.", true); return; }
-  const name = prompt("템플릿 이름", slide.data?.title || slide.data?.label || "새 템플릿");
+  const name = prompt("새 디자인 템플릿 이름", slide.data?.title || slide.data?.label || "새 템플릿");
   if (!name) return;
   await callTool("save_template", { name, slide: slideDesign(slide) });
   msg("tpl-msg", `“${name}” 저장됨`);
   await loadTemplates();
 }
-async function applyTemplate(id) {
-  if (!state.serviceId) return;
-  const { slide_id } = await callTool("apply_template", { template_id: id, service_id: state.serviceId });
-  await refresh();
-  setSingleSelection(slide_id);
-  render();
-  msg("tpl-msg", "현재 예배 끝에 삽입됨");
-}
 async function updateTemplate(id) {
   const slide = selectedSlide();
-  if (!slide) { msg("tpl-msg", "덮어쓸 디자인(슬라이드)을 선택하세요.", true); return; }
-  if (!confirm("현재 슬라이드 디자인으로 이 템플릿을 덮어쓸까요?")) return;
+  if (!slide) { msg("tpl-msg", "디자인 소스 슬라이드를 선택하세요.", true); return; }
+  const t = state.templates.find((x) => x.id === id);
+  const what = t?.kind === "builtin" ? "이 종류의 디자인(배경·요소·콘텐츠 스타일)" : "이 템플릿";
+  if (!confirm(`현재 슬라이드 디자인으로 ${what}을 저장할까요?`)) return;
   await callTool("update_template", { template_id: id, slide: slideDesign(slide) });
-  msg("tpl-msg", "템플릿 업데이트됨");
+  msg("tpl-msg", "디자인 저장됨");
   await loadTemplates();
 }
 async function renameTemplate(id, cur) {
   const name = prompt("새 이름", cur);
   if (!name) return;
   await callTool("update_template", { template_id: id, name });
+  await loadTemplates();
+}
+async function resetTemplate(id) {
+  if (!confirm("이 종류의 디자인을 초기화할까요?")) return;
+  await callTool("update_template", { template_id: id, reset: true });
+  msg("tpl-msg", "초기화됨");
   await loadTemplates();
 }
 async function deleteTemplate(id) {
@@ -509,62 +513,91 @@ function renderTiles() {
   });
 }
 
-// ---------- add slide ----------
-const ADD_FIELDS = {
-  title: [["title", "제목", "text"], ["subtitle", "부제", "text"]],
-  section: [["label", "구분 제목", "text"]],
-  bible: [["book", "책(이름/약칭)", "text"], ["chapter", "장", "number"], ["verse_start", "시작 절", "number"], ["verse_end", "끝 절", "number"], ["layout", "분할", "select:auto,one-per-verse,all-in-one"]],
-  hymn: [["number", "찬송가 번호", "number"], ["verse_nos", "절(예: 1,3)", "text"], ["lines_per_slide", "줄/슬라이드", "number:4"]],
-  responsive_reading: [["number", "교독문 번호", "number"]],
-  praise: [["title", "곡 제목", "text"], ["lyrics", "가사(줄바꿈으로 구분)", "textarea"], ["lines_per_slide", "줄/슬라이드", "number:2"]],
-  announcement: [["items", "광고 항목(줄바꿈)", "textarea"]],
-  blank: [],
+// ---------- add slide (unified: pick any template + schema-driven params) ----------
+const PARAM_LABELS = {
+  title: "제목", subtitle: "부제", label: "구분 제목",
+  book: "책 (이름/약칭)", chapter: "장", verse_start: "시작 절", verse_end: "끝 절", layout: "분할",
+  number: "번호", verse_nos: "절 (예: 1,3)", lines_per_slide: "줄/슬라이드",
+  segments_per_slide: "세그먼트/슬라이드", sections: "가사 (한 줄씩)", items: "광고 항목 (한 줄씩)",
 };
 
+// populate the type/template dropdown (기본 종류 + 내 템플릿) from state.templates
+function renderAddTypeSelect() {
+  const sel = $("add-type");
+  const cur = sel.value;
+  sel.innerHTML = "";
+  const gB = document.createElement("optgroup"); gB.label = "기본 종류";
+  const gC = document.createElement("optgroup"); gC.label = "내 템플릿";
+  for (const t of state.templates) {
+    const o = document.createElement("option"); o.value = t.id; o.textContent = t.name;
+    (t.kind === "builtin" ? gB : gC).appendChild(o);
+  }
+  sel.appendChild(gB);
+  if (gC.children.length) sel.appendChild(gC);
+  if (cur && state.templates.some((t) => t.id === cur)) sel.value = cur;
+  renderAddFields();
+}
+
+// build the input form from the selected template's params_schema
 function renderAddFields() {
+  const tpl = state.templates.find((t) => t.id === $("add-type").value);
   const wrap = $("add-fields");
   wrap.innerHTML = "";
-  for (const [key, label, kind] of ADD_FIELDS[$("add-type").value] || []) {
-    const l = document.createElement("label"); l.textContent = label; wrap.appendChild(l);
+  const props = tpl?.params_schema?.properties || {};
+  for (const [key, def] of Object.entries(props)) {
+    wrap.appendChild(elx("label", null, PARAM_LABELS[key] || key));
     let input;
-    if (kind === "textarea") { input = document.createElement("textarea"); input.rows = 5; }
-    else if (kind.startsWith("select:")) {
+    if (def.enum) {
       input = document.createElement("select");
-      for (const opt of kind.slice(7).split(",")) { const o = document.createElement("option"); o.value = o.textContent = opt; input.appendChild(o); }
+      for (const v of def.enum) { const o = document.createElement("option"); o.value = o.textContent = v; input.appendChild(o); }
+      if (def.default != null) input.value = def.default;
+    } else if (key === "sections" || key === "items" || def.type === "array") {
+      input = document.createElement("textarea");
+      input.rows = key === "sections" ? 5 : 3;
+      input.placeholder = key === "sections" ? "가사 한 줄씩" : key === "items" ? "항목 한 줄씩" : "쉼표로 구분";
     } else {
       input = document.createElement("input");
-      input.type = kind.startsWith("number") ? "number" : "text";
-      if (kind.includes(":")) input.value = kind.split(":")[1];
+      input.type = (def.type === "integer" || def.type === "number") ? "number" : "text";
+      if (def.default != null) input.value = def.default;
     }
-    input.id = "af-" + key;
+    input.dataset.key = key;
+    input.dataset.dtype = def.type || "string";
     wrap.appendChild(input);
   }
 }
-const afVal = (k) => $("af-" + k)?.value?.trim() ?? "";
+
+function collectParams(tpl) {
+  const params = {};
+  for (const [key, def] of Object.entries(tpl?.params_schema?.properties || {})) {
+    const input = $("add-fields").querySelector(`[data-key="${key}"]`);
+    if (!input) continue;
+    const v = input.value.trim();
+    if (key === "sections") {
+      const lines = v.split("\n").map((s) => s.trim()).filter(Boolean);
+      if (lines.length) params.sections = [{ label: "", lines }];
+    } else if (key === "items") {
+      params.items = v.split("\n").map((s) => s.trim()).filter(Boolean);
+    } else if (def.type === "array") {
+      if (v) params[key] = v.split(",").map((x) => Number(x.trim())).filter((x) => !Number.isNaN(x));
+    } else if (v === "") {
+      // skip empty optional field
+    } else if (def.type === "integer" || def.type === "number") {
+      params[key] = Number(v);
+    } else {
+      params[key] = v;
+    }
+  }
+  return params;
+}
 
 async function addSlide() {
-  const type = $("add-type").value;
-  const service_id = state.serviceId;
-  if (!service_id) return msg("add-msg", "예배 순서가 없습니다.", true);
+  const templateId = $("add-type").value;
+  if (!state.serviceId) return msg("add-msg", "예배 순서가 없습니다.", true);
+  const tpl = state.templates.find((t) => t.id === templateId);
+  if (!tpl) return msg("add-msg", "추가할 종류/템플릿을 선택하세요.", true);
   try {
-    if (type === "bible") {
-      await callTool("add_bible_slides", { service_id, book: afVal("book"), chapter: +afVal("chapter"), verse_start: +afVal("verse_start"), verse_end: +afVal("verse_end"), layout: afVal("layout") });
-    } else if (type === "hymn") {
-      const vn = afVal("verse_nos");
-      await callTool("add_hymn_slides", { service_id, number: +afVal("number"), verse_nos: vn ? vn.split(",").map((x) => +x.trim()).filter(Boolean) : undefined, lines_per_slide: +afVal("lines_per_slide") || 4 });
-    } else if (type === "responsive_reading") {
-      await callTool("add_reading_slides", { service_id, number: +afVal("number") });
-    } else if (type === "praise") {
-      const lines = afVal("lyrics").split("\n").map((s) => s.trim()).filter(Boolean);
-      await callTool("add_praise_slides", { service_id, title: afVal("title"), sections: [{ label: "", lines }], lines_per_slide: +afVal("lines_per_slide") || 2 });
-    } else if (type === "announcement") {
-      const items = afVal("items").split("\n").map((s) => s.trim()).filter(Boolean);
-      await callTool("add_announcement_slide", { service_id, items });
-    } else {
-      const data = type === "title" ? { title: afVal("title"), subtitle: afVal("subtitle") } : type === "section" ? { label: afVal("label") } : {};
-      await callTool("add_slide", { service_id, template_type: type, data });
-    }
-    msg("add-msg", "추가됨");
+    await callTool("apply_template", { template_id: templateId, service_id: state.serviceId, params: collectParams(tpl) });
+    msg("add-msg", `“${tpl.name}” 추가됨`);
     await refresh();
   } catch (e) { msg("add-msg", e.message, true); }
 }

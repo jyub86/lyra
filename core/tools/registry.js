@@ -6,6 +6,7 @@
 import { validate } from "../lib/validate.js";
 import { getDb } from "../db/index.js";
 import { bus } from "../lib/bus.js";
+import { seedBuiltins } from "../templates/builtins.js";
 
 const tools = new Map();
 
@@ -71,4 +72,7 @@ export async function loadTools() {
     import("./media.tools.js"),
     import("./template.tools.js"),
   ]);
+  // built-in slide kinds are templates too — seed them now that content tools
+  // (whose schemas define generator params) are registered.
+  seedBuiltins(getDb(), get);
 }

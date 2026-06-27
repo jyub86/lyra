@@ -32,6 +32,12 @@
     </aside>
 
     <section class="col canvas">
+      <div id="tpl-edit-bar" class="tpl-edit-bar" hidden>
+        <span>🎨 템플릿 편집 중: <b id="tpl-edit-name"></b> <span class="muted">— 디자인을 바꾼 뒤 저장하세요</span></span>
+        <span class="spacer"></span>
+        <button id="tpl-edit-save" class="primary-sm">템플릿에 저장</button>
+        <button id="tpl-edit-cancel">취소</button>
+      </div>
       <div class="canvas-tools">
         <span class="ct-label">요소 추가</span>
         <button data-add="text">＋ 텍스트</button>
@@ -42,7 +48,7 @@
         <input id="el-image-file" type="file" accept="image/*" hidden />
       </div>
       <div class="canvas-wrap"><div id="preview" class="slide-layers"></div></div>
-      <div class="canvas-bar">
+      <div id="canvas-bar" class="canvas-bar">
         <button id="prev-slide">◀</button>
         <span id="slide-pos" class="slide-pos">—</span>
         <button id="next-slide">▶</button>

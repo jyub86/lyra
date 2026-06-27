@@ -56,6 +56,11 @@ a { color: var(--accent); text-decoration: none; }
 .canvas-bar { display: flex; align-items: center; gap: 8px; }
 .slide-pos { color: var(--muted); min-width: 120px; text-align: center; }
 
+/* template-edit banner */
+.tpl-edit-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; background: #2a2236; border: 1px solid #5b4b7a; }
+.tpl-edit-bar b { color: var(--accent); }
+.primary-sm { background: var(--accent); color: #0b0e14; border-color: var(--accent); font-weight: 700; }
+
 /* element add toolbar */
 .canvas-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .canvas-tools .ct-label { color: var(--muted); font-size: 12px; margin-right: 2px; }

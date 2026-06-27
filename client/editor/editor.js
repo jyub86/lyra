@@ -15,6 +15,7 @@ const state = {
   mode: "list",         // "list" | "tiles"
   editEl: null,         // selected free-element index within the primary slide
   templates: [],        // design templates (cached)
+  editingTemplate: null, // { id, name, kind, draft } while editing a template's design
 };
 
 function setSingleSelection(id) {
@@ -22,6 +23,7 @@ function setSingleSelection(id) {
   state.anchor = id;
   state.selectedSet = new Set(id ? [id] : []);
   state.editEl = null;
+  state.editingTemplate = null;
 }
 
 const slides = () => state.service?.slides || [];
@@ -91,6 +93,7 @@ function wireDrag(el) {
 // List-row click with multi-select (plain / ⌘·Ctrl toggle / Shift range).
 function onRowClick(s, e) {
   state.editEl = null;
+  state.editingTemplate = null;
   const ids = slides().map((x) => x.id);
   if (e.shiftKey && state.anchor && ids.includes(state.anchor)) {
     const a = ids.indexOf(state.anchor), b = ids.indexOf(s.id);
@@ -162,11 +165,22 @@ function render() {
   $("view-list").classList.toggle("active", state.mode === "list");
   $("view-tiles").classList.toggle("active", state.mode === "tiles");
   $("order-count").textContent = state.service ? `${slides().length}장` : "";
+  const editing = !!state.editingTemplate;
+  $("tpl-edit-bar").hidden = !editing;
+  $("canvas-bar").hidden = editing;
+  if (editing) $("tpl-edit-name").textContent = state.editingTemplate.name;
   if (state.mode === "tiles") renderTiles();
   else { renderList(); renderPreview(); renderInspector(); renderDesignPanel(); renderTemplatePanel(); }
 }
 
+// The slide the canvas/design editor is operating on: the template draft while
+// editing a template, otherwise the selected service slide.
 function selectedSlide() {
+  if (state.editingTemplate) return state.editingTemplate.draft;
+  return slides().find((s) => s.id === state.selected) || null;
+}
+// The actual selected service slide (ignores any template draft).
+function serviceSlide() {
   return slides().find((s) => s.id === state.selected) || null;
 }
 
@@ -293,6 +307,7 @@ function startResize(e, i, pos) {
 }
 
 async function commitEls() {
+  if (state.editingTemplate) { repaintEls(); return; } // draft: local only
   const slide = selectedSlide();
   if (!slide) return;
   await callTool("set_slide_overlays", { slide_id: slide.id, overlays: slide.overlays || [] });
@@ -413,14 +428,15 @@ function applyContentStyleEdit(commit) {
   slide.data = { ...slide.data, style };
   $("cs-scale-v").textContent = style.scale.toFixed(2) + "×";
   renderPreview();
-  if (commit) callTool("update_slide", { slide_id: slide.id, fields: { data: slide.data } }).then(() => refresh());
+  if (commit && !state.editingTemplate) callTool("update_slide", { slide_id: slide.id, fields: { data: slide.data } }).then(() => refresh());
 }
 function resetContentStyle() {
   const slide = selectedSlide();
   if (!slide) return;
   const data = { ...slide.data }; delete data.style;
   slide.data = data;
-  callTool("update_slide", { slide_id: slide.id, fields: { data } }).then(() => refresh());
+  if (state.editingTemplate) { renderPreview(); renderDesignPanel(); }
+  else callTool("update_slide", { slide_id: slide.id, fields: { data } }).then(() => refresh());
 }
 
 // ===== 디자인 템플릿 =====
@@ -445,7 +461,8 @@ function renderTemplatePanel() {
     if (t.kind !== lastKind) { list.appendChild(elx("div", "tpl-group", t.kind === "builtin" ? "기본 종류" : "내 템플릿")); lastKind = t.kind; }
     const row = elx("div", "tpl-row");
     const name = elx("span", "tpl-name", t.name);
-    name.title = t.kind === "builtin" ? "기본 슬라이드 종류 (추가는 ‘추가’ 탭에서)" : "디자인 템플릿";
+    name.title = "클릭하면 디자인 불러와서 편집";
+    name.onclick = () => editTemplate(t.id);
     const save = elx("button", "mini", "이 디자인"); save.title = "현재 선택 슬라이드의 디자인을 이 템플릿에 저장"; save.onclick = () => updateTemplate(t.id);
     const ren = elx("button", "mini", "이름"); ren.onclick = () => renameTemplate(t.id, t.name);
     const last = elx("button", "mini" + (t.kind === "builtin" ? "" : " danger"), t.kind === "builtin" ? "초기화" : "✕");
@@ -456,7 +473,7 @@ function renderTemplatePanel() {
 }
 
 async function saveCurrentAsTemplate() {
-  const slide = selectedSlide();
+  const slide = serviceSlide();
   if (!slide) { msg("tpl-msg", "슬라이드를 먼저 선택하세요.", true); return; }
   const name = prompt("새 디자인 템플릿 이름", slide.data?.title || slide.data?.label || "새 템플릿");
   if (!name) return;
@@ -465,7 +482,7 @@ async function saveCurrentAsTemplate() {
   await loadTemplates();
 }
 async function updateTemplate(id) {
-  const slide = selectedSlide();
+  const slide = serviceSlide();
   if (!slide) { msg("tpl-msg", "디자인 소스 슬라이드를 선택하세요.", true); return; }
   const t = state.templates.find((x) => x.id === id);
   const what = t?.kind === "builtin" ? "이 종류의 디자인(배경·요소·콘텐츠 스타일)" : "이 템플릿";
@@ -490,6 +507,56 @@ async function deleteTemplate(id) {
   if (!confirm("이 템플릿을 삭제할까요?")) return;
   await callTool("delete_template", { template_id: id });
   await loadTemplates();
+}
+
+// ----- 템플릿 디자인 불러와서 편집 -----
+const GEN_TYPE = { add_bible_slides: "bible", add_hymn_slides: "hymn", add_reading_slides: "responsive_reading", add_praise_slides: "praise", add_announcement_slide: "announcement" };
+// placeholder content so built-in (param-driven) templates show how the design looks
+const SAMPLE_DATA = {
+  title: { title: "제목", subtitle: "부제" },
+  section: { label: "순서 구분" },
+  bible: { ref: "요 3:16", chapter: 3, verses: [{ verse: 16, text: "하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니" }] },
+  hymn: { number: 1, title: "찬송 제목", label: "1절", lines: ["가사 첫째 줄", "가사 둘째 줄"] },
+  responsive_reading: { number: 1, title: "교독문", segments: [{ role: "leader", text: "인도자 본문" }, { role: "congregation", text: "회중 본문" }] },
+  praise: { title: "찬양 제목", label: "1절", lines: ["가사 첫째 줄", "가사 둘째 줄"] },
+  announcement: { title: "광고", items: ["광고 항목 1", "광고 항목 2"] },
+  blank: {},
+};
+
+// build an editable draft slide from a template (custom = its design; built-in =
+// sample content + the editable design wrapper)
+function draftFromTemplate(tpl) {
+  const spec = tpl.spec || {};
+  if (tpl.kind === "custom") {
+    return { template_type: spec.template_type, data: structuredClone(spec.data || {}), background: spec.background ?? null, overlays: structuredClone(spec.overlays || []) };
+  }
+  const tt = spec.template_type || GEN_TYPE[spec.tool] || "title";
+  const design = spec.design || {};
+  const data = structuredClone(SAMPLE_DATA[tt] || {});
+  if (design.style) data.style = structuredClone(design.style);
+  return { template_type: tt, data, background: design.background ?? null, overlays: structuredClone(design.overlays || []) };
+}
+
+async function editTemplate(id) {
+  const tpl = await callTool("get_template", { template_id: id });
+  state.editingTemplate = { id, name: tpl.name, kind: tpl.kind, draft: draftFromTemplate(tpl) };
+  state.editEl = null;
+  state.mode = "list";
+  showTab("design");
+  render();
+}
+async function saveTemplateEdit() {
+  const et = state.editingTemplate;
+  if (!et) return;
+  await callTool("update_template", { template_id: et.id, slide: et.draft });
+  state.editingTemplate = null;
+  await loadTemplates();
+  render();
+  msg("tpl-msg", "템플릿에 저장됨");
+}
+function cancelTemplateEdit() {
+  state.editingTemplate = null;
+  render();
 }
 
 
@@ -664,10 +731,16 @@ async function saveInspector() {
   if (!slide) return;
   try {
     const data = JSON.parse($("insp-data").value);
-    await callTool("update_slide", { slide_id: slide.id, fields: { data } });
-    await callTool("set_slide_background", { slide_id: slide.id, background: buildBackground() });
+    const bg = buildBackground();
+    if (state.editingTemplate) {
+      slide.data = data; slide.background = bg;
+      renderPreview(); renderInspector();
+    } else {
+      await callTool("update_slide", { slide_id: slide.id, fields: { data } });
+      await callTool("set_slide_background", { slide_id: slide.id, background: bg });
+      await refresh();
+    }
     msg("insp-msg", "저장됨");
-    await refresh();
   } catch (e) { msg("insp-msg", e.message, true); }
 }
 
@@ -790,6 +863,8 @@ function init() {
   $("import-btn").onclick = () => $("import-file").click();
   $("import-file").onchange = (e) => e.target.files[0] && importService(e.target.files[0]);
   $("tpl-save").onclick = saveCurrentAsTemplate;
+  $("tpl-edit-save").onclick = saveTemplateEdit;
+  $("tpl-edit-cancel").onclick = cancelTemplateEdit;
   loadServices();
   loadTemplates();
 }

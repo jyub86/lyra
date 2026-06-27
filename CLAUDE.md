@@ -1,9 +1,22 @@
-# Sunday Worship PPT — 전체 설계 문서 (v3)
+# Sunday Worship PPT — 전체 설계 문서 (v4)
 
-> 작성일: 2026-06-24 (v3 갱신: 2026-06-27)
+> 작성일: 2026-06-24 (v4 갱신: 2026-06-28)
 > 스택: Bun + 순수 HTML/JS + SQLite
 > 실행 환경: M1 Max MacBook Pro (로컬 전용)
-> v3 핵심: **Service(예배 순서 전체) > Slide 평면 구조** / 템플릿 / 레이어(영상) / **MCP·CLI 우선 Tool-First 아키텍처**
+> v4 핵심: **슬라이드 = 요소 캔버스** (모든 콘텐츠가 요소) / 템플릿 = 요소 배치 / **MCP·CLI 우선 Tool-First**
+
+> ⚠️ **v4 변경 (요소 중심 모델)** — 구현 기준(현행, 가장 권위 있음)
+> - **슬라이드 = `{ background, elements:[] }`.** 타입 슬라이드(template_type)·typed data·overlays 레이어를 제거.
+>   `slides(id, service_id, position, background, elements, transition)`.
+> - **요소(element)**: text / shape(rect·ellipse·line) / image + **콘텐츠 요소** bible / hymn / reading.
+>   콘텐츠 요소 = `{ params(가져올 대상), content(가져온 스냅샷), x,y,w,h, size,color,align,weight … }` —
+>   **성경/교독문/찬송 본문도 폰트·색·위치를 자유 편집**(요소이므로). 0~1 상대 박스, size=cqw.
+> - **템플릿 = 요소 배치** `spec={background, elements}`. 기본 종류는 콘텐츠 요소/`bind:"param"` 텍스트를 가짐.
+>   `apply_template`이 bind 채우고 params로 content를 fetch, **긴 본문/가사를 N장으로 자동 분할**(각 장이 템플릿 디자인 복제).
+>   콘텐츠 도구(add_*_slides)는 apply_template(builtin-*)로 위임. 기본 종류 편집=요소 배치/스타일만(내용은 param).
+> - **공유 = `export_service`/`import_service` worship-service/v2** (elements). DB는 v3→v4 스키마 리셋.
+> - 렌더링: `layer-renderer.js`가 background + elements(콘텐츠 요소 본문 포함) 단일 렌더 → 편집/타일/발표 동일.
+> - 아래 본문(§4 data·§5 레이어·§6 슬라이드 타입·§8 slide 도구)의 옛 설명은 **이 v4 노트로 대체**. 권위는 이 노트 + 코드.
 
 > ⚠️ **v3 변경 (Scene 계층 제거)** — 구현 기준(현행)
 > - **Scene 계층을 제거**했다. 슬라이드는 한 예배(Service) 안에 **하나의 연속된 순서**로 평면 저장된다(`slides.service_id` + `position`).
@@ -448,13 +461,13 @@ set_service_theme(service_id, theme_id)
 export_service(service_id)                                → worship-service/v1 JSON
 import_service(payload, title?)                           → service_id
 
-# Slide (service에 직접 속함 — 평면 순서)
-add_slide(service_id, template_type, data, position?, background?, overlays?, transition?) → slide_id
-update_slide(slide_id, fields)
+# Slide (v4 — service 직속, 평면 순서, 슬라이드=요소 캔버스)
+add_slide(service_id, elements?, background?, transition?, position?)  → slide_id
+update_slide(slide_id, fields)                       # fields: elements/background/transition
+set_slide_elements(slide_id, elements)               # 요소 배열 전체 설정
+set_slide_background(slide_id, background)
 remove_slide(slide_id)
 reorder_slides(service_id, ordered_slide_ids)
-set_slide_background(slide_id, background)
-set_slide_overlays(slide_id, overlays)
 
 # 콘텐츠 생성 (고가치 — LLM이 주로 사용)
 add_bible_slides(service_id, book, chapter, verse_start, verse_end, layout?)  → slide_ids

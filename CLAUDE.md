@@ -253,16 +253,26 @@ CREATE TABLE custom_themes (
 - 영상 background는 자동재생(muted+loop) → 발표 화면에서 끊김 없이 반복
 - `overlay_dim`으로 영상 위 가사 가독성 확보 (검은 반투명 레이어)
 
-### 5-2. overlays 스키마 (옵션)
+### 5-2. overlays(자유 요소) 스키마 — v3에서 일반화
+
+overlays 레이어는 **자유 요소(text box / shape / image)** 다. 편집기에서 드래그·크기조절·서식
+편집(구글 슬라이드식)을 한다. 좌표 `x,y,w,h`는 0~1 상대(해상도 독립). text `size`는 cqw.
 
 ```js
 [
-  { "type": "text", "text": "주일 예배", "x": 0.5, "y": 0.1,
-    "size": 28, "color": "#ffffff", "align": "center" },
-  { "type": "image", "url": "/uploads/logo.png", "x": 0.9, "y": 0.9, "scale": 0.1 }
+  { "type":"text",  "x":0.3,"y":0.8,"w":0.4,"h":0.1,
+    "text":"주일 예배", "size":4, "color":"#ffffff", "align":"center", "weight":700 },
+  { "type":"shape", "x":0.06,"y":0.08,"w":0.2,"h":0.12,
+    "shape":"rect", "fill":"#7aa2f7", "stroke":"#fff", "stroke_width":0, "radius":8 },
+  // shape: "rect" | "ellipse" | "line"  (ellipse=원, line=가는 막대)
+  { "type":"image", "x":0.85,"y":0.85,"w":0.1,"h":0.1, "url":"/uploads/logo.png" }
 ]
-// x, y는 0~1 상대좌표 (해상도 독립)
 ```
+
+### 5-3. 콘텐츠 스타일(가사·본문) — 슬라이드별
+
+구조화 콘텐츠(가사/본문 등)의 폰트 크기·색·정렬을 슬라이드별로 조절: `slide.data.style = { scale?, color?, align? }`.
+렌더러가 테마 크기에 `scale`을 곱하고(`--content-scale`) 색/정렬을 override. 도구는 `update_slide`(data) 재사용.
 
 ### 5-3. 순수 영상 슬라이드
 
@@ -318,6 +328,11 @@ CREATE TABLE custom_themes (
 ---
 
 ## 7. 템플릿 시스템
+
+> **v3 디자인 템플릿 (구현됨)**: custom 템플릿의 1차 형태는 **디자인 템플릿** — 한 슬라이드의 디자인
+> (`template_type, data, background, overlays`)을 `templates.spec`(JSON)에 저장해 재사용한다. 편집기에서
+> 슬라이드를 자유 요소·도형·폰트로 꾸민 뒤 `save_template` → 다른 위치에 `apply_template`(새 슬라이드 생성) →
+> `update_template`로 덮어쓰기(편집). 도구: list/get/save/apply/update/delete_template (§8). produces="slides".
 
 템플릿 = **파라미터를 받아 슬라이드(또는 씬)를 생성하는 도구**.
 
@@ -443,14 +458,18 @@ add_praise_slides(service_id, title, sections, lines_per_slide?)             →
    #   지저분한 가사 텍스트 해석은 외부 LLM이 담당 → 내부 파서 없음.
 add_announcement_slide(service_id, items)                                    → slide_id
 
-# 템플릿
-apply_template(template_id, target_scene_id, params)      → slide_ids | scene_id
-create_template(definition)                               → template_id
+# 디자인 템플릿 (v3 — 슬라이드 디자인 저장/재사용)
+list_templates()                                          → 템플릿 목록
+get_template(template_id)                                 → 템플릿 + spec(디자인)
+save_template(name, slide, description?)                  → template_id
+apply_template(template_id, service_id, position?)        → slide_id (새 슬라이드)
+update_template(template_id, {name?, slide?})             → ok (이름/디자인 덮어쓰기)
+delete_template(template_id)                              → ok
 
 # 미디어
-upload_media(file)                                        → url
-import_pptx(scene_id, file)                               → slide_ids
+upload_media(filename, data_base64)                       → { url, filename }
 set_video_background(slide_id, url, options?)             → ok
+# 브라우저 업로드는 POST /api/upload (멀티파트). import_pptx는 미구현(후순위).
 
 # 발표 제어
 present_goto(page_index)

@@ -329,10 +329,17 @@ overlays 레이어는 **자유 요소(text box / shape / image)** 다. 편집기
 
 ## 7. 템플릿 시스템
 
-> **v3 디자인 템플릿 (구현됨)**: custom 템플릿의 1차 형태는 **디자인 템플릿** — 한 슬라이드의 디자인
-> (`template_type, data, background, overlays`)을 `templates.spec`(JSON)에 저장해 재사용한다. 편집기에서
-> 슬라이드를 자유 요소·도형·폰트로 꾸민 뒤 `save_template` → 다른 위치에 `apply_template`(새 슬라이드 생성) →
-> `update_template`로 덮어쓰기(편집). 도구: list/get/save/apply/update/delete_template (§8). produces="slides".
+> **v3 통합 템플릿 (구현됨)**: **슬라이드 종류 = 템플릿.** 하나의 템플릿 목록에 두 종류가 공존:
+> - **builtin (기본 슬라이드 종류, 시드)**: title/section/bible/hymn/reading/praise/announcement/blank.
+>   `spec={tool}`(생성형 — 콘텐츠 도구 재사용) 또는 `spec={template_type}`(정적) + **편집 가능한 디자인 래퍼**
+>   `spec.design={background,style,overlays}`. params_schema는 생성형이면 콘텐츠 도구 input_schema에서 파생.
+>   **수정 = 디자인만**(내용은 추가 시 params로 입력). 삭제 불가·초기화 가능. (`core/templates/builtins.js` 멱등 시드)
+> - **custom (디자인 템플릿)**: 한 슬라이드 디자인(`template_type,data,background,overlays`)을 `save_template`로 저장.
+>
+> 공통: `apply_template(template_id, service_id, params?)` 로 슬라이드 추가(생성형은 콘텐츠 생성 후 디자인 래퍼 적용,
+> 정적은 params→data+디자인, custom은 그대로). `update_template`(builtin=디자인만/custom=전체, reset 지원).
+> 도구: list/get/save/apply/update/delete_template (§8). produces="slides". 편집기 "추가" 탭=템플릿 선택+params,
+> "템플릿" 탭=관리. **콘텐츠 도구(add_*_slides)는 1차 LLM/CLI API로 유지**(apply_template이 재사용).
 
 템플릿 = **파라미터를 받아 슬라이드(또는 씬)를 생성하는 도구**.
 
@@ -458,13 +465,13 @@ add_praise_slides(service_id, title, sections, lines_per_slide?)             →
    #   지저분한 가사 텍스트 해석은 외부 LLM이 담당 → 내부 파서 없음.
 add_announcement_slide(service_id, items)                                    → slide_id
 
-# 디자인 템플릿 (v3 — 슬라이드 디자인 저장/재사용)
-list_templates()                                          → 템플릿 목록
-get_template(template_id)                                 → 템플릿 + spec(디자인)
-save_template(name, slide, description?)                  → template_id
-apply_template(template_id, service_id, position?)        → slide_id (새 슬라이드)
-update_template(template_id, {name?, slide?})             → ok (이름/디자인 덮어쓰기)
-delete_template(template_id)                              → ok
+# 템플릿 (v3 통합 — 기본 슬라이드 종류 + 커스텀 디자인)
+list_templates()                                          → 템플릿 목록(기본 먼저) + params_schema
+get_template(template_id)                                 → 템플릿 + params_schema + spec
+save_template(name, slide, description?)                  → template_id (커스텀 디자인)
+apply_template(template_id, service_id, params?, position?) → slide_ids (params=책·장·절/제목 등)
+update_template(template_id, {name?, slide?, reset?})     → ok (builtin=디자인만/custom=전체)
+delete_template(template_id)                              → ok (커스텀만; 기본 종류는 거부)
 
 # 미디어
 upload_media(filename, data_base64)                       → { url, filename }

@@ -10,9 +10,7 @@ const hint = document.getElementById("hint");
 const state = { service: null, theme: null, index: 0, blackout: false };
 
 function flatSlides() {
-  const out = [];
-  for (const scene of state.service?.scenes || []) for (const s of scene.slides) out.push(s);
-  return out;
+  return state.service?.slides || [];
 }
 
 async function loadService(serviceId) {

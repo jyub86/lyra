@@ -64,7 +64,6 @@ export async function loadTools() {
   _loaded = true;
   await Promise.all([
     import("./service.tools.js"),
-    import("./scene.tools.js"),
     import("./slide.tools.js"),
     import("./content.tools.js"),
     import("./search.tools.js"),

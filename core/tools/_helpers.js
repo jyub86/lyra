@@ -43,15 +43,10 @@ export function parseSlide(row) {
 }
 
 export function touchService(db, serviceId) {
-  db.query("UPDATE services SET updated_at = ? WHERE id = ?").run(nowIso(), serviceId);
+  if (serviceId) db.query("UPDATE services SET updated_at = ? WHERE id = ?").run(nowIso(), serviceId);
 }
 
-// Find the owning service for a scene/slide — used to bump updated_at.
-export function serviceIdForScene(db, sceneId) {
-  return db.query("SELECT service_id FROM scenes WHERE id = ?").get(sceneId)?.service_id;
-}
+// Owning service for a slide — used to bump updated_at.
 export function serviceIdForSlide(db, slideId) {
-  return db.query(
-    "SELECT s.service_id AS sid FROM slides sl JOIN scenes s ON sl.scene_id = s.id WHERE sl.id = ?"
-  ).get(slideId)?.sid;
+  return db.query("SELECT service_id FROM slides WHERE id = ?").get(slideId)?.service_id;
 }

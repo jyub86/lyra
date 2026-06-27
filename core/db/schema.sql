@@ -1,5 +1,5 @@
 -- Sunday Worship PPT — SQLite schema (design §4)
--- Single local file DB. Content (bible/hymns/readings) + Service>Scene>Slide hierarchy.
+-- Single local file DB. Content (bible/hymns/readings) + Service > Slide (flat) hierarchy.
 
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
@@ -90,7 +90,8 @@ CREATE VIRTUAL TABLE IF NOT EXISTS readings_fts USING fts5(
 );
 
 -- =====================================================================
--- HIERARCHY: Service > Scene > Slide
+-- HIERARCHY: Service(예배 순서 전체) > Slide  (평면 — Scene 계층 없음)
+-- 한 Service = 한 예배의 순서 전체이며, 이 단위가 공유(export/import)된다.
 -- =====================================================================
 CREATE TABLE IF NOT EXISTS services (
   id           TEXT PRIMARY KEY,       -- ulid
@@ -102,36 +103,17 @@ CREATE TABLE IF NOT EXISTS services (
   updated_at   TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS scenes (
-  id         TEXT PRIMARY KEY,         -- ulid
-  service_id TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
-  position   INTEGER NOT NULL,
-  name       TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_scenes_service ON scenes(service_id, position);
-
 CREATE TABLE IF NOT EXISTS slides (
   id            TEXT PRIMARY KEY,      -- ulid
-  scene_id      TEXT NOT NULL REFERENCES scenes(id) ON DELETE CASCADE,
-  position      INTEGER NOT NULL,
+  service_id    TEXT NOT NULL REFERENCES services(id) ON DELETE CASCADE,
+  position      INTEGER NOT NULL,      -- 예배 순서 내 슬라이드 순번 (연속)
   template_type TEXT NOT NULL,
   data          TEXT NOT NULL,         -- JSON
   background    TEXT,                  -- JSON (null = 테마 기본)
   overlays      TEXT,                  -- JSON 배열
   transition    TEXT DEFAULT 'fade'
 );
-CREATE INDEX IF NOT EXISTS idx_slides_scene ON slides(scene_id, position);
-
--- =====================================================================
--- Scene Library (재사용/공유)
--- =====================================================================
-CREATE TABLE IF NOT EXISTS scene_library (
-  id         TEXT PRIMARY KEY,         -- ulid
-  name       TEXT NOT NULL,
-  theme_hint TEXT,
-  payload    TEXT NOT NULL,            -- JSON: { format, slides:[...] }
-  created_at TEXT NOT NULL
-);
+CREATE INDEX IF NOT EXISTS idx_slides_service ON slides(service_id, position);
 
 -- =====================================================================
 -- Templates
@@ -141,7 +123,7 @@ CREATE TABLE IF NOT EXISTS templates (
   name          TEXT NOT NULL,
   description   TEXT NOT NULL,
   kind          TEXT NOT NULL,         -- "builtin" | "custom"
-  produces      TEXT NOT NULL,         -- "slides" | "scene"
+  produces      TEXT NOT NULL,         -- "slides" | "service"
   params_schema TEXT NOT NULL,         -- JSON Schema
   spec          TEXT NOT NULL          -- builtin handler ref 또는 declarative blueprint
 );

@@ -959,9 +959,27 @@ async function importService(file) {
   } catch (e) { alert("가져오기 실패: " + e.message); }
 }
 
-// PDF/이미지 → 이미지 슬라이드로 현재 예배에 추가 (기존 PPT는 PDF로 내보내 사용)
+// ---- busy overlay: spinner + message + live elapsed time ----
+let busyTimer = null;
+function showBusy(message, sub = "") {
+  $("busy-msg").textContent = message;
+  const base = sub;
+  const t0 = performance.now();
+  const tick = () => { $("busy-sub").textContent = `${base}${base ? " · " : ""}${((performance.now() - t0) / 1000).toFixed(1)}초 경과`; };
+  tick();
+  clearInterval(busyTimer); busyTimer = setInterval(tick, 200);
+  $("busy").hidden = false;
+}
+function hideBusy() { clearInterval(busyTimer); busyTimer = null; $("busy").hidden = true; }
+
+// PPT/PDF/이미지 → 이미지 슬라이드로 현재 예배에 추가
 async function importSlidesFile(file) {
   if (!state.serviceId) return;
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const isOffice = ["pptx", "ppt", "odp", "key"].includes(ext);
+  const label = isOffice ? "PowerPoint 변환 중…" : ext === "pdf" ? "PDF 변환 중…" : "이미지 가져오는 중…";
+  const sub = isOffice ? `${file.name} · LibreOffice로 변환(첫 실행은 몇 초 걸려요)` : file.name;
+  showBusy(label, sub);
   try {
     const fd = new FormData();
     fd.append("file", file);
@@ -969,8 +987,15 @@ async function importSlidesFile(file) {
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || "가져오기 실패");
     await refresh();
-    msg("add-msg", `${body.slide_ids.length}장 가져옴`);
-  } catch (e) { alert("슬라이드 가져오기 실패: " + e.message); }
+    clearInterval(busyTimer); busyTimer = null;
+    $("busy-msg").textContent = `${body.slide_ids.length}장 가져왔어요 ✓`;
+    $("busy-sub").textContent = "";
+    $("busy").querySelector(".spinner").style.display = "none";
+    setTimeout(() => { $("busy").querySelector(".spinner").style.display = ""; hideBusy(); }, 900);
+  } catch (e) {
+    hideBusy();
+    alert("슬라이드 가져오기 실패: " + e.message);
+  }
 }
 
 function msg(id, text, err) { const el = $(id); if (!el) return; el.textContent = text; el.className = "msg" + (err ? " err" : ""); }
@@ -1036,7 +1061,7 @@ function init() {
   $("import-btn").onclick = () => $("import-file").click();
   $("import-file").onchange = (e) => e.target.files[0] && importService(e.target.files[0]);
   $("import-ppt").onclick = () => $("import-ppt-file").click();
-  $("import-ppt-file").onchange = (e) => e.target.files[0] && importSlidesFile(e.target.files[0]);
+  $("import-ppt-file").onchange = (e) => { const f = e.target.files[0]; if (f) importSlidesFile(f); e.target.value = ""; };
   $("tpl-save").onclick = saveCurrentAsTemplate;
   $("tpl-edit-save").onclick = saveTemplateEdit;
   $("tpl-edit-cancel").onclick = cancelTemplateEdit;

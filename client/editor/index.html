@@ -131,6 +131,15 @@
     <div id="tile-grid" class="tile-grid"></div>
   </section>
 
+  <!-- 진행 중 오버레이 (가져오기 등 긴 작업) -->
+  <div id="busy" class="busy-overlay" hidden>
+    <div class="busy-box">
+      <div class="spinner"></div>
+      <div id="busy-msg" class="busy-msg">작업 중…</div>
+      <div id="busy-sub" class="busy-sub muted"></div>
+    </div>
+  </div>
+
   <script type="module" src="/editor/editor.js"></script>
 </body>
 </html>

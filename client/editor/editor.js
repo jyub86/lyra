@@ -753,8 +753,13 @@ function renderTiles() {
 const PARAM_LABELS = {
   title: "제목", subtitle: "부제", label: "구분 제목",
   book: "책 (이름/약칭)", chapter: "장", verse_start: "시작 절", verse_end: "끝 절", layout: "분할",
-  number: "번호", verse_nos: "절 (예: 1,3)", lines_per_slide: "줄/슬라이드",
-  segments_per_slide: "세그먼트/슬라이드", sections: "가사 (한 줄씩)", items: "광고 항목 (한 줄씩)",
+  number: "번호", verse_nos: "절 (예: 1,3)", lines_per_slide: "슬라이드당 줄 수",
+  segments_per_slide: "슬라이드당 문장 수", sections: "가사 (한 줄씩)", items: "광고 항목 (한 줄씩)",
+};
+// 필드 아래 안내 문구 (페이지당 개수 조절이 무엇인지 명확히)
+const PARAM_HINTS = {
+  segments_per_slide: "한 슬라이드에 담을 인도자/회중 문장 수. 숫자를 키우면 슬라이드가 줄고, 줄이면 많아져요.",
+  lines_per_slide: "한 슬라이드에 담을 가사 줄 수. 숫자를 키우면 슬라이드가 줄어요.",
 };
 
 // populate the type/template dropdown (기본 종류 + 내 템플릿) from state.templates
@@ -799,6 +804,7 @@ function renderAddFields() {
     input.dataset.key = key;
     input.dataset.dtype = def.type || "string";
     wrap.appendChild(input);
+    if (PARAM_HINTS[key]) wrap.appendChild(elx("p", "hint muted", PARAM_HINTS[key]));
   }
 }
 

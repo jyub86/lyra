@@ -31,7 +31,7 @@ export function officeImportAvailable() { return !!findSoffice(); }
 async function officeToPdf(filename, bytes) {
   const soffice = findSoffice();
   if (!soffice) throw new Error("LibreOffice(soffice) 미설치 — .pptx 변환 불가. PDF로 내보내거나 LibreOffice를 설치하세요.");
-  const dir = mkdtempSync(join(tmpdir(), "ryre-office-"));
+  const dir = mkdtempSync(join(tmpdir(), "lyra-office-"));
   try {
     const inPath = join(dir, filename.replace(/[^\w.\-가-힣]/g, "_"));
     writeFileSync(inPath, Buffer.from(bytes));
@@ -61,7 +61,7 @@ async function pdfToImageUrls(bytes) {
   if (!Bun.which("pdftoppm")) {
     throw new Error("PDF→이미지 변환 도구(poppler)가 없습니다. macOS: brew install poppler · Windows: poppler 설치 후 PATH 등록 · Linux: apt install poppler-utils");
   }
-  const dir = mkdtempSync(join(tmpdir(), "ryre-pdf-"));
+  const dir = mkdtempSync(join(tmpdir(), "lyra-pdf-"));
   try {
     const pdfPath = join(dir, "in.pdf");
     writeFileSync(pdfPath, Buffer.from(bytes));

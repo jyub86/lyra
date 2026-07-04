@@ -15,7 +15,7 @@ import { loadTools, schemas, execute, get } from "../core/tools/registry.js";
 export async function buildMcpServer() {
   await loadTools();
   const server = new Server(
-    { name: "ryre", version: "1.0.0" },
+    { name: "lyra", version: "1.0.0" },
     { capabilities: { tools: {} } }
   );
 
@@ -47,5 +47,5 @@ if (import.meta.main) {
   const server = await buildMcpServer();
   await server.connect(new StdioServerTransport());
   // stdio transport keeps the process alive; logs must go to stderr (stdout is the protocol channel).
-  process.stderr.write("[mcp] ryre server listening on stdio\n");
+  process.stderr.write("[mcp] lyra server listening on stdio\n");
 }

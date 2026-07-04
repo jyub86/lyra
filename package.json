@@ -1,5 +1,5 @@
 {
-  "name": "ryre",
+  "name": "lyra",
   "version": "0.1.0",
   "type": "module",
   "description": "Tool-First / Headless-First worship presentation system (Bun + SQLite)",

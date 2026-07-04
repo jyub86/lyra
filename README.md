@@ -1,4 +1,6 @@
-# RYRE — 주일예배 PPT 시스템
+# Lyra — 주일예배 PPT 시스템
+
+> **Lyra** — 시편에서 다윗이 연주한 수금(竪琴, lyre)에서 따온 이름. 찬양·예배·말씀을 담는 도구.
 
 교회 주일예배용 프레젠테이션(PPT)을 **빠르게 제작하고 발표**하는 로컬 도구입니다.
 성경·찬송가·교독문을 오프라인 DB에서 바로 슬라이드로 만들고, 모든 슬라이드를
@@ -54,8 +56,8 @@ sudo apt install libreoffice poppler-utils
 ## 설치 & 실행
 
 ```bash
-git clone https://github.com/jyub86/ryre.git
-cd ryre
+git clone https://github.com/jyub86/lyra.git
+cd lyra
 bun install
 ```
 
@@ -172,7 +174,7 @@ GET  /api/tools            # 도구 목록
 ## 프로젝트 구조
 
 ```
-ryre/
+lyra/
 ├── core/
 │   ├── db/           # SQLite 연결·스키마·시드(성경/찬송/교독문 임포트)
 │   ├── tools/        # ★ Tool Registry + 모든 도구(service/slide/content/template/library/media/present …)

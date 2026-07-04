@@ -84,4 +84,4 @@ const server = Bun.serve({
   websocket,
 });
 
-console.log(`RYRE → http://localhost:${server.port}  (presenter: http://localhost:${server.port}/presenter)`);
+console.log(`Lyra → http://localhost:${server.port}  (presenter: http://localhost:${server.port}/presenter)`);

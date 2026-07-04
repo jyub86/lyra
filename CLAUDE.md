@@ -1,12 +1,12 @@
-# ryre — 주일예배 PPT 전체 설계 문서 (v4.1)
+# Lyra — 주일예배 PPT 전체 설계 문서 (v4.1)
 
-> 작성일: 2026-06-24 (v4.1 갱신: 2026-07-04) · 프로젝트명 **ryre**
+> 작성일: 2026-06-24 (v4.1 갱신: 2026-07-04) · 프로젝트명 **Lyra** (구 ryre / Sunday Worship)
 > 스택: Bun + 순수 HTML/JS + SQLite
 > 실행 환경: M1 Max MacBook Pro (로컬 전용)
 > v4 핵심: **슬라이드 = 요소 캔버스** (모든 콘텐츠가 요소) / 템플릿 = 요소 배치 / **MCP·CLI 우선 Tool-First**
 
 > ⚠️ **v4.1 추가 (편집 UX·테마·전환·임포트·이름)** — 구현 기준(현행)
-> - **이름 = ryre** (구 "Sunday Worship"). UI/타이틀/서버·MCP 서버명 변경, tool 인터페이스·데이터 불변.
+> - **이름 = Lyra** (구 ryre / "Sunday Worship"). UI 브랜드 "Lyra", 패키지·MCP id는 소문자 `lyra`. tool 인터페이스·데이터 불변.
 > - **스냅/가이드**: 요소 드래그·리사이즈 시 캔버스 가장자리·가운데(0/0.5/1)에 스냅 + 점선 가이드(`.guide-v/.guide-h`).
 > - **글자 크기 숫자 입력**: 디자인 패널 size = 슬라이더 + 숫자(cqw) → 여러 슬라이드에 동일 값 적용.
 > - **테마**: 프리셋 dark-blue/light-warm/**black** + 서비스별 커스텀 **배경색·메인색**(`services.theme_overrides` JSON,
@@ -29,7 +29,7 @@
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
 > ⚠️ **편집기 UI 구성 (v4.3)** — 상단바 정리
-> - 상단바: `ryre · 예배선택 [+] · 리스트/타일 · … · 가져오기▾ · ⚙설정▾ · ▶발표`.
+> - 상단바: `Lyra · 예배선택 [+] · 리스트/타일 · … · 가져오기▾ · ⚙설정▾ · ▶발표`.
 >   **가져오기▾** 드롭다운=슬라이드(PPT/PDF)·라이브러리·JSON export/import, **⚙설정▾** 팝오버=테마·배경/메인색·전환.
 >   메뉴 토글 `wireMenu`(바깥클릭/Esc 닫힘, editor.js). 발표는 accent 버튼.
 > - 우측 **3탭**(추가/디자인/템플릿). "검사기"는 제거되고 **슬라이드 배경**은 디자인 탭 섹션으로 통합

@@ -16,6 +16,10 @@
 > - **슬라이드 임포트**: **PPT(.pptx/.ppt/.odp)·PDF·이미지** → 이미지 요소 슬라이드. `POST /api/import`(멀티파트) +
 >   `import_pdf(service_id, path)` tool. Office는 LibreOffice `soffice`로 PDF 변환 후 `pdftoppm` 페이지 분할.
 >   soffice 미설치 시 PDF로 내보내 사용(graceful). `core/lib/pdf-import.js`(findSoffice/officeToPdf/officeImportAvailable).
+> - **PPT 라이브러리 (v4.2)**: 폴더 하나 지정(`settings.library_dir`, 서버 경로) → 재귀 색인(`library_index` 캐시,
+>   mtime 증분) → **파일명+내용 부분검색**(pptx/odp=unzip 슬라이드 XML, pdf=pdftotext; .ppt는 파일명만) →
+>   결과를 `import_pdf`로 현재 예배에 가져오기. 도구 get/set_library_dir·index_library·search_library
+>   (`core/tools/library.tools.js`, `core/lib/ppt-extract.js`). 편집기 "라이브러리" 모달(검색·스니펫·가져오기).
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
 > ⚠️ **v4 변경 (요소 중심 모델)** — 구현 기준(현행, 가장 권위 있음)
@@ -505,6 +509,13 @@ upload_media(filename, data_base64)                       → { url, filename }
 set_video_background(slide_id, url, options?)             → ok
 import_pdf(service_id, path)                              → slide_ids (PPT/PDF/이미지 → 이미지 슬라이드)
 # 브라우저 업로드=POST /api/upload, 슬라이드 임포트=POST /api/import(멀티파트). .pptx는 LibreOffice(soffice)로 자동 변환.
+
+# PPT 라이브러리 (폴더 검색·가져오기)
+get_library_dir()                                         → { library_dir, indexed }
+set_library_dir(path)                                     → ok (서버 폴더 절대경로)
+index_library(refresh?)                                   → { files, added, updated, removed, skipped }
+search_library(query, limit?)                             → { results:[{path,name,relpath,ext,pages,matched_in,snippet}] }
+# 검색 결과 가져오기는 import_pdf(service_id, result.path) 재사용.
 
 # 발표 제어
 present_goto(page_index)

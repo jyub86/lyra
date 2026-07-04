@@ -28,6 +28,13 @@
 >   프로필은 `-env:UserInstallation`(OS 무관). 미설치 시 명확 안내로 graceful. Windows: LibreOffice/poppler 설치+PATH.
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
+> ⚠️ **편집기 UI 구성 (v4.3)** — 상단바 정리
+> - 상단바: `ryre · 예배선택 [+] · 리스트/타일 · … · 가져오기▾ · ⚙설정▾ · ▶발표`.
+>   **가져오기▾** 드롭다운=슬라이드(PPT/PDF)·라이브러리·JSON export/import, **⚙설정▾** 팝오버=테마·배경/메인색·전환.
+>   메뉴 토글 `wireMenu`(바깥클릭/Esc 닫힘, editor.js). 발표는 accent 버튼.
+> - 우측 **3탭**(추가/디자인/템플릿). "검사기"는 제거되고 **슬라이드 배경**은 디자인 탭 섹션으로 통합
+>   (id 유지: insp-bg-type/insp-bg-fields/insp-save). 모든 기존 핸들러 id 불변(순수 재배치).
+
 > ⚠️ **v4 변경 (요소 중심 모델)** — 구현 기준(현행, 가장 권위 있음)
 > - **슬라이드 = `{ background, elements:[] }`.** 타입 슬라이드(template_type)·typed data·overlays 레이어를 제거.
 >   `slides(id, service_id, position, background, elements, transition)`.

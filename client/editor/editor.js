@@ -1086,9 +1086,27 @@ function initTabs() {
   document.querySelectorAll(".tab").forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
 }
 
+// ---- topbar dropdown menus / popovers ----
+let openMenu = null;
+function closeMenus() { if (openMenu) { openMenu.hidden = true; openMenu = null; } }
+function wireMenu(btnId, panelId, { closeOnItem = false } = {}) {
+  const btn = $(btnId), panel = $(panelId);
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    const willOpen = panel.hidden;
+    closeMenus();
+    if (willOpen) { panel.hidden = false; openMenu = panel; }
+  };
+  if (closeOnItem) panel.querySelectorAll(".menu-item").forEach((it) => it.addEventListener("click", closeMenus));
+}
+document.addEventListener("click", (e) => { if (openMenu && !openMenu.parentElement.contains(e.target)) closeMenus(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
+
 function init() {
   initThemeSelect();
   initTabs();
+  wireMenu("menu-import-btn", "menu-import", { closeOnItem: true });
+  wireMenu("menu-settings-btn", "menu-settings");
   renderAddFields();
   $("service-select").onchange = (e) => selectService(e.target.value);
   $("new-service").onclick = newService;

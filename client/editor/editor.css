@@ -21,13 +21,29 @@ a { color: var(--accent); text-decoration: none; }
 .spacer { flex: 1; }
 .muted { color: var(--muted); }
 
-.topbar { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.brand { color: var(--accent); letter-spacing: .3px; }
-.theme-pick { color: var(--muted); display: flex; gap: 5px; align-items: center; font-size: 12px; }
-.theme-pick input[type="color"] { width: 28px; height: 24px; padding: 1px; border-radius: 5px; }
+.topbar { display: flex; align-items: center; gap: 8px; padding: 9px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { color: var(--accent); letter-spacing: .3px; font-size: 16px; margin-right: 2px; }
+.icon-btn { padding: 6px 9px; font-weight: 700; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .seg-btn { border: 0; border-radius: 0; background: var(--panel2); }
 .seg-btn.active { background: var(--accent); color: #0b0e14; font-weight: 700; }
+
+/* topbar dropdown menus / popovers */
+.menu { position: relative; }
+.menu-btn { background: var(--panel2); }
+.menu-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; min-width: 220px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px;
+  box-shadow: 0 10px 30px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 2px; }
+.menu-panel.wide { min-width: 240px; padding: 10px; gap: 8px; }
+.menu-item { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 6px; padding: 8px 10px; }
+.menu-item:hover { background: var(--panel2); }
+.menu-item .mi-sub { color: var(--muted); font-size: 11px; margin-left: auto; }
+.menu-sep { height: 1px; background: var(--line); margin: 4px 2px; }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
+.set-row select { flex: 0 0 auto; }
+.set-row input[type="color"] { width: 30px; height: 24px; padding: 1px; border-radius: 5px; }
+.present-btn { background: var(--accent); color: #0b0e14 !important; font-weight: 700; padding: 7px 12px; border-radius: 6px; }
+.present-btn:hover { filter: brightness(1.06); }
 
 .layout { flex: 1; display: grid; grid-template-columns: 280px 1fr 320px; min-height: 0; }
 .col { min-height: 0; overflow: auto; }

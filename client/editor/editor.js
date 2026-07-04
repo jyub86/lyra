@@ -375,7 +375,18 @@ const CONTENT_PARAMS = {
 const FIELD_OPTIONS = {
   bible: [["all", "전체"], ["ref", "구절(요 3:16)"], ["text", "본문만"]],
   hymn: [["all", "전체"], ["title", "제목/장"], ["label", "절"], ["lyrics", "가사만"]],
-  reading: [["all", "전체"], ["title", "제목"], ["body", "본문만"]],
+  reading: [["all", "전체(인도자+회중)"], ["title", "제목"], ["body", "본문(인도자+회중)"], ["leader", "인도자만"], ["congregation", "회중만"], ["unison", "다같이만"]],
+};
+// 형식(format): 단일 줄 필드의 표시 문자열 (기본값 + 사용 가능 토큰)
+const FMT_DEFAULT = {
+  hymn: { title: "{number}장 {title}", label: "{label}" },
+  bible: { ref: "{ref}" },
+  reading: { title: "{number}번 {title}" },
+};
+const FMT_TOKENS = {
+  hymn: { title: "{number}, {title}", label: "{label}" },
+  bible: { ref: "{ref}" },
+  reading: { title: "{number}, {title}" },
 };
 
 function renderDesignPanel() {
@@ -438,11 +449,31 @@ function renderDesignPanel() {
       sel.onchange = () => { el.field = sel.value; repaintEls(); commitEls(); renderDesignPanel(); };
       wrap.appendChild(sel); body.appendChild(wrap);
     }
+    const fkey = el.field ?? "all";
+    { // 형식(format): 단일 줄 필드(제목/구절)의 표시 문자열
+      const fmtDef = FMT_DEFAULT[el.type]?.[fkey];
+      if (fmtDef != null) {
+        const wrap = elx("label", null, "형식");
+        const input = document.createElement("input");
+        input.type = "text"; input.value = el.format ?? fmtDef; input.placeholder = fmtDef;
+        input.oninput = () => { el.format = input.value; repaintEls(); };
+        input.onchange = () => { el.format = input.value; commitEls(); };
+        wrap.appendChild(input); body.appendChild(wrap);
+        body.appendChild(elx("p", "hint muted", `토큰: ${FMT_TOKENS[el.type][fkey]}`));
+      }
+    }
     field("글자 크기", "range", "size", { min: 1.5, max: 10, step: 0.25, num: true, def: 3.2 });
     field("색", "color", "color", { def: "#ffffff" });
     field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
-    if (el.type === "bible" && (el.field ?? "all") !== "ref") field("절 번호 표시", "check", "show_numbers");
+    if (el.type === "bible" && fkey !== "ref") field("절 번호 표시", "check", "show_numbers");
+    // 교독문 인도자/회중 스타일 (전체·본문 = 인도자·회중이 함께 있을 때)
+    if (el.type === "reading" && (fkey === "all" || fkey === "body")) {
+      body.appendChild(elx("div", "section-title", "역할 스타일"));
+      field("역할 표시(인도자/회중)", "check", "show_tags");
+      field("인도자 색", "color", "leader_color", { def: "#7aa2f7" });
+      field("회중 색", "color", "congregation_color", { def: "#e0af68" });
+    }
     body.appendChild(elx("div", "section-title", "내용 (params)"));
     for (const [label, name, ptype] of CONTENT_PARAMS[el.type]) {
       const wrap = elx("label", null, label);

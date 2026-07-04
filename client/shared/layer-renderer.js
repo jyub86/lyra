@@ -44,11 +44,16 @@ function el(tag, cls, text) {
   return n;
 }
 
+// substitute {token} placeholders from values (missing → "")
+function fmtStr(str, vals) {
+  return String(str).replace(/\{(\w+)\}/g, (_, k) => (vals[k] != null ? String(vals[k]) : ""));
+}
+
 // ----- content element bodies (bible / hymn / reading) -----
-// field: "all" (default) | "ref" | "text"
-function renderBibleBody(root, c, showNumbers, field) {
+// field: "all" (default) | "ref" | "text". `format` customizes the ref line.
+function renderBibleBody(root, c, showNumbers, field, format) {
   field = field || "all";
-  if (field === "ref") { root.textContent = c?.ref || ""; return; }
+  if (field === "ref") { root.textContent = fmtStr(format || "{ref}", { ref: c?.ref }); return; }
   if (field !== "text" && c?.ref) root.appendChild(el("div", "ce-ref", c.ref));
   const body = el("div", "ce-body");
   for (const v of c?.verses || []) {
@@ -60,16 +65,11 @@ function renderBibleBody(root, c, showNumbers, field) {
   }
   root.appendChild(body);
 }
-// field: "all" (default) | "title" | "label" | "lyrics" — lets a hymn be split
-// into separately-placeable title/verse/lyrics elements.
-function renderHymnBody(root, c, field) {
+// field: "all" | "title" | "label" | "lyrics". `format` customizes title/label text.
+function renderHymnBody(root, c, field, format) {
   field = field || "all";
-  if (field === "title") {
-    if (c?.number != null) { root.appendChild(el("span", "ce-hno", `${c.number}장`)); root.appendChild(document.createTextNode(" ")); }
-    root.appendChild(document.createTextNode(c?.title || ""));
-    return;
-  }
-  if (field === "label") { root.textContent = c?.label || ""; return; }
+  if (field === "title") { root.textContent = fmtStr(format || "{number}장 {title}", { number: c?.number, title: c?.title }); return; }
+  if (field === "label") { root.textContent = fmtStr(format || "{label}", { label: c?.label }); return; }
   if (field === "lyrics") { for (const line of c?.lines || []) root.appendChild(el("div", "ce-line", line)); return; }
   const head = el("div", "ce-head");
   if (c?.number) head.appendChild(el("span", "ce-no", `${c.number}장`));
@@ -78,16 +78,25 @@ function renderHymnBody(root, c, field) {
   if (c?.label) root.appendChild(el("div", "ce-label", c.label));
   for (const line of c?.lines || []) root.appendChild(el("div", "ce-line", line));
 }
-// field: "all" | "title" | "body"
-function renderReadingBody(root, c, field) {
+// field: "all" | "title" | "body" | "leader" | "congregation" | "unison".
+// role fields render only that role (separate styleable element); all/body stay
+// interleaved (call-response) with per-role tag colors + optional tags.
+const ROLE_TAG = { leader: "인도자", congregation: "회중", unison: "다같이" };
+function renderReadingBody(root, c, field, format, opts = {}) {
   field = field || "all";
-  const titleText = c?.title ? `${c.number ? c.number + "번 " : ""}${c.title}` : "";
+  const titleText = c?.title ? fmtStr(format || "{number}번 {title}", { number: c?.number, title: c?.title }) : "";
   if (field === "title") { root.textContent = titleText; return; }
-  if (field !== "body" && titleText) root.appendChild(el("div", "ce-ref", titleText));
+  const onlyRole = ROLE_TAG[field] ? field : null; // "leader"|"congregation"|"unison"
+  if (!onlyRole && field !== "body" && titleText) root.appendChild(el("div", "ce-ref", titleText));
+  const roleColor = { leader: opts.leader_color, congregation: opts.congregation_color, unison: opts.unison_color };
   for (const seg of c?.segments || []) {
+    if (onlyRole && seg.role !== onlyRole) continue;
     const row = el("div", `ce-seg role-${seg.role}`);
-    const tag = { leader: "인도자", congregation: "회중", unison: "다같이" }[seg.role];
-    if (tag) row.appendChild(el("span", "ce-tag", tag));
+    if (!onlyRole && opts.show_tags !== false && ROLE_TAG[seg.role]) {
+      const t = el("span", "ce-tag", ROLE_TAG[seg.role]);
+      if (roleColor[seg.role]) t.style.background = roleColor[seg.role];
+      row.appendChild(t);
+    }
     row.appendChild(el("span", null, seg.text));
     root.appendChild(row);
   }
@@ -123,9 +132,11 @@ export function renderElements(root, elements) {
       n.style.textAlign = e.align || "center";
       n.style.fontWeight = e.weight || 600;
       if (e.line_height) n.style.lineHeight = e.line_height;
-      if (e.type === "bible") renderBibleBody(n, e.content, e.show_numbers, e.field);
-      else if (e.type === "hymn") renderHymnBody(n, e.content, e.field);
-      else renderReadingBody(n, e.content, e.field);
+      if (e.type === "bible") renderBibleBody(n, e.content, e.show_numbers, e.field, e.format);
+      else if (e.type === "hymn") renderHymnBody(n, e.content, e.field, e.format);
+      else renderReadingBody(n, e.content, e.field, e.format, {
+        leader_color: e.leader_color, congregation_color: e.congregation_color, unison_color: e.unison_color, show_tags: e.show_tags,
+      });
     } else {
       n = el("div", "el el-text", e.text ?? "");
       n.style.fontSize = (e.size ?? 4) + "cqw";

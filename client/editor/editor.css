@@ -80,6 +80,7 @@ a { color: var(--accent); text-decoration: none; }
 
 /* design + template panels */
 .section-title { color: var(--muted); font-size: 12px; margin: 6px 0 4px; font-weight: 700; }
+.hint { font-size: 11px; margin: 2px 0 4px; }
 .tab-body hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
 .el-actions { display: flex; gap: 6px; margin-top: 10px; }
 .el-actions button { flex: 1; }

@@ -1,9 +1,10 @@
 // Extract searchable text + page count from a presentation/PDF file.
-//   .pptx/.odp → `unzip -p` the slide/content XML, pull the run text.
-//   .pdf       → `pdftotext`.
+//   .pptx/.odp → read the zip in pure JS (fflate) → pull run text. OS-independent.
+//   .pdf       → `pdftotext` (poppler; still native).
 //   .ppt       → filename-only (no bundled extractor); text = "".
-// Uses shell tools already present (unzip, pdftotext). Failures degrade to
-// text:"" so the file is still indexed/searchable by name.
+// Failures degrade to text:"" so the file is still indexed/searchable by name.
+import { readFileSync } from "node:fs";
+import { unzipSync, strFromU8 } from "fflate";
 
 function runText(cmd) {
   try {
@@ -11,6 +12,15 @@ function runText(cmd) {
     if (p.exitCode !== 0) return "";
     return new TextDecoder().decode(p.stdout || new Uint8Array());
   } catch { return ""; }
+}
+
+// Read specific entries from a zip (pptx/odp) as text, cross-platform.
+// `match(name)` selects entries; returns array of decoded strings.
+function zipEntries(path, match) {
+  try {
+    const files = unzipSync(readFileSync(path), { filter: (f) => match(f.name) });
+    return Object.keys(files).sort().map((k) => strFromU8(files[k]));
+  } catch { return []; }
 }
 
 function decodeXml(s) {
@@ -32,20 +42,17 @@ function paraText(p) {
 }
 
 function extractPptx(path) {
-  const xml = runText(["unzip", "-p", path, "ppt/slides/slide*.xml"]);
+  const slides = zipEntries(path, (n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)); // one xml per slide
+  const xml = slides.join("\n");
   const paras = blocks(xml, "a:p").map(paraText).filter(Boolean);
-  const text = paras.join(" ");
-  const listing = runText(["unzip", "-Z1", path]);
-  const pages = (listing.match(/ppt\/slides\/slide\d+\.xml/g) || []).length || null;
-  return { text, pages };
+  return { text: paras.join(" "), pages: slides.length || null };
 }
 
 function extractOdp(path) {
-  const xml = runText(["unzip", "-p", path, "content.xml"]);
+  const [xml = ""] = zipEntries(path, (n) => n === "content.xml");
   const paras = blocks(xml, "text:p").map((p) => decodeXml(p).trim()).filter(Boolean);
-  const text = paras.join(" ");
   const pages = (xml.match(/draw:page /g) || []).length || null;
-  return { text, pages };
+  return { text: paras.join(" "), pages };
 }
 
 function extractPdf(path) {

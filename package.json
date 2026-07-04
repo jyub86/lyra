@@ -15,6 +15,7 @@
     "db:reset": "bun run core/db/index.js --reset"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "fflate": "^0.8.3"
   }
 }

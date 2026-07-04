@@ -10,10 +10,18 @@ import { saveUpload } from "./uploads.js";
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // presentation docs LibreOffice can read
 
-// Locate the LibreOffice CLI (PATH or the macOS app bundle).
+// Locate the LibreOffice CLI across macOS / Windows / Linux (PATH or known locations).
 function findSoffice() {
-  const paths = ["/opt/homebrew/bin/soffice", "/usr/local/bin/soffice",
-    "/Applications/LibreOffice.app/Contents/MacOS/soffice"];
+  const paths = [
+    // macOS
+    "/opt/homebrew/bin/soffice", "/usr/local/bin/soffice",
+    "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    // Windows
+    "C:\\Program Files\\LibreOffice\\program\\soffice.exe",
+    "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe",
+    // Linux
+    "/usr/bin/soffice", "/usr/bin/libreoffice", "/snap/bin/libreoffice",
+  ];
   for (const p of paths) if (existsSync(p)) return p;
   return Bun.which("soffice") || Bun.which("libreoffice") || null;
 }
@@ -27,8 +35,11 @@ async function officeToPdf(filename, bytes) {
   try {
     const inPath = join(dir, filename.replace(/[^\w.\-가-힣]/g, "_"));
     writeFileSync(inPath, Buffer.from(bytes));
-    const proc = Bun.spawnSync([soffice, "--headless", "--convert-to", "pdf", "--outdir", dir, inPath],
-      { env: { ...process.env, HOME: dir } }); // isolated profile dir avoids lock clashes
+    // -env:UserInstallation isolates the LibreOffice profile per-run (avoids lock
+    // clashes) in an OS-independent way (works on Windows, unlike HOME).
+    const profileUrl = "file://" + (process.platform === "win32" ? "/" + dir.replace(/\\/g, "/") : dir);
+    const proc = Bun.spawnSync([soffice, `-env:UserInstallation=${profileUrl}`,
+      "--headless", "--convert-to", "pdf", "--outdir", dir, inPath]);
     const pdf = readdirSync(dir).find((f) => f.toLowerCase().endsWith(".pdf"));
     if (proc.exitCode !== 0 || !pdf) {
       throw new Error("LibreOffice 변환 실패: " + (proc.stderr ? new TextDecoder().decode(proc.stderr).slice(0, 200) : "unknown"));
@@ -47,13 +58,16 @@ function imageSlide(url) {
 }
 
 async function pdfToImageUrls(bytes) {
+  if (!Bun.which("pdftoppm")) {
+    throw new Error("PDF→이미지 변환 도구(poppler)가 없습니다. macOS: brew install poppler · Windows: poppler 설치 후 PATH 등록 · Linux: apt install poppler-utils");
+  }
   const dir = mkdtempSync(join(tmpdir(), "ryre-pdf-"));
   try {
     const pdfPath = join(dir, "in.pdf");
     writeFileSync(pdfPath, Buffer.from(bytes));
     const proc = Bun.spawnSync(["pdftoppm", "-png", "-r", "150", pdfPath, join(dir, "page")]);
     if (proc.exitCode !== 0) {
-      throw new Error("pdftoppm 변환 실패 (poppler 설치 필요). PPT는 PDF로 내보내 시도하세요.");
+      throw new Error("pdftoppm 변환 실패 (poppler 확인). PPT는 LibreOffice로 자동 변환됩니다.");
     }
     const pages = readdirSync(dir).filter((f) => f.startsWith("page") && f.endsWith(".png")).sort();
     const urls = [];

@@ -17,9 +17,15 @@
 >   `import_pdf(service_id, path)` tool. Office는 LibreOffice `soffice`로 PDF 변환 후 `pdftoppm` 페이지 분할.
 >   soffice 미설치 시 PDF로 내보내 사용(graceful). `core/lib/pdf-import.js`(findSoffice/officeToPdf/officeImportAvailable).
 > - **PPT 라이브러리 (v4.2)**: 폴더 하나 지정(`settings.library_dir`, 서버 경로) → 재귀 색인(`library_index` 캐시,
->   mtime 증분) → **파일명+내용 부분검색**(pptx/odp=unzip 슬라이드 XML, pdf=pdftotext; .ppt는 파일명만) →
->   결과를 `import_pdf`로 현재 예배에 가져오기. 도구 get/set_library_dir·index_library·search_library
->   (`core/tools/library.tools.js`, `core/lib/ppt-extract.js`). 편집기 "라이브러리" 모달(검색·스니펫·가져오기).
+>   mtime 증분) → **파일명+내용 부분검색**(pptx/odp=**fflate 순수 JS 압축해제**+슬라이드 XML, pdf=pdftotext; .ppt는 파일명만).
+>   여러 단어=AND, 파일명·내용 NFC 정규화(macOS NFD 대응). 결과를 `import_pdf`로 가져오기. 도구
+>   get/set_library_dir·index_library·search_library(`core/tools/library.tools.js`, `core/lib/ppt-extract.js`). 편집기 "라이브러리" 모달.
+
+> ⚠️ **크로스플랫폼 / 외부 의존성** (macOS·Windows·Linux)
+> - 순수 이식: 편집·발표·DB·서버·요소편집·**pptx/odp 내용 추출(fflate)**은 외부 도구 없이 어디서나 동작.
+> - 외부 프로그램 필요(선택 기능): **LibreOffice**(`soffice`) = .pptx/.ppt/.odp 슬라이드 임포트,
+>   **poppler**(`pdftoppm`/`pdftotext`) = PDF 임포트·PDF 내용 검색. `findSoffice`가 mac/Win/Linux 경로 탐지,
+>   프로필은 `-env:UserInstallation`(OS 무관). 미설치 시 명확 안내로 graceful. Windows: LibreOffice/poppler 설치+PATH.
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
 > ⚠️ **v4 변경 (요소 중심 모델)** — 구현 기준(현행, 가장 권위 있음)

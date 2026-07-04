@@ -12,10 +12,19 @@ const SCHEMA_PATH = join(__dirname, "schema.sql");
 
 let _db = null;
 
-// Applies schema.sql (idempotent — all CREATE ... IF NOT EXISTS).
+// Add a column if the table lacks it (non-destructive migration for existing DBs).
+function ensureColumn(db, table, col, decl) {
+  const cols = db.query(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${decl}`);
+}
+
+// Applies schema.sql (idempotent — all CREATE ... IF NOT EXISTS) + column migrations.
 export function migrate(db) {
   const sql = readFileSync(SCHEMA_PATH, "utf8");
   db.exec(sql); // exec runs multiple statements; run() would stop after the first.
+  // v4.1: additive columns on services (kept for DBs created before v4.1)
+  ensureColumn(db, "services", "theme_overrides", "TEXT");
+  ensureColumn(db, "services", "transition", "TEXT DEFAULT 'none'");
   return db;
 }
 

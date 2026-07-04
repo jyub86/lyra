@@ -94,13 +94,15 @@ CREATE VIRTUAL TABLE IF NOT EXISTS readings_fts USING fts5(
 -- 한 Service = 한 예배의 순서 전체이며, 이 단위가 공유(export/import)된다.
 -- =====================================================================
 CREATE TABLE IF NOT EXISTS services (
-  id           TEXT PRIMARY KEY,       -- ulid
-  title        TEXT NOT NULL,
-  date         TEXT NOT NULL,
-  worship_part TEXT NOT NULL,          -- "1부" | "2부" | "연합"
-  theme_id     TEXT NOT NULL DEFAULT 'dark-blue',
-  created_at   TEXT NOT NULL,
-  updated_at   TEXT NOT NULL
+  id              TEXT PRIMARY KEY,    -- ulid
+  title           TEXT NOT NULL,
+  date            TEXT NOT NULL,
+  worship_part    TEXT NOT NULL,       -- "1부" | "2부" | "연합"
+  theme_id        TEXT NOT NULL DEFAULT 'dark-blue',
+  theme_overrides TEXT,                -- JSON { background?, accent? } — 테마 위 커스텀 색
+  transition      TEXT DEFAULT 'none', -- 'none' | 'fade' | 'slide' (발표 전환 효과)
+  created_at      TEXT NOT NULL,
+  updated_at      TEXT NOT NULL
 );
 
 -- v4: 슬라이드 = background + elements(요소 캔버스). 타입/typed-data 제거.

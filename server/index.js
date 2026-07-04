@@ -84,4 +84,4 @@ const server = Bun.serve({
   websocket,
 });
 
-console.log(`Sunday Worship PPT → http://localhost:${server.port}  (presenter: http://localhost:${server.port}/presenter)`);
+console.log(`ryre → http://localhost:${server.port}  (presenter: http://localhost:${server.port}/presenter)`);

@@ -1,5 +1,5 @@
 // 편집 UI 컨트롤러. 예배(순서) > 슬라이드 평면 구조. 모든 동작은 Tool 호출.
-import { callTool, loadTheme, uploadFile, BUILTIN_THEMES } from "/shared/api.js";
+import { callTool, loadServiceTheme, uploadFile, BUILTIN_THEMES } from "/shared/api.js";
 import { renderSlideWithLayers, renderElements } from "/shared/layer-renderer.js";
 
 const $ = (id) => document.getElementById(id);
@@ -142,10 +142,20 @@ async function loadServices(selectId) {
 async function selectService(id) {
   state.serviceId = id;
   state.service = await callTool("get_service", { service_id: id });
-  state.theme = await loadTheme(state.service.theme_id);
-  $("theme-select").value = state.service.theme_id;
+  state.theme = await loadServiceTheme(state.service);
+  syncThemeControls();
   setSingleSelection(slides()[0]?.id || null);
   render();
+}
+
+// reflect the service's theme/color/transition into the topbar controls
+function syncThemeControls() {
+  const s = state.service;
+  if (!s) return;
+  $("theme-select").value = s.theme_id;
+  $("bg-color").value = state.theme?.background?.value || "#1a1a2e";
+  $("accent-color").value = state.theme?.colors?.accent || "#7aa2f7";
+  $("transition-select").value = s.transition || "none";
 }
 
 async function refresh() {
@@ -157,6 +167,13 @@ async function refresh() {
   render();
 }
 
+async function reloadTheme() {
+  state.service = await callTool("get_service", { service_id: state.serviceId });
+  state.theme = await loadServiceTheme(state.service);
+  syncThemeControls();
+  render();
+}
+
 function initThemeSelect() {
   const sel = $("theme-select");
   for (const t of BUILTIN_THEMES) {
@@ -165,8 +182,24 @@ function initThemeSelect() {
   }
   sel.onchange = async () => {
     await callTool("set_service_theme", { service_id: state.serviceId, theme_id: sel.value });
-    state.theme = await loadTheme(sel.value);
-    render();
+    await reloadTheme();
+  };
+  // custom colors: background (테마 기본 배경) + accent (메인)
+  const setOverride = async (patch) => {
+    const cur = state.service?.theme_overrides || {};
+    await callTool("set_service_theme", { service_id: state.serviceId, overrides: { ...cur, ...patch } });
+    await reloadTheme();
+  };
+  $("bg-color").onchange = (e) => setOverride({ background: { type: "color", value: e.target.value } });
+  $("accent-color").onchange = (e) => setOverride({ accent: e.target.value });
+  $("theme-reset").onclick = async () => {
+    await callTool("set_service_theme", { service_id: state.serviceId, overrides: null });
+    await reloadTheme();
+  };
+  $("transition-select").onchange = async (e) => {
+    await callTool("set_service_transition", { service_id: state.serviceId, transition: e.target.value });
+    state.service.transition = e.target.value;
+    try { await callTool("present_reload"); } catch {}
   };
 }
 
@@ -238,6 +271,46 @@ function navSlide(delta) {
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const els = () => selectedSlide()?.elements || [];
 
+// ---- snapping to canvas edges/center (0, 0.5, 1) with visual guides ----
+const SNAP_TARGETS = [0, 0.5, 1];
+const SNAP_TOL = 0.012;
+let activeGuides = { v: null, h: null }; // fractions where guide lines show
+
+// Snap a moving box: try aligning its left/center/right (x-axis) and
+// top/middle/bottom (y-axis) to targets. Returns adjusted {x,y} + records guides.
+function snapMove(x, y, w, h) {
+  activeGuides = { v: null, h: null };
+  const axis = (start, size) => {
+    let best = null;
+    for (const [lineOffset, key] of [[0, "s"], [size / 2, "c"], [size, "e"]]) {
+      for (const t of SNAP_TARGETS) {
+        const d = Math.abs(start + lineOffset - t);
+        if (d < SNAP_TOL && (!best || d < best.d)) best = { d, newStart: t - lineOffset, guide: t };
+      }
+    }
+    return best;
+  };
+  const bx = axis(x, w), by = axis(y, h);
+  if (bx) { x = bx.newStart; activeGuides.v = bx.guide; }
+  if (by) { y = by.newStart; activeGuides.h = by.guide; }
+  return { x, y };
+}
+
+// Snap a single dragged edge value to targets (for resize).
+function snapEdge(v) {
+  for (const t of SNAP_TARGETS) if (Math.abs(v - t) < SNAP_TOL) return t;
+  return v;
+}
+
+function renderGuides() {
+  const layer = $("preview")?.querySelector(":scope > .edit-layer");
+  if (!layer) return;
+  layer.querySelectorAll(".guide-v, .guide-h").forEach((n) => n.remove());
+  if (activeGuides.v != null) { const g = elx("div", "guide-v"); g.style.left = activeGuides.v * 100 + "%"; layer.appendChild(g); }
+  if (activeGuides.h != null) { const g = elx("div", "guide-h"); g.style.top = activeGuides.h * 100 + "%"; layer.appendChild(g); }
+}
+function clearGuides() { activeGuides = { v: null, h: null }; renderGuides(); }
+
 // Interactive handle layer over #preview: select / move / resize elements.
 function renderEditLayer() {
   const pv = $("preview");
@@ -290,11 +363,13 @@ function startMove(e, i) {
   const el = els()[i];
   const sx = e.clientX, sy = e.clientY, ox = el.x ?? 0.4, oy = el.y ?? 0.4;
   const mv = (ev) => {
-    el.x = clamp01(ox + (ev.clientX - sx) / rect.width);
-    el.y = clamp01(oy + (ev.clientY - sy) / rect.height);
-    repaintEls();
+    let x = clamp01(ox + (ev.clientX - sx) / rect.width);
+    let y = clamp01(oy + (ev.clientY - sy) / rect.height);
+    ({ x, y } = snapMove(x, y, el.w ?? 0.2, el.h ?? 0.12)); // snap to edges/center
+    el.x = x; el.y = y;
+    repaintEls(); renderGuides();
   };
-  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); commitEls(); };
+  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); commitEls(); };
   document.addEventListener("mousemove", mv);
   document.addEventListener("mouseup", up);
 }
@@ -307,13 +382,14 @@ function startResize(e, i, pos) {
   const o = { x: el.x ?? 0.4, y: el.y ?? 0.4, w: el.w ?? 0.2, h: el.h ?? 0.12 };
   const mv = (ev) => {
     const dx = (ev.clientX - sx) / rect.width, dy = (ev.clientY - sy) / rect.height;
-    if (pos.includes("e")) el.w = Math.max(0.03, o.w + dx);
-    if (pos.includes("s")) el.h = Math.max(0.03, o.h + dy);
-    if (pos.includes("w")) { el.w = Math.max(0.03, o.w - dx); el.x = o.x + dx; }
-    if (pos.includes("n")) { el.h = Math.max(0.03, o.h - dy); el.y = o.y + dy; }
-    repaintEls();
+    activeGuides = { v: null, h: null };
+    if (pos.includes("e")) { const r = snapEdge(o.x + o.w + dx); el.w = Math.max(0.03, r - o.x); if (r !== o.x + o.w + dx) activeGuides.v = r; }
+    if (pos.includes("s")) { const b = snapEdge(o.y + o.h + dy); el.h = Math.max(0.03, b - o.y); if (b !== o.y + o.h + dy) activeGuides.h = b; }
+    if (pos.includes("w")) { const l = snapEdge(o.x + dx); el.x = l; el.w = Math.max(0.03, o.x + o.w - l); if (l !== o.x + dx) activeGuides.v = l; }
+    if (pos.includes("n")) { const t = snapEdge(o.y + dy); el.y = t; el.h = Math.max(0.03, o.y + o.h - t); if (t !== o.y + dy) activeGuides.h = t; }
+    repaintEls(); renderGuides();
   };
-  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); commitEls(); };
+  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); commitEls(); };
   document.addEventListener("mousemove", mv);
   document.addEventListener("mouseup", up);
 }
@@ -422,9 +498,24 @@ function renderDesignPanel() {
     body.appendChild(wrap);
   };
 
+  // 글자 크기: 슬라이더 + 숫자(정확값). 여러 슬라이드에 동일 값 적용 가능.
+  const sizeRow = (min, max, def = 4) => {
+    const wrap = elx("label", null, "글자 크기 (숫자)");
+    const row = elx("div", "size-row");
+    const range = document.createElement("input"); range.type = "range"; range.min = min; range.max = max; range.step = 0.1;
+    const num = document.createElement("input"); num.type = "number"; num.min = min; num.max = max; num.step = 0.1;
+    range.value = num.value = el.size ?? def;
+    const apply = (v, commit) => { el.size = Number(v); range.value = num.value = el.size; repaintEls(); if (commit) commitEls(); };
+    range.addEventListener("input", () => apply(range.value, false));
+    range.addEventListener("change", () => apply(range.value, true));
+    num.addEventListener("input", () => apply(num.value, false));
+    num.addEventListener("change", () => apply(num.value, true));
+    row.append(range, num); wrap.appendChild(row); body.appendChild(wrap);
+  };
+
   if (el.type === "text") {
     field("내용", "textarea", "text");
-    field("글자 크기", "range", "size", { min: 1.5, max: 12, step: 0.25, num: true });
+    sizeRow(1.5, 12);
     field("색", "color", "color", { def: "#ffffff" });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
     field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
@@ -462,7 +553,7 @@ function renderDesignPanel() {
         body.appendChild(elx("p", "hint muted", `토큰: ${FMT_TOKENS[el.type][fkey]}`));
       }
     }
-    field("글자 크기", "range", "size", { min: 1.5, max: 10, step: 0.25, num: true, def: 3.2 });
+    sizeRow(1.5, 10, 3.2);
     field("색", "color", "color", { def: "#ffffff" });
     field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
@@ -868,6 +959,20 @@ async function importService(file) {
   } catch (e) { alert("가져오기 실패: " + e.message); }
 }
 
+// PDF/이미지 → 이미지 슬라이드로 현재 예배에 추가 (기존 PPT는 PDF로 내보내 사용)
+async function importSlidesFile(file) {
+  if (!state.serviceId) return;
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/import?service_id=${state.serviceId}`, { method: "POST", body: fd });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "가져오기 실패");
+    await refresh();
+    msg("add-msg", `${body.slide_ids.length}장 가져옴`);
+  } catch (e) { alert("슬라이드 가져오기 실패: " + e.message); }
+}
+
 function msg(id, text, err) { const el = $(id); if (!el) return; el.textContent = text; el.className = "msg" + (err ? " err" : ""); }
 
 // ---------- wire ----------
@@ -930,6 +1035,8 @@ function init() {
   $("export-btn").onclick = exportService;
   $("import-btn").onclick = () => $("import-file").click();
   $("import-file").onchange = (e) => e.target.files[0] && importService(e.target.files[0]);
+  $("import-ppt").onclick = () => $("import-ppt-file").click();
+  $("import-ppt-file").onchange = (e) => e.target.files[0] && importSlidesFile(e.target.files[0]);
   $("tpl-save").onclick = saveCurrentAsTemplate;
   $("tpl-edit-save").onclick = saveTemplateEdit;
   $("tpl-edit-cancel").onclick = cancelTemplateEdit;

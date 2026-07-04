@@ -23,7 +23,8 @@ a { color: var(--accent); text-decoration: none; }
 
 .topbar { display: flex; align-items: center; gap: 10px; padding: 9px 14px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .brand { color: var(--accent); letter-spacing: .3px; }
-.theme-pick { color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.theme-pick { color: var(--muted); display: flex; gap: 5px; align-items: center; font-size: 12px; }
+.theme-pick input[type="color"] { width: 28px; height: 24px; padding: 1px; border-radius: 5px; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .seg-btn { border: 0; border-radius: 0; background: var(--panel2); }
 .seg-btn.active { background: var(--accent); color: #0b0e14; font-weight: 700; }
@@ -77,6 +78,13 @@ a { color: var(--accent); text-decoration: none; }
 .eh .handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .eh .handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
 .eh .handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+/* snap guide lines */
+.guide-v { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed #f7768e; pointer-events: none; z-index: 6; }
+.guide-h { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed #f7768e; pointer-events: none; z-index: 6; }
+/* numeric size control (range + number) */
+.size-row { display: flex; gap: 6px; align-items: center; }
+.size-row input[type="range"] { flex: 1; }
+.size-row input[type="number"] { width: 58px; }
 
 /* design + template panels */
 .section-title { color: var(--muted); font-size: 12px; margin: 6px 0 4px; font-weight: 700; }

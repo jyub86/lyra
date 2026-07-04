@@ -31,7 +31,11 @@ register({
   handler: ({ service_id }, { db }) => {
     const service = db.query("SELECT * FROM services WHERE id = ?").get(service_id);
     if (!service) throw new Error(`unknown service: ${service_id}`);
-    return { ...service, slides: slidesOf(db, service_id) };
+    return {
+      ...service,
+      theme_overrides: service.theme_overrides ? JSON.parse(service.theme_overrides) : null,
+      slides: slidesOf(db, service_id),
+    };
   },
 });
 
@@ -68,7 +72,7 @@ register({
     required: ["service_id", "fields"],
   },
   handler: ({ service_id, fields }, { db }) => {
-    const allowed = ["title", "date", "worship_part", "theme_id"];
+    const allowed = ["title", "date", "worship_part", "theme_id", "transition"];
     const keys = Object.keys(fields).filter((k) => allowed.includes(k));
     if (keys.length === 0) throw new Error("no updatable fields provided");
     const set = keys.map((k) => `${k} = ?`).join(", ");
@@ -80,15 +84,36 @@ register({
 
 register({
   name: "set_service_theme",
-  description: "예배 순서의 테마를 변경한다.",
+  description: "예배 순서의 테마와 커스텀 색을 설정한다. overrides={background?, accent?}로 배경/메인색을 덮어쓴다.",
   input_schema: {
     type: "object",
-    properties: { service_id: { type: "string" }, theme_id: { type: "string" } },
-    required: ["service_id", "theme_id"],
+    properties: {
+      service_id: { type: "string" },
+      theme_id: { type: "string" },
+      overrides: { description: "{ background?, accent? } 객체 — 생략 시 유지, null이면 초기화" },
+    },
+    required: ["service_id"],
   },
-  handler: ({ service_id, theme_id }, { db }) => {
-    db.query("UPDATE services SET theme_id = ?, updated_at = ? WHERE id = ?")
-      .run(theme_id, nowIso(), service_id);
+  handler: ({ service_id, theme_id, overrides }, { db }) => {
+    const sets = [], vals = [];
+    if (theme_id !== undefined) { sets.push("theme_id = ?"); vals.push(theme_id); }
+    if (overrides !== undefined) { sets.push("theme_overrides = ?"); vals.push(overrides == null ? null : JSON.stringify(overrides)); }
+    if (!sets.length) throw new Error("theme_id 또는 overrides 필요");
+    db.query(`UPDATE services SET ${sets.join(", ")}, updated_at = ? WHERE id = ?`).run(...vals, nowIso(), service_id);
+    return { ok: true };
+  },
+});
+
+register({
+  name: "set_service_transition",
+  description: "발표 전환 효과를 설정한다: none(없음) | fade | slide.",
+  input_schema: {
+    type: "object",
+    properties: { service_id: { type: "string" }, transition: { type: "string", enum: ["none", "fade", "slide"] } },
+    required: ["service_id", "transition"],
+  },
+  handler: ({ service_id, transition }, { db }) => {
+    db.query("UPDATE services SET transition = ?, updated_at = ? WHERE id = ?").run(transition, nowIso(), service_id);
     return { ok: true };
   },
 });

@@ -1,7 +1,8 @@
-// Media tools (design §8-2). Video background + media upload.
-// import_pptx (F17) is post-MVP (M15) and intentionally not registered yet.
-import { register } from "./registry.js";
+// Media tools (design §8-2). Video background + media upload + PDF/image import.
+import { register, execute } from "./registry.js";
+import { readFileSync } from "node:fs";
 import { saveUpload } from "../lib/uploads.js";
+import { fileToSlides } from "../lib/pdf-import.js";
 import { serviceIdForSlide, touchService } from "./_helpers.js";
 
 register({
@@ -18,6 +19,26 @@ register({
   handler: async ({ filename, data_base64 }) => {
     const bytes = Buffer.from(data_base64, "base64");
     return saveUpload(filename, bytes);
+  },
+});
+
+register({
+  name: "import_pdf",
+  description: "PDF(또는 이미지) 파일을 페이지별 이미지 슬라이드로 예배 순서에 추가한다. 기존 PPT는 PDF로 내보낸 뒤 사용. 브라우저는 POST /api/import 사용.",
+  input_schema: {
+    type: "object",
+    properties: {
+      service_id: { type: "string" },
+      path: { type: "string", description: "서버의 PDF/이미지 파일 경로" },
+    },
+    required: ["service_id", "path"],
+  },
+  handler: async ({ service_id, path }, ctx) => {
+    if (!ctx.db.query("SELECT id FROM services WHERE id = ?").get(service_id)) throw new Error(`unknown service: ${service_id}`);
+    const slides = await fileToSlides(path.split("/").pop(), readFileSync(path));
+    const slide_ids = [];
+    for (const s of slides) slide_ids.push((await execute("add_slide", { service_id, ...s }, ctx)).slide_id);
+    return { slide_ids };
   },
 });
 

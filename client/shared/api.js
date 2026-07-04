@@ -28,7 +28,27 @@ export async function loadTheme(id) {
   return theme;
 }
 
+// Merge per-service overrides { background?, accent? } onto a base theme.
+// accent also drives the ref/label/leader color. Returns a fresh object.
+export function mergeTheme(base, overrides) {
+  const t = base ? structuredClone(base) : { colors: {}, font: {} };
+  if (!overrides) return t;
+  if (overrides.background) t.background = overrides.background;
+  if (overrides.accent) {
+    t.colors = { ...(t.colors || {}) };
+    t.colors.accent = overrides.accent;
+    t.colors.leader = overrides.accent;
+  }
+  return t;
+}
+
+// Load a service's effective theme (base preset + its color overrides).
+export async function loadServiceTheme(service) {
+  return mergeTheme(await loadTheme(service?.theme_id || "dark-blue"), service?.theme_overrides);
+}
+
 export const BUILTIN_THEMES = [
   { id: "dark-blue", name: "다크 블루" },
   { id: "light-warm", name: "라이트 웜" },
+  { id: "black", name: "블랙" },
 ];

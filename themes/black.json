@@ -1,0 +1,20 @@
+{
+  "id": "black",
+  "name": "블랙",
+  "background": { "type": "color", "value": "#000000" },
+  "colors": {
+    "text": "#ffffff",
+    "accent": "#ffffff",
+    "muted": "#9aa0aa",
+    "leader": "#7aa2f7",
+    "congregation": "#e0af68"
+  },
+  "font": {
+    "family": "'Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif",
+    "title_size": 5.0,
+    "body_size": 3.2,
+    "label_size": 1.8,
+    "line_height": 1.5,
+    "weight": 600
+  }
+}

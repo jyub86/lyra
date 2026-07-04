@@ -129,6 +129,7 @@ export function renderElements(root, elements) {
       n = el("div", "el el-content el-" + e.type);
       n.style.fontSize = (e.size ?? 3.2) + "cqw";
       if (e.color) n.style.color = e.color;
+      if (e.font) n.style.fontFamily = `'${e.font}', var(--font-family, sans-serif)`;
       n.style.textAlign = e.align || "center";
       n.style.fontWeight = e.weight || 600;
       if (e.line_height) n.style.lineHeight = e.line_height;
@@ -141,6 +142,7 @@ export function renderElements(root, elements) {
       n = el("div", "el el-text", e.text ?? "");
       n.style.fontSize = (e.size ?? 4) + "cqw";
       if (e.color) n.style.color = e.color;
+      if (e.font) n.style.fontFamily = `'${e.font}', var(--font-family, sans-serif)`;
       n.style.textAlign = e.align || "center";
       n.style.fontWeight = e.weight || 600;
     }

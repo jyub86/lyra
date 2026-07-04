@@ -76,6 +76,7 @@ export async function loadTools() {
     import("./media.tools.js"),
     import("./template.tools.js"),
     import("./library.tools.js"),
+    import("./font.tools.js"),
   ]);
   // built-in slide kinds are templates too — seed them now that content tools
   // (whose schemas define generator params) are registered.

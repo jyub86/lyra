@@ -28,8 +28,9 @@ export async function loadTheme(id) {
   return theme;
 }
 
-// Merge per-service overrides { background?, accent? } onto a base theme.
-// accent also drives the ref/label/leader color. Returns a fresh object.
+// Merge per-service overrides { background?, accent?, font? } onto a base theme.
+// accent also drives the ref/label/leader color. font = 서비스 기본 글꼴(family).
+// Returns a fresh object.
 export function mergeTheme(base, overrides) {
   const t = base ? structuredClone(base) : { colors: {}, font: {} };
   if (!overrides) return t;
@@ -38,6 +39,10 @@ export function mergeTheme(base, overrides) {
     t.colors = { ...(t.colors || {}) };
     t.colors.accent = overrides.accent;
     t.colors.leader = overrides.accent;
+  }
+  if (overrides.font) {
+    t.font = { ...(t.font || {}) };
+    t.font.family = `'${overrides.font}', ${t.font.family || "sans-serif"}`;
   }
   return t;
 }

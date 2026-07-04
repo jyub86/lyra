@@ -24,7 +24,7 @@ function resolveStatic(pathname) {
     rel = "client" + pathname;
   } else if (pathname.startsWith("/themes/")) {
     rel = pathname.slice(1);
-  } else if (pathname.startsWith("/uploads/")) {
+  } else if (pathname.startsWith("/uploads/") || pathname.startsWith("/fonts/")) {
     rel = "data" + pathname;
   }
   if (!rel) return null;

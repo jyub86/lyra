@@ -1,0 +1,148 @@
+[
+  {
+    "id": "noto-sans-kr",
+    "family": "Noto Sans KR",
+    "label": "노토 산스 (본문)",
+    "category": "sans",
+    "script": "ko",
+    "weights": [
+      400,
+      700
+    ]
+  },
+  {
+    "id": "gowun-dodum",
+    "family": "Gowun Dodum",
+    "label": "고운 도담 (깔끔)",
+    "category": "sans",
+    "script": "ko",
+    "weights": [
+      400
+    ]
+  },
+  {
+    "id": "nanum-myeongjo",
+    "family": "Nanum Myeongjo",
+    "label": "나눔 명조 (명조)",
+    "category": "serif",
+    "script": "ko",
+    "weights": [
+      400,
+      700
+    ]
+  },
+  {
+    "id": "song-myung",
+    "family": "Song Myung",
+    "label": "송명 (우아한 명조)",
+    "category": "serif",
+    "script": "ko",
+    "weights": [
+      400
+    ]
+  },
+  {
+    "id": "black-han-sans",
+    "family": "Black Han Sans",
+    "label": "블랙 한 산스 (제목)",
+    "category": "display",
+    "script": "ko",
+    "weights": [
+      400
+    ]
+  },
+  {
+    "id": "do-hyeon",
+    "family": "Do Hyeon",
+    "label": "도현 (제목)",
+    "category": "display",
+    "script": "ko",
+    "weights": [
+      400
+    ]
+  },
+  {
+    "id": "jua",
+    "family": "Jua",
+    "label": "주아 (둥근 제목)",
+    "category": "display",
+    "script": "ko",
+    "weights": [
+      400
+    ]
+  },
+  {
+    "id": "gaegu",
+    "family": "Gaegu",
+    "label": "개구 (손글씨)",
+    "category": "hand",
+    "script": "ko",
+    "weights": [
+      400,
+      700
+    ]
+  },
+  {
+    "id": "nanum-pen-script",
+    "family": "Nanum Pen Script",
+    "label": "나눔 펜 (붓글씨)",
+    "category": "hand",
+    "script": "ko",
+    "weights": [
+      400
+    ]
+  },
+  {
+    "id": "montserrat",
+    "family": "Montserrat",
+    "label": "Montserrat (산스)",
+    "category": "sans",
+    "script": "en",
+    "weights": [
+      400,
+      700
+    ]
+  },
+  {
+    "id": "roboto",
+    "family": "Roboto",
+    "label": "Roboto (산스)",
+    "category": "sans",
+    "script": "en",
+    "weights": [
+      400,
+      700
+    ]
+  },
+  {
+    "id": "playfair-display",
+    "family": "Playfair Display",
+    "label": "Playfair (세리프)",
+    "category": "serif",
+    "script": "en",
+    "weights": [
+      400,
+      700
+    ]
+  },
+  {
+    "id": "bebas-neue",
+    "family": "Bebas Neue",
+    "label": "Bebas Neue (임팩트)",
+    "category": "display",
+    "script": "en",
+    "weights": [
+      400
+    ]
+  },
+  {
+    "id": "dancing-script",
+    "family": "Dancing Script",
+    "label": "Dancing Script (필기)",
+    "category": "hand",
+    "script": "en",
+    "weights": [
+      400
+    ]
+  }
+]

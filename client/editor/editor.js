@@ -16,7 +16,13 @@ const state = {
   editEl: null,         // selected free-element index within the primary slide
   templates: [],        // design templates (cached)
   editingTemplate: null, // { id, name, kind, draft } while editing a template's design
+  fonts: [],            // self-host 웹폰트 목록 (list_fonts)
 };
+
+// 요소/설정 글꼴 select 옵션: [값=family, 표시]. 첫 항목은 상속(테마 기본).
+function fontOptions() {
+  return [["", "테마 기본"], ...state.fonts.map((f) => [f.family, f.label])];
+}
 
 function setSingleSelection(id) {
   state.selected = id;
@@ -155,6 +161,7 @@ function syncThemeControls() {
   $("theme-select").value = s.theme_id;
   $("bg-color").value = state.theme?.background?.value || "#1a1a2e";
   $("accent-color").value = state.theme?.colors?.accent || "#7aa2f7";
+  $("font-select").value = s.theme_overrides?.font || "";
   $("transition-select").value = s.transition || "none";
 }
 
@@ -192,6 +199,7 @@ function initThemeSelect() {
   };
   $("bg-color").onchange = (e) => setOverride({ background: { type: "color", value: e.target.value } });
   $("accent-color").onchange = (e) => setOverride({ accent: e.target.value });
+  $("font-select").onchange = (e) => setOverride({ font: e.target.value || undefined });
   $("theme-reset").onclick = async () => {
     await callTool("set_service_theme", { service_id: state.serviceId, overrides: null });
     await reloadTheme();
@@ -516,6 +524,7 @@ function renderDesignPanel() {
   if (el.type === "text") {
     field("내용", "textarea", "text");
     sizeRow(1.5, 12);
+    field("글꼴", "select", "font", { options: fontOptions() });
     field("색", "color", "color", { def: "#ffffff" });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
     field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
@@ -554,6 +563,7 @@ function renderDesignPanel() {
       }
     }
     sizeRow(1.5, 10, 3.2);
+    field("글꼴", "select", "font", { options: fontOptions() });
     field("색", "color", "color", { def: "#ffffff" });
     field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
@@ -1108,6 +1118,18 @@ function wireMenu(btnId, panelId, { closeOnItem = false } = {}) {
 document.addEventListener("click", (e) => { if (openMenu && !openMenu.parentElement.contains(e.target)) closeMenus(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
 
+// self-host 웹폰트 목록을 불러와 설정의 기본 글꼴 select를 채운다.
+async function loadFonts() {
+  try { state.fonts = (await callTool("list_fonts")).fonts || []; } catch { state.fonts = []; }
+  const sel = $("font-select");
+  sel.replaceChildren();
+  for (const [v, t] of fontOptions()) {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = t; sel.appendChild(o);
+  }
+  if (state.service) syncThemeControls();
+}
+
 function init() {
   initThemeSelect();
   initTabs();
@@ -1175,6 +1197,7 @@ function init() {
   $("tpl-edit-cancel").onclick = cancelTemplateEdit;
   loadServices();
   loadTemplates();
+  loadFonts();
 }
 
 init();

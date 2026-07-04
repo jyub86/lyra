@@ -35,6 +35,18 @@
 > - 우측 **3탭**(추가/디자인/템플릿). "검사기"는 제거되고 **슬라이드 배경**은 디자인 탭 섹션으로 통합
 >   (id 유지: insp-bg-type/insp-bg-fields/insp-save). 모든 기존 핸들러 id 불변(순수 재배치).
 
+> ⚠️ **v4.4 추가 (self-host 무료 웹폰트)** — 구현 기준(현행)
+> - **오프라인 우선**: 구글폰트 CDN 링크가 아니라 폰트 파일을 로컬에 받아 `data/fonts/`에서 서빙(`/fonts/`).
+>   예배 중 인터넷이 끊겨도 폰트 유지. 출처=fontsource(jsDelivr), 패밀리별 korean/latin 결합 woff2 1~2파일 +
+>   직접 작성 `@font-face`(unicode-range). 빌드/추가: `bun run scripts/build-fonts.js`(FONTS 배열에 추가 후 재실행).
+>   산출물 `data/fonts/{files/*.woff2, fonts.css, fonts.json}`. 기본 14종(한글 노토산스/나눔명조/송명/블랙한산스/도현/주아/
+>   개구/나눔펜/고운도담 + 영어 Montserrat/Roboto/Playfair/Bebas/Dancing).
+> - **도구**: `list_fonts()` → 매니페스트(`core/tools/font.tools.js`). Tool-First 일관.
+> - **적용**: 요소(text/bible/hymn/reading)에 `font`=family 문자열 → 렌더러가 `fontFamily` 지정(`layer-renderer.js`).
+>   서비스 기본 글꼴 = `theme_overrides.font`(`mergeTheme`가 `--font-family`에 병합). 요소 font가 없으면 기본 글꼴 상속.
+> - **UI**: 디자인 탭 "선택한 요소"에 **글꼴 select**(text·콘텐츠 요소), ⚙설정에 **기본 글꼴 select**(id `font-select`).
+>   둘 다 `list_fonts`로 채움. editor+presenter가 `/fonts/fonts.css` 로드.
+
 > ⚠️ **v4 변경 (요소 중심 모델)** — 구현 기준(현행, 가장 권위 있음)
 > - **슬라이드 = `{ background, elements:[] }`.** 타입 슬라이드(template_type)·typed data·overlays 레이어를 제거.
 >   `slides(id, service_id, position, background, elements, transition)`.
@@ -50,7 +62,7 @@
 
 > ⚠️ **v3 변경 (Scene 계층 제거)** — 구현 기준(현행)
 > - **Scene 계층을 제거**했다. 슬라이드는 한 예배(Service) 안에 **하나의 연속된 순서**로 평면 저장된다(`slides.service_id` + `position`).
-> - **공유 단위는 Service 전체**(= 한 예배의 순서 전체). `export_service` / `import_service` (worship-service/v1 JSON). Scene Library/`scene_library` 테이블·scene 도구는 폐기됐다.
+> - **공유 단위는 Service 전체**(= 한 예배의 순서 전체). `export_service` / `import_service` (worship-service/v2 JSON). Scene Library/`scene_library` 테이블·scene 도구는 폐기됐다.
 > - 편집 화면은 **리스트 뷰 + 타일(썸네일 그리드) 뷰 토글**을 제공한다.
 > - 아래 본문 중 `Scene`/`scene_*` 도구·`scenes`/`scene_library` 테이블·`worship-scene/v1` 언급은 **이 v3 노트로 대체**됐다(역사적 기록). 권위 있는 현행 구조는 §1·§4·§8·§10·§15와 이 노트다.
 
@@ -109,7 +121,7 @@ Theme (테마)               시각 스타일 (계층 밖, Service에 적용)
 
 | 개념 | 정의 | 저장 | 공유 |
 |------|------|------|------|
-| Service | 한 예배의 순서 전체 | DB | **export/import (worship-service/v1 JSON)** + 덱 복사 |
+| Service | 한 예배의 순서 전체 | DB | **export/import (worship-service/v2 JSON)** + 덱 복사 |
 | Slide | 개별 화면 (순서 내 position) | DB | (Service 단위로) |
 | Template | 슬라이드 생성기 | DB(custom) + 파일(builtin) | JSON |
 | Theme | 시각 스타일 | DB(custom) + 파일(builtin) | JSON |
@@ -466,7 +478,7 @@ overlays 레이어는 **자유 요소(text box / shape / image)** 다. 편집기
 ```
 list_services()                                  → 예배 순서 목록
 get_service(service_id)                           → 예배 + 슬라이드(평면, 순서대로)
-export_service(service_id)                        → 공유용 JSON (worship-service/v1)
+export_service(service_id)                        → 공유용 JSON (worship-service/v2)
 list_bible_books()                                → 성경 책 목록
 get_bible_passage(book, chapter, v_start, v_end)  → 본문 절 배열
 search_bible(query, limit)                        → 전문 검색
@@ -542,24 +554,24 @@ present_reload()
 // core/tools/content.tools.js
 registry.register({
   name: "add_bible_slides",
-  description: "지정한 성경 본문(책/장/절 범위)을 현재 씬에 본문 슬라이드로 추가한다. 절 수에 따라 자동 분할된다.",
+  description: "지정한 성경 본문(책/장/절 범위)을 현재 예배 순서에 본문 슬라이드로 추가한다. 절 수에 따라 자동 분할된다.",
   input_schema: {
     type: "object",
     properties: {
-      scene_id:    { type: "string", description: "대상 씬 ID" },
+      service_id:  { type: "string", description: "대상 예배(Service) ID" },
       book:        { type: "string", description: "책 이름 또는 약칭 (예: 요한복음, 요)" },
       chapter:     { type: "integer" },
       verse_start: { type: "integer" },
       verse_end:   { type: "integer" },
       layout:      { type: "string", enum: ["auto","one-per-verse","all-in-one"], default: "auto" }
     },
-    required: ["scene_id","book","chapter","verse_start","verse_end"]
+    required: ["service_id","book","chapter","verse_start","verse_end"]
   },
   handler: async (db, args) => {
     const bookOrder = resolveBook(db, args.book);          // 별칭 매핑
     const verses = queryVerses(db, bookOrder, args.chapter, args.verse_start, args.verse_end);
     const pages  = splitBible(verses, args.layout);        // 분할
-    return insertSlides(db, args.scene_id, "bible", pages);
+    return insertSlides(db, args.service_id, "bible", pages);
   }
 });
 ```
@@ -627,11 +639,11 @@ server.listen({ stdio: true, http: { port: 3100 } });
 # 레지스트리에서 자동 생성되는 범용 명령
 worship tools                          # 전체 tool 목록
 worship schema add_bible_slides        # 입력 스키마 출력
-worship call add_bible_slides --json '{"scene_id":"S1","book":"요한복음","chapter":3,"verse_start":16,"verse_end":18}'
+worship call add_bible_slides --json '{"service_id":"S1","book":"요한복음","chapter":3,"verse_start":16,"verse_end":18}'
 
 # 파이프라인 자동화 예 (매주 토요일 cron)
 SVC=$(worship call create_service --json '{"title":"6월29일 1부","date":"2025-06-29","worship_part":"1부"}' | jq -r .service_id)
-worship call add_hymn_slides --json "{\"scene_id\":\"$SVC...\",\"number\":1}"
+worship call add_hymn_slides --json "{\"service_id\":\"$SVC\",\"number\":1}"
 ```
 → MCP 없이도 셸에서 모든 기능 호출 가능. 테스트·디버깅·무인 자동화에 사용.
 
@@ -745,10 +757,10 @@ HTTP  : registry tool → POST /api/tools/:name            ← UI 전용 얇은 
 ```
 # HTTP 예
 POST /api/tools/add_bible_slides
-     { "scene_id":"...", "book":"요한복음", "chapter":3, "verse_start":16, "verse_end":18 }
+     { "service_id":"...", "book":"요한복음", "chapter":3, "verse_start":16, "verse_end":18 }
 
 # CLI 예 (동일 tool)
-worship call add_bible_slides --json '{"scene_id":"...","book":"요한복음","chapter":3,"verse_start":16,"verse_end":18}'
+worship call add_bible_slides --json '{"service_id":"...","book":"요한복음","chapter":3,"verse_start":16,"verse_end":18}'
 
 # MCP 예 (동일 tool) — 외부 Claude/AXIS가 tool_use로 호출
 ```
@@ -800,7 +812,7 @@ worship call add_bible_slides --json '{"scene_id":"...","book":"요한복음","c
 | 레이어 | background / content / overlays 3겹 | 영상 위 텍스트 자연 해결 |
 | 찬양 가사 | **내부 파서 없음.** 구조화는 외부 LLM | 변수 과다 → 휴리스틱 불가 |
 | LLM 연결 | tool 스키마 자동 노출 (MCP/CLI) | Claude/로컬 vLLM 모델 독립 |
-| 순서 공유 | **worship-service/v1 JSON** (export/import_service) | 한 예배 순서 전체를 파일로 공유 |
+| 순서 공유 | **worship-service/v2 JSON** (export/import_service) | 한 예배 순서 전체를 파일로 공유 |
 | 편집 뷰 | 리스트 + 타일(썸네일) 토글 | 순서 개요를 라이트테이블처럼 |
 | 서버/DB | Bun + bun:sqlite | 오프라인, 단일 파일 |
 | 클라이언트 | 순수 HTML/JS | 빌드 없음 |

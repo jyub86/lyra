@@ -181,7 +181,7 @@ register({
 
 register({
   name: "export_service",
-  description: "예배 순서 전체를 공유용 JSON(worship-service/v1)으로 내보낸다. 슬라이드가 순서대로 포함된다.",
+  description: "예배 순서 전체를 공유용 JSON(worship-service/v2)으로 내보낸다. 슬라이드가 순서대로 포함된다.",
   read: true,
   input_schema: {
     type: "object",
@@ -203,11 +203,11 @@ register({
 
 register({
   name: "import_service",
-  description: "공유용 JSON(worship-service/v1)을 받아 새 예배 순서로 가져온다.",
+  description: "공유용 JSON(worship-service/v2)을 받아 새 예배 순서로 가져온다.",
   input_schema: {
     type: "object",
     properties: {
-      payload: { type: "object", description: "worship-service/v1 객체" },
+      payload: { type: "object", description: "worship-service/v2 객체" },
       title: { type: "string", description: "가져올 제목(생략 시 payload 제목 사용)" },
     },
     required: ["payload"],

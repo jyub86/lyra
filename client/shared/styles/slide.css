@@ -34,6 +34,7 @@
 .ce-verse-no { font-size: 0.55em; color: var(--accent); vertical-align: super; margin: 0 0.12em 0 0; }
 .ce-head { font-size: 0.5em; color: var(--muted); margin-bottom: 0.2em; }
 .ce-head .ce-no { color: var(--accent); }
+.ce-hno { color: var(--accent); font-weight: 700; }  /* field="title" 장 번호 */
 .ce-label { font-size: 0.55em; color: var(--accent); margin-bottom: 0.15em; }
 .ce-line { margin: 0.12em 0; }
 .ce-seg { margin: 0.32em 0; }

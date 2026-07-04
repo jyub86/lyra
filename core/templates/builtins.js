@@ -8,11 +8,21 @@
 // generators: params_schema derived from the content tool's input_schema
 const GENERATORS = [
   { id: "builtin-bible", name: "성경 본문", tool: "add_bible_slides",
-    elements: [{ type: "bible", x: 0.08, y: 0.2, w: 0.84, h: 0.6, size: 3.2, align: "center", weight: 600, line_height: 1.5, show_numbers: true }] },
+    elements: [
+      { type: "bible", field: "ref", x: 0.1, y: 0.12, w: 0.8, h: 0.08, size: 2.2, align: "center", weight: 700, color: "#7aa2f7" },
+      { type: "bible", field: "text", x: 0.08, y: 0.26, w: 0.84, h: 0.56, size: 3.2, align: "center", weight: 600, line_height: 1.5, show_numbers: true },
+    ] },
   { id: "builtin-hymn", name: "찬송가", tool: "add_hymn_slides",
-    elements: [{ type: "hymn", x: 0.1, y: 0.24, w: 0.8, h: 0.52, size: 3.2, align: "center", weight: 600 }] },
+    elements: [
+      { type: "hymn", field: "title", x: 0.1, y: 0.12, w: 0.8, h: 0.1, size: 2.6, align: "center", weight: 700, color: "#c0caf5" },
+      { type: "hymn", field: "label", x: 0.3, y: 0.24, w: 0.4, h: 0.07, size: 2.2, align: "center", weight: 700 },
+      { type: "hymn", field: "lyrics", x: 0.1, y: 0.34, w: 0.8, h: 0.5, size: 3.6, align: "center", weight: 600 },
+    ] },
   { id: "builtin-reading", name: "교독문", tool: "add_reading_slides",
-    elements: [{ type: "reading", x: 0.08, y: 0.18, w: 0.84, h: 0.64, size: 2.9, align: "center", weight: 600 }] },
+    elements: [
+      { type: "reading", field: "title", x: 0.1, y: 0.12, w: 0.8, h: 0.08, size: 2.4, align: "center", weight: 700, color: "#7aa2f7" },
+      { type: "reading", field: "body", x: 0.08, y: 0.24, w: 0.84, h: 0.6, size: 2.9, align: "center", weight: 600 },
+    ] },
 ];
 
 // statics: build slide data from params (text bound via `bind`)

@@ -45,8 +45,11 @@ function el(tag, cls, text) {
 }
 
 // ----- content element bodies (bible / hymn / reading) -----
-function renderBibleBody(root, c, showNumbers) {
-  if (c?.ref) root.appendChild(el("div", "ce-ref", c.ref));
+// field: "all" (default) | "ref" | "text"
+function renderBibleBody(root, c, showNumbers, field) {
+  field = field || "all";
+  if (field === "ref") { root.textContent = c?.ref || ""; return; }
+  if (field !== "text" && c?.ref) root.appendChild(el("div", "ce-ref", c.ref));
   const body = el("div", "ce-body");
   for (const v of c?.verses || []) {
     const row = el("span", "ce-verse");
@@ -57,7 +60,17 @@ function renderBibleBody(root, c, showNumbers) {
   }
   root.appendChild(body);
 }
-function renderHymnBody(root, c) {
+// field: "all" (default) | "title" | "label" | "lyrics" — lets a hymn be split
+// into separately-placeable title/verse/lyrics elements.
+function renderHymnBody(root, c, field) {
+  field = field || "all";
+  if (field === "title") {
+    if (c?.number != null) { root.appendChild(el("span", "ce-hno", `${c.number}장`)); root.appendChild(document.createTextNode(" ")); }
+    root.appendChild(document.createTextNode(c?.title || ""));
+    return;
+  }
+  if (field === "label") { root.textContent = c?.label || ""; return; }
+  if (field === "lyrics") { for (const line of c?.lines || []) root.appendChild(el("div", "ce-line", line)); return; }
   const head = el("div", "ce-head");
   if (c?.number) head.appendChild(el("span", "ce-no", `${c.number}장`));
   if (c?.title) head.appendChild(el("span", null, " " + c.title));
@@ -65,8 +78,12 @@ function renderHymnBody(root, c) {
   if (c?.label) root.appendChild(el("div", "ce-label", c.label));
   for (const line of c?.lines || []) root.appendChild(el("div", "ce-line", line));
 }
-function renderReadingBody(root, c) {
-  if (c?.title) root.appendChild(el("div", "ce-ref", `${c.number ? c.number + "번 " : ""}${c.title}`));
+// field: "all" | "title" | "body"
+function renderReadingBody(root, c, field) {
+  field = field || "all";
+  const titleText = c?.title ? `${c.number ? c.number + "번 " : ""}${c.title}` : "";
+  if (field === "title") { root.textContent = titleText; return; }
+  if (field !== "body" && titleText) root.appendChild(el("div", "ce-ref", titleText));
   for (const seg of c?.segments || []) {
     const row = el("div", `ce-seg role-${seg.role}`);
     const tag = { leader: "인도자", congregation: "회중", unison: "다같이" }[seg.role];
@@ -106,9 +123,9 @@ export function renderElements(root, elements) {
       n.style.textAlign = e.align || "center";
       n.style.fontWeight = e.weight || 600;
       if (e.line_height) n.style.lineHeight = e.line_height;
-      if (e.type === "bible") renderBibleBody(n, e.content, e.show_numbers);
-      else if (e.type === "hymn") renderHymnBody(n, e.content);
-      else renderReadingBody(n, e.content);
+      if (e.type === "bible") renderBibleBody(n, e.content, e.show_numbers, e.field);
+      else if (e.type === "hymn") renderHymnBody(n, e.content, e.field);
+      else renderReadingBody(n, e.content, e.field);
     } else {
       n = el("div", "el el-text", e.text ?? "");
       n.style.fontSize = (e.size ?? 4) + "cqw";

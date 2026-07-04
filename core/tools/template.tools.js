@@ -59,13 +59,18 @@ function buildSlidesFromTemplate(db, spec, params) {
   const els = spec.elements || [];
   const bg = spec.background ?? null;
 
-  const contentEl = els.find((e) => CONTENT_TYPES.has(e.type));
-  if (contentEl) {
-    const chunks = contentChunks(db, contentEl.type, params);
+  const contentEls = els.filter((e) => CONTENT_TYPES.has(e.type));
+  if (contentEls.length) {
+    const type = contentEls[0].type; // split by the first content element's type
+    const chunks = contentChunks(db, type, params);
     if (!chunks.length) throw new Error("콘텐츠를 가져오지 못했습니다");
+    // every content element of that type (e.g. hymn title/label/lyrics) shares the chunk
     return chunks.map((chunk) => ({
       background: bg,
-      elements: els.map((e) => (e === contentEl ? { ...e, params: chunk.params, content: chunk.content } : fillElement(e, params))),
+      elements: els.map((e) =>
+        e.type === type ? { ...e, params: chunk.params, content: chunk.content }
+          : CONTENT_TYPES.has(e.type) ? { ...e }
+            : fillElement(e, params)),
     }));
   }
 

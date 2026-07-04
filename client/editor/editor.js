@@ -371,6 +371,12 @@ const CONTENT_PARAMS = {
   hymn: [["찬송가 번호", "number", "int"], ["절(선택)", "verse_no", "int"]],
   reading: [["교독문 번호", "number", "int"]],
 };
+// 표시 항목 — 콘텐츠 요소가 어느 부분을 보여줄지 (분리 배치용)
+const FIELD_OPTIONS = {
+  bible: [["all", "전체"], ["ref", "구절(요 3:16)"], ["text", "본문만"]],
+  hymn: [["all", "전체"], ["title", "제목/장"], ["label", "절"], ["lyrics", "가사만"]],
+  reading: [["all", "전체"], ["title", "제목"], ["body", "본문만"]],
+};
 
 function renderDesignPanel() {
   const empty = $("el-empty"), body = $("el-props");
@@ -424,11 +430,19 @@ function renderDesignPanel() {
   } else if (el.type === "image") {
     body.appendChild(elx("p", "muted", "이미지는 캔버스에서 드래그·크기조절하세요."));
   } else if (["bible", "hymn", "reading"].includes(el.type)) {
+    { // 표시 항목(field): 바꾸면 즉시 반영 + 패널 갱신(절 번호 표시 노출 여부)
+      const wrap = elx("label", null, "표시 항목");
+      const sel = document.createElement("select");
+      for (const [v, t] of FIELD_OPTIONS[el.type]) { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); }
+      sel.value = el.field ?? "all";
+      sel.onchange = () => { el.field = sel.value; repaintEls(); commitEls(); renderDesignPanel(); };
+      wrap.appendChild(sel); body.appendChild(wrap);
+    }
     field("글자 크기", "range", "size", { min: 1.5, max: 10, step: 0.25, num: true, def: 3.2 });
     field("색", "color", "color", { def: "#ffffff" });
     field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
-    if (el.type === "bible") field("절 번호 표시", "check", "show_numbers");
+    if (el.type === "bible" && (el.field ?? "all") !== "ref") field("절 번호 표시", "check", "show_numbers");
     body.appendChild(elx("div", "section-title", "내용 (params)"));
     for (const [label, name, ptype] of CONTENT_PARAMS[el.type]) {
       const wrap = elx("label", null, label);

@@ -1006,7 +1006,7 @@ async function openLibrary() {
     const { library_dir, indexed } = await callTool("get_library_dir");
     $("lib-dir").value = library_dir || "";
     $("lib-status").textContent = library_dir ? `색인 ${indexed}개` : "폴더를 지정하세요";
-    if (library_dir && indexed === 0) await reindexLibrary(false);
+    if (library_dir && indexed === 0) await reindexLibrary();
     renderLibResults([]);
     $("lib-query").focus();
   } catch (e) { $("lib-status").textContent = e.message; }
@@ -1018,15 +1018,16 @@ async function saveLibraryDir() {
   if (!path) return;
   try {
     await callTool("set_library_dir", { path });
-    $("lib-status").textContent = "폴더 저장됨 · 재색인하세요";
-    await reindexLibrary(true);
+    $("lib-status").textContent = "폴더 저장됨 · 색인 중…";
+    await reindexLibrary();
   } catch (e) { $("lib-status").textContent = e.message; }
 }
 
-async function reindexLibrary(force) {
-  showBusy("라이브러리 색인 중…", "PPT/PDF 내용을 읽는 중이에요 (처음은 오래 걸릴 수 있어요)");
+// 증분 색인(변경분만). 새 폴더면 전부 신규로 추출됨.
+async function reindexLibrary() {
+  showBusy("라이브러리 색인 중…", "새/변경된 PPT의 내용을 읽는 중이에요 (처음은 오래 걸릴 수 있어요)");
   try {
-    const r = await callTool("index_library", { refresh: force });
+    const r = await callTool("index_library", {});
     $("lib-status").textContent = `색인 ${r.files}개 (신규 ${r.added}, 갱신 ${r.updated})`;
   } catch (e) { $("lib-status").textContent = e.message; }
   finally { hideBusy(); }
@@ -1142,7 +1143,7 @@ function init() {
   $("library-btn").onclick = openLibrary;
   $("library-close").onclick = closeLibrary;
   $("lib-save").onclick = saveLibraryDir;
-  $("lib-reindex").onclick = () => reindexLibrary(true);
+  $("lib-reindex").onclick = () => reindexLibrary();
   $("lib-query").addEventListener("input", () => { clearTimeout(libSearchTimer); libSearchTimer = setTimeout(searchLibrary, 250); });
   $("library-modal").addEventListener("mousedown", (e) => { if (e.target === $("library-modal")) closeLibrary(); });
   $("tpl-save").onclick = saveCurrentAsTemplate;

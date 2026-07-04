@@ -64,9 +64,8 @@ register({
     const dir = getSetting(db, "library_dir");
     if (!dir) throw new Error("라이브러리 폴더가 설정되지 않았습니다 (set_library_dir).");
     if (!existsSync(dir)) throw new Error(`라이브러리 폴더가 없습니다: ${dir}`);
-    const existing = db.query("SELECT COUNT(*) n FROM library_index").get().n;
-    if (!refresh && existing > 0) return { files: existing, added: 0, updated: 0, removed: 0, skipped: existing, cached: true };
 
+    // Always walk; extract new/changed files (or all, if refresh forces re-extract).
     const files = walk(dir);
     const seen = new Set(files);
     const prior = new Map(db.query("SELECT path, mtime FROM library_index").all().map((r) => [r.path, r.mtime]));
@@ -82,7 +81,7 @@ register({
       const st = statSync(f);
       const mtime = Math.floor(st.mtimeMs);
       const had = prior.has(f);
-      if (had && prior.get(f) === mtime) { skipped++; continue; }
+      if (!refresh && had && prior.get(f) === mtime) { skipped++; continue; }
       const { text, pages } = extractText(f);
       up.run(f, basename(f), relative(dir, f), extname(f).toLowerCase(), st.size, mtime, pages, text, ts);
       had ? updated++ : added++;
@@ -104,20 +103,26 @@ register({
     required: ["query"],
   },
   handler: ({ query, limit }, { db }) => {
-    const q = String(query || "").trim();
-    if (!q) return { results: [] };
-    const like = `%${q.replace(/[%_]/g, (c) => "\\" + c)}%`;
+    // 띄어쓰기로 나눈 각 단어를 모두 포함(AND). 각 단어는 파일명 또는 내용 어디든.
+    const terms = String(query || "").trim().split(/\s+/).filter(Boolean);
+    if (!terms.length) return { results: [] };
+    const esc = (t) => `%${t.replace(/[%_\\]/g, (c) => "\\" + c)}%`;
+    const clause = terms.map(() => "(name LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\')").join(" AND ");
+    const args = terms.flatMap((t) => [esc(t), esc(t)]);
     const rows = db.query(
-      `SELECT path,name,relpath,ext,pages,text FROM library_index
-        WHERE name LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\'
-        ORDER BY name LIMIT ?`
-    ).all(like, like, limit);
+      `SELECT path,name,relpath,ext,pages,text FROM library_index WHERE ${clause} ORDER BY name LIMIT ?`
+    ).all(...args, limit);
+
+    const lterms = terms.map((t) => t.toLowerCase());
     const results = rows.map((r) => {
-      const inName = r.name.toLowerCase().includes(q.toLowerCase());
+      const lname = r.name.toLowerCase(), ltext = (r.text || "").toLowerCase();
+      const inName = lterms.every((t) => lname.includes(t));
       let snippet = "";
       if (!inName && r.text) {
-        const i = r.text.toLowerCase().indexOf(q.toLowerCase());
-        if (i >= 0) { const s = Math.max(0, i - 30); snippet = (s > 0 ? "…" : "") + r.text.slice(s, i + q.length + 40).trim() + "…"; }
+        // 내용에서 처음 걸린 단어 주변을 스니펫으로
+        let best = -1, blen = 0;
+        for (const t of lterms) { const i = ltext.indexOf(t); if (i >= 0 && (best < 0 || i < best)) { best = i; blen = t.length; } }
+        if (best >= 0) { const s = Math.max(0, best - 30); snippet = (s > 0 ? "…" : "") + r.text.slice(s, best + blen + 40).trim() + "…"; }
       }
       return { path: r.path, name: r.name, relpath: r.relpath, ext: r.ext, pages: r.pages, matched_in: inName ? "name" : "content", snippet };
     });

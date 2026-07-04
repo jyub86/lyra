@@ -13,22 +13,28 @@ function runText(cmd) {
   } catch { return ""; }
 }
 
-// Collect inner text of all <tag ...>text</tag> occurrences (e.g. a:t / text:p).
-function pullTags(xml, tag) {
-  const out = [];
-  const re = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)</${tag}>`, "g");
+function decodeXml(s) {
+  return s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+// Split into <tag>…</tag> blocks (paragraphs).
+function blocks(xml, tag) {
+  return xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>[\\s\\S]*?</${tag}>`, "g")) || [];
+}
+// Paragraph text: concat <a:t> runs with no separator (avoids fake mid-word
+// spaces from formatting splits like "시편 3 2 편"); <a:br/> line breaks → space.
+function paraText(p) {
+  let out = "";
+  const re = /<a:t(?:\s[^>]*)?>([\s\S]*?)<\/a:t>|<a:br\b[^>]*\/?>/g;
   let m;
-  while ((m = re.exec(xml)) !== null) {
-    const t = m[1].replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
-    if (t) out.push(t);
-  }
-  return out;
+  while ((m = re.exec(p)) !== null) out += m[1] !== undefined ? decodeXml(m[1]) : " ";
+  return out.trim();
 }
 
 function extractPptx(path) {
-  // slide XML → <a:t> text runs; page count = number of slide files
   const xml = runText(["unzip", "-p", path, "ppt/slides/slide*.xml"]);
-  const text = pullTags(xml, "a:t").join(" ");
+  const paras = blocks(xml, "a:p").map(paraText).filter(Boolean);
+  const text = paras.join(" ");
   const listing = runText(["unzip", "-Z1", path]);
   const pages = (listing.match(/ppt\/slides\/slide\d+\.xml/g) || []).length || null;
   return { text, pages };
@@ -36,7 +42,8 @@ function extractPptx(path) {
 
 function extractOdp(path) {
   const xml = runText(["unzip", "-p", path, "content.xml"]);
-  const text = [...pullTags(xml, "text:p"), ...pullTags(xml, "text:span")].join(" ");
+  const paras = blocks(xml, "text:p").map((p) => decodeXml(p).trim()).filter(Boolean);
+  const text = paras.join(" ");
   const pages = (xml.match(/draw:page /g) || []).length || null;
   return { text, pages };
 }

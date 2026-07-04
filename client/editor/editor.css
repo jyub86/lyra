@@ -90,6 +90,24 @@ a { color: var(--accent); text-decoration: none; }
 .section-title { color: var(--muted); font-size: 12px; margin: 6px 0 4px; font-weight: 700; }
 .hint { font-size: 11px; margin: 2px 0 4px; }
 
+/* library modal */
+.modal-overlay { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; background: rgba(8,10,15,.6); backdrop-filter: blur(2px); }
+.modal { width: min(760px, 92vw); max-height: 84vh; display: flex; flex-direction: column; gap: 10px; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.modal-head { display: flex; align-items: center; gap: 8px; }
+.lib-folder { display: flex; gap: 6px; align-items: center; }
+.lib-folder input { flex: 1; }
+.lib-folder .muted { font-size: 12px; white-space: nowrap; }
+.lib-search input { width: 100%; padding: 8px 10px; }
+.lib-results { overflow: auto; display: flex; flex-direction: column; gap: 6px; min-height: 120px; }
+.lib-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; }
+.lib-row .info { flex: 1; min-width: 0; }
+.lib-row .fname { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-row .fmeta { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-row .snip { font-size: 12px; color: var(--congregation); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lib-row .mtag { font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.lib-row .mtag.content { color: var(--accent); border-color: var(--accent); }
+.lib-empty { color: var(--muted); text-align: center; padding: 20px; }
+
 /* busy overlay (imports & other long ops) */
 .busy-overlay { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; background: rgba(8,10,15,.66); backdrop-filter: blur(2px); }
 .busy-box { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 26px 34px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; min-width: 260px; }

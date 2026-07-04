@@ -22,6 +22,7 @@
     <input id="import-file" type="file" accept="application/json,.json" hidden />
     <button id="import-ppt" title="PPT·PDF·이미지를 슬라이드로 가져오기">슬라이드 가져오기</button>
     <input id="import-ppt-file" type="file" accept=".pptx,.ppt,.odp,application/pdf,image/*" hidden />
+    <button id="library-btn" title="라이브러리 폴더에서 PPT 검색·가져오기">라이브러리</button>
     <label class="theme-pick">테마 <select id="theme-select"></select></label>
     <label class="theme-pick" title="테마 기본 배경색">배경 <input id="bg-color" type="color" /></label>
     <label class="theme-pick" title="메인 강조색">메인 <input id="accent-color" type="color" /></label>
@@ -130,6 +131,27 @@
     <p class="tiles-hint muted">클릭·⌘/Ctrl·Shift로 선택 · 드래그로 순서 변경(여럿 함께) · 더블클릭하면 발표로 보냄</p>
     <div id="tile-grid" class="tile-grid"></div>
   </section>
+
+  <!-- ===== PPT 라이브러리 검색 모달 ===== -->
+  <div id="library-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <strong>PPT 라이브러리</strong>
+        <span class="spacer"></span>
+        <button id="library-close" class="mini">닫기 ✕</button>
+      </div>
+      <div class="lib-folder">
+        <input id="lib-dir" type="text" placeholder="라이브러리 폴더 절대경로 (예: /Users/이름/church/ppt)" />
+        <button id="lib-save" class="mini">저장</button>
+        <button id="lib-reindex" class="mini">재색인</button>
+        <span id="lib-status" class="muted"></span>
+      </div>
+      <div class="lib-search">
+        <input id="lib-query" type="search" placeholder="제목·내용 검색 (예: 부활, 구주, 사도신경)" />
+      </div>
+      <div id="lib-results" class="lib-results"></div>
+    </div>
+  </div>
 
   <!-- 진행 중 오버레이 (가져오기 등 긴 작업) -->
   <div id="busy" class="busy-overlay" hidden>

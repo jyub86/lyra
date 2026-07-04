@@ -24,7 +24,7 @@ register({
 
 register({
   name: "import_pdf",
-  description: "PDF(또는 이미지) 파일을 페이지별 이미지 슬라이드로 예배 순서에 추가한다. 기존 PPT는 PDF로 내보낸 뒤 사용. 브라우저는 POST /api/import 사용.",
+  description: "PPT(.pptx/.ppt/.odp)·PDF·이미지 파일(서버 경로)을 페이지별 이미지 슬라이드로 예배 순서에 추가한다. 라이브러리 검색 결과 가져오기에도 사용. 브라우저 업로드는 POST /api/import.",
   input_schema: {
     type: "object",
     properties: {

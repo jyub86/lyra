@@ -998,6 +998,82 @@ async function importSlidesFile(file) {
   }
 }
 
+// ---- PPT 라이브러리 검색 모달 ----
+let libSearchTimer = null;
+async function openLibrary() {
+  $("library-modal").hidden = false;
+  try {
+    const { library_dir, indexed } = await callTool("get_library_dir");
+    $("lib-dir").value = library_dir || "";
+    $("lib-status").textContent = library_dir ? `색인 ${indexed}개` : "폴더를 지정하세요";
+    if (library_dir && indexed === 0) await reindexLibrary(false);
+    renderLibResults([]);
+    $("lib-query").focus();
+  } catch (e) { $("lib-status").textContent = e.message; }
+}
+function closeLibrary() { $("library-modal").hidden = true; }
+
+async function saveLibraryDir() {
+  const path = $("lib-dir").value.trim();
+  if (!path) return;
+  try {
+    await callTool("set_library_dir", { path });
+    $("lib-status").textContent = "폴더 저장됨 · 재색인하세요";
+    await reindexLibrary(true);
+  } catch (e) { $("lib-status").textContent = e.message; }
+}
+
+async function reindexLibrary(force) {
+  showBusy("라이브러리 색인 중…", "PPT/PDF 내용을 읽는 중이에요 (처음은 오래 걸릴 수 있어요)");
+  try {
+    const r = await callTool("index_library", { refresh: force });
+    $("lib-status").textContent = `색인 ${r.files}개 (신규 ${r.added}, 갱신 ${r.updated})`;
+  } catch (e) { $("lib-status").textContent = e.message; }
+  finally { hideBusy(); }
+}
+
+async function searchLibrary() {
+  const q = $("lib-query").value.trim();
+  if (!q) { renderLibResults([]); return; }
+  try {
+    const { results } = await callTool("search_library", { query: q });
+    renderLibResults(results);
+  } catch (e) { $("lib-results").innerHTML = `<div class="lib-empty">${e.message}</div>`; }
+}
+
+function renderLibResults(results) {
+  const root = $("lib-results");
+  root.replaceChildren();
+  if (!results.length) { root.innerHTML = '<div class="lib-empty">검색어를 입력하세요. 제목과 슬라이드 내용에서 찾습니다.</div>'; return; }
+  for (const r of results) {
+    const row = elx("div", "lib-row");
+    const info = elx("div", "info");
+    info.append(elx("div", "fname", r.name));
+    info.append(elx("div", "fmeta", `${r.relpath}${r.pages ? " · " + r.pages + "장" : ""}`));
+    if (r.snippet) info.append(elx("div", "snip", r.snippet));
+    const tag = elx("span", "mtag" + (r.matched_in === "content" ? " content" : ""), r.matched_in === "content" ? "내용" : "제목");
+    const imp = elx("button", "mini accent", "가져오기");
+    imp.onclick = () => importFromLibrary(r);
+    row.append(info, tag, imp);
+    root.appendChild(row);
+  }
+}
+
+async function importFromLibrary(r) {
+  if (!state.serviceId) return;
+  const isOffice = [".pptx", ".ppt", ".odp"].includes(r.ext);
+  showBusy(isOffice ? "PowerPoint 변환 중…" : "가져오는 중…", `${r.name}${isOffice ? " · LibreOffice로 변환" : ""}`);
+  try {
+    const { slide_ids } = await callTool("import_pdf", { service_id: state.serviceId, path: r.path });
+    await refresh();
+    clearInterval(busyTimer); busyTimer = null;
+    $("busy-msg").textContent = `${slide_ids.length}장 가져왔어요 ✓`;
+    $("busy-sub").textContent = "";
+    $("busy").querySelector(".spinner").style.display = "none";
+    setTimeout(() => { $("busy").querySelector(".spinner").style.display = ""; hideBusy(); }, 900);
+  } catch (e) { hideBusy(); alert("가져오기 실패: " + e.message); }
+}
+
 function msg(id, text, err) { const el = $(id); if (!el) return; el.textContent = text; el.className = "msg" + (err ? " err" : ""); }
 
 // ---------- wire ----------
@@ -1062,6 +1138,13 @@ function init() {
   $("import-file").onchange = (e) => e.target.files[0] && importService(e.target.files[0]);
   $("import-ppt").onclick = () => $("import-ppt-file").click();
   $("import-ppt-file").onchange = (e) => { const f = e.target.files[0]; if (f) importSlidesFile(f); e.target.value = ""; };
+  // 라이브러리 모달
+  $("library-btn").onclick = openLibrary;
+  $("library-close").onclick = closeLibrary;
+  $("lib-save").onclick = saveLibraryDir;
+  $("lib-reindex").onclick = () => reindexLibrary(true);
+  $("lib-query").addEventListener("input", () => { clearTimeout(libSearchTimer); libSearchTimer = setTimeout(searchLibrary, 250); });
+  $("library-modal").addEventListener("mousedown", (e) => { if (e.target === $("library-modal")) closeLibrary(); });
   $("tpl-save").onclick = saveCurrentAsTemplate;
   $("tpl-edit-save").onclick = saveTemplateEdit;
   $("tpl-edit-cancel").onclick = cancelTemplateEdit;

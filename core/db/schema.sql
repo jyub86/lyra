@@ -138,3 +138,26 @@ CREATE TABLE IF NOT EXISTS custom_themes (
   base_theme TEXT NOT NULL,
   overrides  TEXT NOT NULL             -- JSON
 );
+
+-- =====================================================================
+-- 전역 설정 (key/value) — 예: library_dir
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
+
+-- =====================================================================
+-- PPT 라이브러리 인덱스 (파일별 추출 텍스트 캐시, mtime 증분 갱신)
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS library_index (
+  path       TEXT PRIMARY KEY,          -- 절대경로
+  name       TEXT NOT NULL,             -- 파일명
+  relpath    TEXT,                      -- library_dir 기준 상대경로
+  ext        TEXT,                      -- .pptx | .pdf | .ppt | .odp
+  size       INTEGER,
+  mtime      INTEGER,                   -- 수정시각(ms) — 증분 판단
+  pages      INTEGER,                   -- 슬라이드/페이지 수(추정)
+  text       TEXT,                      -- 추출 본문 (검색용, .ppt는 빈값)
+  indexed_at TEXT
+);

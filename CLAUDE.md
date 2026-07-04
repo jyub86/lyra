@@ -13,8 +13,9 @@
 >   `mergeTheme`로 편집/발표 병합). `set_service_theme(service_id, theme_id?, overrides?)`.
 > - **전환 효과**: `services.transition` = none|fade|slide. `set_service_transition`. 발표(presenter)가 deck에
 >   두 stage를 교차(fade=opacity, slide=translateX ~360ms). 편집기 topbar에서 토글.
-> - **슬라이드 임포트**: PDF·이미지 → 이미지 요소 슬라이드. `POST /api/import`(멀티파트) + `import_pdf(service_id, path)` tool.
->   PDF는 `pdftoppm`으로 페이지 분할(poppler 필요). **.pptx 직접 미지원** → PDF로 내보내 사용. `core/lib/pdf-import.js`.
+> - **슬라이드 임포트**: **PPT(.pptx/.ppt/.odp)·PDF·이미지** → 이미지 요소 슬라이드. `POST /api/import`(멀티파트) +
+>   `import_pdf(service_id, path)` tool. Office는 LibreOffice `soffice`로 PDF 변환 후 `pdftoppm` 페이지 분할.
+>   soffice 미설치 시 PDF로 내보내 사용(graceful). `core/lib/pdf-import.js`(findSoffice/officeToPdf/officeImportAvailable).
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
 > ⚠️ **v4 변경 (요소 중심 모델)** — 구현 기준(현행, 가장 권위 있음)
@@ -502,8 +503,8 @@ delete_template(template_id)                              → ok (커스텀만; 
 # 미디어 / 임포트
 upload_media(filename, data_base64)                       → { url, filename }
 set_video_background(slide_id, url, options?)             → ok
-import_pdf(service_id, path)                              → slide_ids (PDF·이미지 → 이미지 슬라이드)
-# 브라우저 업로드=POST /api/upload, 슬라이드 임포트=POST /api/import(멀티파트). .pptx는 PDF로 내보내 사용.
+import_pdf(service_id, path)                              → slide_ids (PPT/PDF/이미지 → 이미지 슬라이드)
+# 브라우저 업로드=POST /api/upload, 슬라이드 임포트=POST /api/import(멀티파트). .pptx는 LibreOffice(soffice)로 자동 변환.
 
 # 발표 제어
 present_goto(page_index)

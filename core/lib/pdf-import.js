@@ -1,13 +1,43 @@
-// Import existing slides as images. PDF → per-page PNGs via `pdftoppm`; single
-// images pass through. Each page/image becomes a slide with one full-bleed image
-// element on a black background. Real .pptx must be exported to PDF/images first
-// (no LibreOffice here). Shared by the /api/import endpoint and import_pdf tool.
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// Import existing slides as images. Office docs (.pptx/.ppt/.odp/.key-exported/
+// .docx) → PDF via LibreOffice `soffice`; PDF → per-page PNGs via `pdftoppm`;
+// single images pass through. Each page/image becomes a slide with one full-bleed
+// image element on a black background. Shared by /api/import and import_pdf tool.
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { saveUpload } from "./uploads.js";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
+const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // presentation docs LibreOffice can read
+
+// Locate the LibreOffice CLI (PATH or the macOS app bundle).
+function findSoffice() {
+  const paths = ["/opt/homebrew/bin/soffice", "/usr/local/bin/soffice",
+    "/Applications/LibreOffice.app/Contents/MacOS/soffice"];
+  for (const p of paths) if (existsSync(p)) return p;
+  return Bun.which("soffice") || Bun.which("libreoffice") || null;
+}
+export function officeImportAvailable() { return !!findSoffice(); }
+
+// Convert an office presentation file (bytes) → PDF bytes via soffice headless.
+async function officeToPdf(filename, bytes) {
+  const soffice = findSoffice();
+  if (!soffice) throw new Error("LibreOffice(soffice) 미설치 — .pptx 변환 불가. PDF로 내보내거나 LibreOffice를 설치하세요.");
+  const dir = mkdtempSync(join(tmpdir(), "ryre-office-"));
+  try {
+    const inPath = join(dir, filename.replace(/[^\w.\-가-힣]/g, "_"));
+    writeFileSync(inPath, Buffer.from(bytes));
+    const proc = Bun.spawnSync([soffice, "--headless", "--convert-to", "pdf", "--outdir", dir, inPath],
+      { env: { ...process.env, HOME: dir } }); // isolated profile dir avoids lock clashes
+    const pdf = readdirSync(dir).find((f) => f.toLowerCase().endsWith(".pdf"));
+    if (proc.exitCode !== 0 || !pdf) {
+      throw new Error("LibreOffice 변환 실패: " + (proc.stderr ? new TextDecoder().decode(proc.stderr).slice(0, 200) : "unknown"));
+    }
+    return readFileSync(join(dir, pdf));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 function imageSlide(url) {
   return {
@@ -40,13 +70,16 @@ async function pdfToImageUrls(bytes) {
 // Returns an array of slide objects ({ background, elements }) for the file.
 export async function fileToSlides(filename, bytes) {
   const ext = "." + (filename.split(".").pop() || "").toLowerCase();
+  if (OFFICE_EXT.has(ext)) { // .pptx/.ppt/… → PDF via LibreOffice → images
+    const pdf = await officeToPdf(filename, bytes);
+    return (await pdfToImageUrls(pdf)).map(imageSlide);
+  }
   if (ext === ".pdf") {
-    const urls = await pdfToImageUrls(bytes);
-    return urls.map(imageSlide);
+    return (await pdfToImageUrls(bytes)).map(imageSlide);
   }
   if (IMAGE_EXT.has(ext)) {
     const { url } = await saveUpload(filename, bytes);
     return [imageSlide(url)];
   }
-  throw new Error(`지원하지 않는 형식: ${ext} (PDF 또는 이미지 파일). PPT는 PDF로 내보내세요.`);
+  throw new Error(`지원하지 않는 형식: ${ext} (PPT/PDF/이미지). LibreOffice 미설치 시 PPT는 PDF로 내보내세요.`);
 }

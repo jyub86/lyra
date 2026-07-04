@@ -40,16 +40,30 @@
 
 설치 예시:
 ```bash
-# Bun
+# ── Bun (필수) ─────────────────────────────
+# macOS / Linux
 curl -fsSL https://bun.sh/install | bash
+# Windows (PowerShell)
+powershell -c "irm bun.sh/install.ps1 | iex"
 
-# (선택) 임포트 기능용 — macOS
+# ── (선택) 임포트 기능용: LibreOffice(soffice) + poppler ──
+# macOS
 brew install --cask libreoffice   # .pptx 임포트
 brew install poppler              # PDF 임포트/검색
-# Linux(예: Debian/Ubuntu)
+# Linux (Debian/Ubuntu)
 sudo apt install libreoffice poppler-utils
-# Windows: LibreOffice, poppler를 설치하고 PATH 등록
+# Windows (winget + scoop, 관리자 PowerShell)
+winget install -e --id TheDocumentFoundation.LibreOffice
+scoop install poppler             # 또는: choco install poppler libreoffice-fresh
 ```
+
+> **Windows 도구 참고**
+> - **LibreOffice**는 기본 설치 경로(`C:\Program Files\LibreOffice\program\soffice.exe`)를
+>   앱이 자동 탐지하므로 PATH 등록이 필요 없습니다.
+> - **poppler**(`pdftoppm`·`pdftotext`)는 반드시 **PATH에 있어야** 합니다.
+>   `scoop`/`choco`로 설치하면 자동 등록됩니다. 압축본을 직접 받았다면
+>   `poppler-…\Library\bin` 폴더를 시스템 PATH에 추가하세요.
+> - 임포트/검색 기능을 안 쓰면 둘 다 없어도 됩니다(편집·발표·PPT/ODP 내용검색은 순수 동작).
 
 ---
 
@@ -60,6 +74,14 @@ git clone https://github.com/jyub86/lyra.git
 cd lyra
 bun install
 ```
+
+> **Windows 참고** — `bun install`·`bun run …` 명령은 macOS/Linux와 동일합니다.
+> 다만 아래 예시의 `PORT=8080 bun run dev`처럼 **환경변수를 명령 앞에 붙이는 문법은 bash 전용**입니다.
+> PowerShell에서는 나눠서 실행하세요:
+> ```powershell
+> $env:PORT = 8080; bun run dev
+> $env:WORSHIP_DATA_DIR = "C:\path\to\data"; bun run seed
+> ```
 
 ### 1) 콘텐츠 데이터 준비
 

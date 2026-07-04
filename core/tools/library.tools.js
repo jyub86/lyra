@@ -83,7 +83,10 @@ register({
       const had = prior.has(f);
       if (!refresh && had && prior.get(f) === mtime) { skipped++; continue; }
       const { text, pages } = extractText(f);
-      up.run(f, basename(f), relative(dir, f), extname(f).toLowerCase(), st.size, mtime, pages, text, ts);
+      // macOS 파일명은 NFD(분해형)이라 NFC로 정규화해 저장(검색어와 형태 일치).
+      // path는 파일 접근용이라 원형 유지.
+      up.run(f, basename(f).normalize("NFC"), relative(dir, f).normalize("NFC"),
+        extname(f).toLowerCase(), st.size, mtime, pages, (text || "").normalize("NFC"), ts);
       had ? updated++ : added++;
     }
     // remove entries for files that disappeared
@@ -104,7 +107,8 @@ register({
   },
   handler: ({ query, limit }, { db }) => {
     // 띄어쓰기로 나눈 각 단어를 모두 포함(AND). 각 단어는 파일명 또는 내용 어디든.
-    const terms = String(query || "").trim().split(/\s+/).filter(Boolean);
+    // NFC 정규화(저장된 이름/내용과 형태 일치 — 한글 파일명 NFD 문제 해결).
+    const terms = String(query || "").normalize("NFC").trim().split(/\s+/).filter(Boolean);
     if (!terms.length) return { results: [] };
     const esc = (t) => `%${t.replace(/[%_\\]/g, (c) => "\\" + c)}%`;
     const clause = terms.map(() => "(name LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\')").join(" AND ");

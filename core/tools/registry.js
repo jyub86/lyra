@@ -54,7 +54,11 @@ export async function execute(name, args = {}, ctx = defaultCtx()) {
     err.errors = errors;
     throw err;
   }
-  return tool.handler(value, ctx);
+  const result = await tool.handler(value, ctx);
+  // Broadcast a content-change signal so presenter/other clients live-refresh.
+  // Skip read tools and present_* (which emit their own "present" state events).
+  if (!tool.read && !name.startsWith("present_")) bus.emit("changed", { tool: name });
+  return result;
 }
 
 // Modules call registerAll() at import time; we also expose a loader so

@@ -33,3 +33,6 @@ bus.on(TOPIC, (state) => {
   lastState = { ...lastState, ...state };
   broadcast({ type: "present", ...lastState });
 });
+
+// Any content mutation (edit from any client/CLI/MCP) → tell clients to refresh.
+bus.on("changed", (info) => broadcast({ type: "changed", tool: info?.tool }));

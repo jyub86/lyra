@@ -75,10 +75,22 @@ function transitionTo(newIndex) {
 }
 
 // ---- WebSocket follow ----
+// content edits arrive rapidly (element drags commit on mouseup); coalesce them
+let changedTimer = null;
+function onContentChanged() {
+  clearTimeout(changedTimer);
+  changedTimer = setTimeout(async () => {
+    if (!state.service?.id) return;
+    await loadService(state.service.id); // re-fetch fresh content
+    renderNow();                          // re-render current slide (no index change/anim)
+  }, 150);
+}
+
 function connectWs() {
   const ws = new WebSocket(`ws://${location.host}/ws`);
   ws.onmessage = async (ev) => {
     const msg = JSON.parse(ev.data);
+    if (msg.type === "changed") { onContentChanged(); return; } // live edit reflection
     if (msg.type !== "present") return;
     let reloaded = false;
     if (msg.service_id && msg.service_id !== state.service?.id) { await loadService(msg.service_id); reloaded = true; }

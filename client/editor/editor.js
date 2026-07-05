@@ -626,6 +626,11 @@ function slideDesign(slide) {
 
 async function loadTemplates() {
   state.templates = await callTool("list_templates").catch(() => []);
+  // 자가복구: 템플릿이 0개면 아무것도 추가할 수 없으므로 기본 종류를 다시 시드한다.
+  if (!state.templates?.length) {
+    await callTool("reset_templates").catch(() => {});
+    state.templates = await callTool("list_templates").catch(() => []);
+  }
   renderTemplatePanel();
   renderAddTypeSelect();
 }

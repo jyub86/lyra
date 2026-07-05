@@ -52,5 +52,8 @@ if (import.meta.main) {
     console.log("Reset DB:", DB_PATH);
   }
   getDb();
-  console.log("Schema applied:", DB_PATH);
+  // 기본 슬라이드 종류(builtin 템플릿)까지 시드해 리셋 직후에도 바로 추가할 수 있게 한다.
+  const { loadTools } = await import("../tools/registry.js");
+  await loadTools();
+  console.log("Schema applied + builtins seeded:", DB_PATH);
 }

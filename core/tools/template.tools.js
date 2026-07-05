@@ -204,3 +204,14 @@ register({
     return { ok: true };
   },
 });
+
+register({
+  name: "reset_templates",
+  description: "기본 슬라이드 종류(builtin 템플릿)가 비었거나 일부 빠졌을 때 다시 시드한다(멱등). " +
+    "커스텀 템플릿은 건드리지 않는다. 템플릿이 0개면 아무것도 추가할 수 없으므로 복구용으로 쓴다.",
+  input_schema: { type: "object", properties: {} },
+  handler: (_a, { db }) => {
+    seedBuiltins(db, get);
+    return { ok: true, count: db.query("SELECT COUNT(*) AS n FROM templates").get().n };
+  },
+});

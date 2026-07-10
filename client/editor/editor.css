@@ -170,3 +170,29 @@ textarea { resize: vertical; }
 .tile .cap .label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .cap .del { padding: 1px 6px; font-size: 11px; opacity: 0; }
 .tile:hover .cap .del { opacity: 1; }
+
+/* 설정 팝오버: 다른 기기 접속 주소 */
+.net-addrs { display:flex; flex-direction:column; gap:2px; font-size:12px; text-align:right; max-width:60%; }
+.net-addrs a { color: var(--accent, #7aa2f7); text-decoration:none; word-break:break-all; }
+.net-addrs a:hover { text-decoration:underline; }
+
+/* 토스트 알림 (복사/붙여넣기 등) */
+.toast {
+  position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%) translateY(8px);
+  background: rgba(20,22,30,.95); color: #e8e8ea; padding: 8px 16px; border-radius: 8px;
+  font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.4); border: 1px solid rgba(255,255,255,.08);
+  opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; z-index: 9999;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* 드래그드롭 안내 오버레이 */
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 9998; display: flex; align-items: center; justify-content: center;
+  background: rgba(10,12,18,.72); backdrop-filter: blur(2px);
+}
+.drop-box {
+  display: flex; flex-direction: column; gap: 8px; align-items: center;
+  border: 3px dashed rgba(122,162,247,.8); border-radius: 16px; padding: 40px 56px;
+  color: #e8e8ea; font-size: 20px; font-weight: 700; text-align: center;
+}
+.drop-box .muted { font-size: 13px; font-weight: 400; }

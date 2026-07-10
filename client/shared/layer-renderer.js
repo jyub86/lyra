@@ -102,6 +102,11 @@ function renderReadingBody(root, c, field, format, opts = {}) {
   }
 }
 
+// vertical align → flex justify-content (column). default: 가운데(center).
+function vAlign(v) {
+  return v === "top" ? "flex-start" : v === "bottom" ? "flex-end" : "center";
+}
+
 function placeElement(n, e) {
   n.style.left = (e.x ?? 0.4) * 100 + "%";
   n.style.top = (e.y ?? 0.4) * 100 + "%";
@@ -131,6 +136,7 @@ export function renderElements(root, elements) {
       if (e.color) n.style.color = e.color;
       if (e.font) n.style.fontFamily = `'${e.font}', var(--font-family, sans-serif)`;
       n.style.textAlign = e.align || "center";
+      n.style.justifyContent = vAlign(e.valign);
       n.style.fontWeight = e.weight || 600;
       if (e.line_height) n.style.lineHeight = e.line_height;
       if (e.type === "bible") renderBibleBody(n, e.content, e.show_numbers, e.field, e.format);
@@ -144,6 +150,7 @@ export function renderElements(root, elements) {
       if (e.color) n.style.color = e.color;
       if (e.font) n.style.fontFamily = `'${e.font}', var(--font-family, sans-serif)`;
       n.style.textAlign = e.align || "center";
+      n.style.justifyContent = vAlign(e.valign);
       n.style.fontWeight = e.weight || 600;
     }
     placeElement(n, e);

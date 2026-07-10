@@ -84,4 +84,16 @@ const server = Bun.serve({
   websocket,
 });
 
+// LAN 주소도 함께 안내 (같은 네트워크의 다른 기기에서 접속용).
+import { networkInterfaces } from "node:os";
+function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(networkInterfaces())) {
+    for (const ni of list || []) {
+      if (ni.family === "IPv4" && !ni.internal) out.push(ni.address);
+    }
+  }
+  return out;
+}
 console.log(`Lyra → http://localhost:${server.port}  (presenter: http://localhost:${server.port}/presenter)`);
+for (const ip of lanAddresses()) console.log(`  · 다른 기기(같은 네트워크): http://${ip}:${server.port}`);

@@ -1,8 +1,42 @@
 [
   {
+    "id": "black-han-sans",
+    "family": "Black Han Sans",
+    "label": "블랙 한 산스",
+    "group": "한글 · 제목용",
+    "category": "display",
+    "script": "ko",
+    "weights": [
+      400
+    ]
+  },
+  {
+    "id": "do-hyeon",
+    "family": "Do Hyeon",
+    "label": "도현",
+    "group": "한글 · 제목용",
+    "category": "display",
+    "script": "ko",
+    "weights": [
+      400
+    ]
+  },
+  {
+    "id": "jua",
+    "family": "Jua",
+    "label": "주아 (둥근)",
+    "group": "한글 · 제목용",
+    "category": "display",
+    "script": "ko",
+    "weights": [
+      400
+    ]
+  },
+  {
     "id": "noto-sans-kr",
     "family": "Noto Sans KR",
-    "label": "노토 산스 (본문)",
+    "label": "노토 산스",
+    "group": "한글 · 본문용",
     "category": "sans",
     "script": "ko",
     "weights": [
@@ -13,7 +47,8 @@
   {
     "id": "gowun-dodum",
     "family": "Gowun Dodum",
-    "label": "고운 도담 (깔끔)",
+    "label": "고운 도담",
+    "group": "한글 · 본문용",
     "category": "sans",
     "script": "ko",
     "weights": [
@@ -23,7 +58,8 @@
   {
     "id": "nanum-myeongjo",
     "family": "Nanum Myeongjo",
-    "label": "나눔 명조 (명조)",
+    "label": "나눔 명조",
+    "group": "한글 · 본문용",
     "category": "serif",
     "script": "ko",
     "weights": [
@@ -34,38 +70,9 @@
   {
     "id": "song-myung",
     "family": "Song Myung",
-    "label": "송명 (우아한 명조)",
+    "label": "송명 (명조)",
+    "group": "한글 · 본문용",
     "category": "serif",
-    "script": "ko",
-    "weights": [
-      400
-    ]
-  },
-  {
-    "id": "black-han-sans",
-    "family": "Black Han Sans",
-    "label": "블랙 한 산스 (제목)",
-    "category": "display",
-    "script": "ko",
-    "weights": [
-      400
-    ]
-  },
-  {
-    "id": "do-hyeon",
-    "family": "Do Hyeon",
-    "label": "도현 (제목)",
-    "category": "display",
-    "script": "ko",
-    "weights": [
-      400
-    ]
-  },
-  {
-    "id": "jua",
-    "family": "Jua",
-    "label": "주아 (둥근 제목)",
-    "category": "display",
     "script": "ko",
     "weights": [
       400
@@ -74,7 +81,8 @@
   {
     "id": "gaegu",
     "family": "Gaegu",
-    "label": "개구 (손글씨)",
+    "label": "개구",
+    "group": "한글 · 손글씨",
     "category": "hand",
     "script": "ko",
     "weights": [
@@ -86,6 +94,7 @@
     "id": "nanum-pen-script",
     "family": "Nanum Pen Script",
     "label": "나눔 펜 (붓글씨)",
+    "group": "한글 · 손글씨",
     "category": "hand",
     "script": "ko",
     "weights": [
@@ -95,7 +104,8 @@
   {
     "id": "montserrat",
     "family": "Montserrat",
-    "label": "Montserrat (산스)",
+    "label": "Montserrat",
+    "group": "영문",
     "category": "sans",
     "script": "en",
     "weights": [
@@ -106,7 +116,8 @@
   {
     "id": "roboto",
     "family": "Roboto",
-    "label": "Roboto (산스)",
+    "label": "Roboto",
+    "group": "영문",
     "category": "sans",
     "script": "en",
     "weights": [
@@ -117,7 +128,8 @@
   {
     "id": "playfair-display",
     "family": "Playfair Display",
-    "label": "Playfair (세리프)",
+    "label": "Playfair Display",
+    "group": "영문",
     "category": "serif",
     "script": "en",
     "weights": [
@@ -128,7 +140,8 @@
   {
     "id": "bebas-neue",
     "family": "Bebas Neue",
-    "label": "Bebas Neue (임팩트)",
+    "label": "Bebas Neue",
+    "group": "영문",
     "category": "display",
     "script": "en",
     "weights": [
@@ -138,7 +151,8 @@
   {
     "id": "dancing-script",
     "family": "Dancing Script",
-    "label": "Dancing Script (필기)",
+    "label": "Dancing Script",
+    "group": "영문",
     "category": "hand",
     "script": "en",
     "weights": [

@@ -19,9 +19,27 @@ const state = {
   fonts: [],            // self-host 웹폰트 목록 (list_fonts)
 };
 
-// 요소/설정 글꼴 select 옵션: [값=family, 표시]. 첫 항목은 상속(테마 기본).
-function fontOptions() {
-  return [["", "테마 기본"], ...state.fonts.map((f) => [f.family, f.label])];
+// 글꼴 <select>를 "테마 기본" + 용도 그룹(optgroup)으로 채운다. current=현재 family.
+function fillFontSelect(sel, current) {
+  sel.replaceChildren();
+  const base = document.createElement("option"); base.value = ""; base.textContent = "테마 기본"; sel.appendChild(base);
+  const groups = {};
+  for (const f of state.fonts) (groups[f.group] ??= []).push(f);
+  for (const [g, list] of Object.entries(groups)) {
+    const og = document.createElement("optgroup"); og.label = g;
+    for (const f of list) { const o = document.createElement("option"); o.value = f.family; o.textContent = f.label; og.appendChild(o); }
+    sel.appendChild(og);
+  }
+  sel.value = current ?? "";
+}
+
+// 잠깐 뜨는 알림(복사/붙여넣기 등 피드백).
+let toastT = null;
+function toast(text) {
+  let t = document.getElementById("toast");
+  if (!t) { t = document.createElement("div"); t.id = "toast"; t.className = "toast"; document.body.appendChild(t); }
+  t.textContent = text; t.classList.add("show");
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 1400);
 }
 
 function setSingleSelection(id) {
@@ -521,13 +539,23 @@ function renderDesignPanel() {
     row.append(range, num); wrap.appendChild(row); body.appendChild(wrap);
   };
 
+  // 글꼴: 용도 그룹(optgroup) select. 값=family("" → 테마 기본 상속).
+  const fontField = () => {
+    const wrap = elx("label", null, "글꼴");
+    const sel = document.createElement("select");
+    fillFontSelect(sel, el.font || "");
+    sel.addEventListener("change", () => { el.font = sel.value; repaintEls(); commitEls(); });
+    wrap.appendChild(sel); body.appendChild(wrap);
+  };
+
   if (el.type === "text") {
     field("내용", "textarea", "text");
     sizeRow(1.5, 12);
-    field("글꼴", "select", "font", { options: fontOptions() });
+    fontField();
     field("색", "color", "color", { def: "#ffffff" });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
-    field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
+    field("정렬(가로)", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
+    field("정렬(세로)", "select", "valign", { options: [["middle", "가운데"], ["top", "위"], ["bottom", "아래"]] });
   } else if (el.type === "shape") {
     if (el.shape !== "line") {
       field("채움색", "color", "fill", { def: "#7aa2f7" });
@@ -563,9 +591,10 @@ function renderDesignPanel() {
       }
     }
     sizeRow(1.5, 10, 3.2);
-    field("글꼴", "select", "font", { options: fontOptions() });
+    fontField();
     field("색", "color", "color", { def: "#ffffff" });
-    field("정렬", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
+    field("정렬(가로)", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
+    field("정렬(세로)", "select", "valign", { options: [["middle", "가운데"], ["top", "위"], ["bottom", "아래"]] });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
     if (el.type === "bible" && fkey !== "ref") field("절 번호 표시", "check", "show_numbers");
     // 교독문 인도자/회중 스타일 (전체·본문 = 인도자·회중이 함께 있을 때)
@@ -847,16 +876,54 @@ function collectParams(tpl) {
   return params;
 }
 
-async function addSlide() {
+// where: "end"(순서 끝) | "after"(선택 슬라이드 바로 다음)
+async function addSlide(where = "end") {
   const templateId = $("add-type").value;
   if (!state.serviceId) return msg("add-msg", "예배 순서가 없습니다.", true);
   const tpl = state.templates.find((t) => t.id === templateId);
   if (!tpl) return msg("add-msg", "추가할 종류/템플릿을 선택하세요.", true);
+  let position; // undefined → 끝에 추가
+  if (where === "after") {
+    const idx = slides().findIndex((s) => s.id === state.selected);
+    if (idx >= 0) position = idx + 1;
+  }
   try {
-    await callTool("apply_template", { template_id: templateId, service_id: state.serviceId, params: collectParams(tpl) });
+    const res = await callTool("apply_template", { template_id: templateId, service_id: state.serviceId, params: collectParams(tpl), position });
     msg("add-msg", `“${tpl.name}” 추가됨`);
     await refresh();
+    if (res?.slide_ids?.[0]) { setSingleSelection(res.slide_ids[0]); render(); }
   } catch (e) { msg("add-msg", e.message, true); }
+}
+
+// ----- 슬라이드 복사 / 붙여넣기 (리스트·타일 멀티셀렉) -----
+let slideClipboard = [];
+function copySelectedSlides() {
+  const sel = slides().filter((s) => state.selectedSet.has(s.id));
+  if (!sel.length) return;
+  slideClipboard = sel.map((s) => ({
+    elements: structuredClone(s.elements || []),
+    background: s.background ? structuredClone(s.background) : null,
+    transition: s.transition || "fade",
+  }));
+  toast(`${sel.length}개 슬라이드 복사됨 · ⌘/Ctrl+V로 붙여넣기`);
+}
+async function pasteSlides() {
+  if (!slideClipboard.length || !state.serviceId) return;
+  // 붙여넣기 위치: 선택한 슬라이드 중 마지막 다음(없으면 순서 끝).
+  const idxs = slides().map((s, i) => (state.selectedSet.has(s.id) ? i : -1)).filter((i) => i >= 0);
+  let pos = idxs.length ? Math.max(...idxs) + 1 : undefined;
+  const newIds = [];
+  for (const c of slideClipboard) {
+    const res = await callTool("add_slide", { service_id: state.serviceId, elements: c.elements, background: c.background, transition: c.transition, position: pos });
+    newIds.push(res.slide_id);
+    if (pos != null) pos += 1;
+  }
+  await refresh();
+  state.selectedSet = new Set(newIds);
+  state.selected = newIds[newIds.length - 1];
+  state.anchor = state.selected;
+  render();
+  toast(`${newIds.length}개 붙여넣음`);
 }
 
 // ---------- inspector ----------
@@ -1126,13 +1193,26 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus
 // self-host 웹폰트 목록을 불러와 설정의 기본 글꼴 select를 채운다.
 async function loadFonts() {
   try { state.fonts = (await callTool("list_fonts")).fonts || []; } catch { state.fonts = []; }
-  const sel = $("font-select");
-  sel.replaceChildren();
-  for (const [v, t] of fontOptions()) {
-    const o = document.createElement("option");
-    o.value = v; o.textContent = t; sel.appendChild(o);
-  }
+  fillFontSelect($("font-select"), state.service?.theme_overrides?.font || "");
   if (state.service) syncThemeControls();
+}
+
+// 설정 팝오버: 같은 네트워크 다른 기기에서 접속할 주소 목록.
+async function loadNetwork() {
+  const box = $("net-addrs");
+  if (!box) return;
+  try {
+    const { addresses } = await callTool("list_network_addresses");
+    if (!addresses?.length) { box.textContent = "네트워크 주소를 찾지 못했습니다."; return; }
+    const port = location.port || "4321";
+    box.replaceChildren();
+    for (const ip of addresses) {
+      const url = `http://${ip}:${port}`;
+      const a = document.createElement("a");
+      a.href = url; a.target = "_blank"; a.rel = "noopener"; a.textContent = url;
+      box.appendChild(a);
+    }
+  } catch { box.textContent = "주소 확인 실패"; }
 }
 
 function init() {
@@ -1146,7 +1226,34 @@ function init() {
   $("view-list").onclick = () => { state.mode = "list"; render(); };
   $("view-tiles").onclick = () => { state.mode = "tiles"; render(); };
   $("add-type").onchange = renderAddFields;
-  $("add-slide-btn").onclick = addSlide;
+  $("add-slide-btn").onclick = () => addSlide("end");
+  $("add-after-btn").onclick = () => addSlide("after");
+
+  // 드래그드롭: 이미지/PDF/PPT 파일을 현재 예배에 슬라이드로 가져오기
+  let dragDepth = 0;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes("Files");
+  window.addEventListener("dragenter", (e) => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $("drop-overlay").hidden = false; });
+  window.addEventListener("dragover", (e) => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener("dragleave", (e) => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $("drop-overlay").hidden = true; });
+  window.addEventListener("drop", async (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault(); dragDepth = 0; $("drop-overlay").hidden = true;
+    const files = [...(e.dataTransfer?.files || [])];
+    if (!files.length) return;
+    if (!state.serviceId) { toast("먼저 예배를 선택하거나 만들어 주세요"); return; }
+    for (const f of files) await importSlidesFile(f);
+  });
+
+  // 슬라이드 복사/붙여넣기 (리스트·타일에서 멀티셀렉 후 ⌘/Ctrl+C·V)
+  document.addEventListener("keydown", (e) => {
+    const tag = document.activeElement?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (state.editEl != null) return;           // 요소 편집 중이면 요소용 단축키가 우선
+    if (!(e.metaKey || e.ctrlKey)) return;
+    const k = e.key.toLowerCase();
+    if (k === "c") { copySelectedSlides(); e.preventDefault(); }
+    else if (k === "v") { e.preventDefault(); pasteSlides(); }
+  });
   $("prev-slide").onclick = () => navSlide(-1);
   $("next-slide").onclick = () => navSlide(1);
   $("del-slide").onclick = deleteSelected;
@@ -1203,6 +1310,7 @@ function init() {
   loadServices();
   loadTemplates();
   loadFonts();
+  loadNetwork();
 }
 
 init();

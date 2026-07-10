@@ -3,11 +3,36 @@
 import { register } from "./registry.js";
 import { ulid } from "../lib/ulid.js";
 import { nowIso, parseSlide } from "./_helpers.js";
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname, basename } from "node:path";
+import { fileURLToPath } from "node:url";
+import { saveUpload } from "../lib/uploads.js";
 
 const SHARE_FORMAT = "worship-service/v2";
+const UPLOAD_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../data/uploads");
 
 function slidesOf(db, serviceId) {
   return db.query("SELECT * FROM slides WHERE service_id = ? ORDER BY position").all(serviceId).map(parseSlide);
+}
+
+// /uploads/... 를 참조하는 곳: 요소 image url + 배경(image/video) url.
+function collectAssetUrls(slides) {
+  const urls = new Set();
+  for (const s of slides) {
+    if (typeof s.background?.url === "string" && s.background.url.startsWith("/uploads/")) urls.add(s.background.url);
+    for (const e of s.elements || []) {
+      if (typeof e?.url === "string" && e.url.startsWith("/uploads/")) urls.add(e.url);
+    }
+  }
+  return [...urls];
+}
+
+// slide의 url을 map(old→new)으로 치환한 새 slide 반환(배경 + 이미지 요소).
+function remapAssets(slide, map) {
+  const s = { ...slide };
+  if (s.background?.url && map[s.background.url]) s.background = { ...s.background, url: map[s.background.url] };
+  s.elements = (s.elements || []).map((e) => (e.url && map[e.url] ? { ...e, url: map[e.url] } : e));
+  return s;
 }
 
 register({
@@ -127,6 +152,8 @@ function writeService(db, meta, slides) {
       `INSERT INTO services (id, title, date, worship_part, theme_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(id, meta.title, meta.date, meta.worship_part, meta.theme_id || "dark-blue", ts, ts);
+    if (meta.theme_overrides != null) db.query("UPDATE services SET theme_overrides = ? WHERE id = ?").run(JSON.stringify(meta.theme_overrides), id);
+    if (meta.transition != null) db.query("UPDATE services SET transition = ? WHERE id = ?").run(meta.transition, id);
     const insert = db.query(
       `INSERT INTO slides (id, service_id, position, background, elements, transition)
        VALUES (?, ?, ?, ?, ?, ?)`
@@ -181,22 +208,36 @@ register({
 
 register({
   name: "export_service",
-  description: "예배 순서 전체를 공유용 JSON(worship-service/v2)으로 내보낸다. 슬라이드가 순서대로 포함된다.",
+  description: "예배 순서 전체를 공유용 JSON(worship-service/v2)으로 내보낸다. 슬라이드·테마 커스텀·전환과 " +
+    "첨부 이미지(assets, base64)까지 포함해 다른 머신에서도 그대로 재현된다. assets=false면 이미지 제외(가벼움).",
   read: true,
   input_schema: {
     type: "object",
-    properties: { service_id: { type: "string" } },
+    properties: {
+      service_id: { type: "string" },
+      assets: { type: "boolean", default: true, description: "첨부 이미지 파일을 함께 내보낼지" },
+    },
     required: ["service_id"],
   },
-  handler: ({ service_id }, { db }) => {
+  handler: ({ service_id, assets = true }, { db }) => {
     const s = db.query("SELECT * FROM services WHERE id = ?").get(service_id);
     if (!s) throw new Error(`unknown service: ${service_id}`);
     const slides = slidesOf(db, service_id).map(({ background, elements, transition }) =>
       ({ background, elements, transition }));
+    // 참조된 업로드 파일을 base64로 번들 (다른 머신에서도 이미지 유지)
+    const bundled = [];
+    if (assets) {
+      for (const url of collectAssetUrls(slides)) {
+        const p = join(UPLOAD_DIR, basename(url));
+        if (existsSync(p)) bundled.push({ url, data_base64: readFileSync(p).toString("base64") });
+      }
+    }
     return {
       format: SHARE_FORMAT,
       title: s.title, date: s.date, worship_part: s.worship_part, theme_id: s.theme_id,
-      slides,
+      theme_overrides: s.theme_overrides ? JSON.parse(s.theme_overrides) : null,
+      transition: s.transition || "none",
+      slides, assets: bundled,
     };
   },
 });
@@ -212,17 +253,28 @@ register({
     },
     required: ["payload"],
   },
-  handler: ({ payload, title }, { db }) => {
+  handler: async ({ payload, title }, { db }) => {
     if (!payload || payload.format !== SHARE_FORMAT) {
       throw new Error(`unsupported format: ${payload?.format} (expected ${SHARE_FORMAT})`);
     }
+    // 번들된 이미지 복원 → uploads에 저장하고 url을 새 경로로 매핑
+    const map = {};
+    for (const a of payload.assets || []) {
+      if (!a?.url || !a?.data_base64) continue;
+      const { url } = await saveUpload(basename(a.url), Buffer.from(a.data_base64, "base64"));
+      map[a.url] = url;
+    }
+    const slidesIn = Array.isArray(payload.slides) ? payload.slides : [];
+    const slides = Object.keys(map).length ? slidesIn.map((s) => remapAssets(s, map)) : slidesIn;
     const meta = {
       title: title || payload.title || "가져온 예배",
       date: payload.date || nowIso().slice(0, 10),
       worship_part: payload.worship_part || "1부",
       theme_id: payload.theme_id || "dark-blue",
+      theme_overrides: payload.theme_overrides || null,
+      transition: payload.transition || null,
     };
-    const id = writeService(db, meta, Array.isArray(payload.slides) ? payload.slides : []);
+    const id = writeService(db, meta, slides);
     return { service_id: id };
   },
 });

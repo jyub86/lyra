@@ -18,24 +18,27 @@ const RANGE = {
   latin: "U+0000-00FF,U+0131,U+0152-0153,U+2000-206F,U+2074,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD",
 };
 
-// 큐레이션: 무료(OFL) 한글·영어 폰트. subsets = 받을 결합 서브셋, weights = 굵기.
+// 큐레이션: 무료(OFL) 한글·영어 폰트. label=친숙한 이름만, group=용도(선택 UI 그룹 헤더).
+// subsets=받을 결합 서브셋, weights=굵기.
 const FONTS = [
-  // ---- 한글 ----
-  { id: "noto-sans-kr",     family: "Noto Sans KR",    label: "노토 산스 (본문)",   category: "sans",    script: "ko", subsets: ["korean", "latin"], weights: [400, 700] },
-  { id: "gowun-dodum",      family: "Gowun Dodum",     label: "고운 도담 (깔끔)",   category: "sans",    script: "ko", subsets: ["korean", "latin"], weights: [400] },
-  { id: "nanum-myeongjo",   family: "Nanum Myeongjo",  label: "나눔 명조 (명조)",   category: "serif",   script: "ko", subsets: ["korean", "latin"], weights: [400, 700] },
-  { id: "song-myung",       family: "Song Myung",      label: "송명 (우아한 명조)", category: "serif",   script: "ko", subsets: ["korean", "latin"], weights: [400] },
-  { id: "black-han-sans",   family: "Black Han Sans",  label: "블랙 한 산스 (제목)", category: "display", script: "ko", subsets: ["korean", "latin"], weights: [400] },
-  { id: "do-hyeon",         family: "Do Hyeon",        label: "도현 (제목)",        category: "display", script: "ko", subsets: ["korean", "latin"], weights: [400] },
-  { id: "jua",              family: "Jua",             label: "주아 (둥근 제목)",   category: "display", script: "ko", subsets: ["korean", "latin"], weights: [400] },
-  { id: "gaegu",            family: "Gaegu",           label: "개구 (손글씨)",      category: "hand",    script: "ko", subsets: ["korean", "latin"], weights: [400, 700] },
-  { id: "nanum-pen-script", family: "Nanum Pen Script", label: "나눔 펜 (붓글씨)",  category: "hand",    script: "ko", subsets: ["korean", "latin"], weights: [400] },
-  // ---- 영어 ----
-  { id: "montserrat",       family: "Montserrat",      label: "Montserrat (산스)",  category: "sans",    script: "en", subsets: ["latin"], weights: [400, 700] },
-  { id: "roboto",           family: "Roboto",          label: "Roboto (산스)",      category: "sans",    script: "en", subsets: ["latin"], weights: [400, 700] },
-  { id: "playfair-display", family: "Playfair Display", label: "Playfair (세리프)", category: "serif",   script: "en", subsets: ["latin"], weights: [400, 700] },
-  { id: "bebas-neue",       family: "Bebas Neue",      label: "Bebas Neue (임팩트)", category: "display", script: "en", subsets: ["latin"], weights: [400] },
-  { id: "dancing-script",   family: "Dancing Script",  label: "Dancing Script (필기)", category: "hand", script: "en", subsets: ["latin"], weights: [400] },
+  // ---- 한글: 제목용 ----
+  { id: "black-han-sans",   family: "Black Han Sans",  label: "블랙 한 산스",   group: "한글 · 제목용", category: "display", script: "ko", subsets: ["korean", "latin"], weights: [400] },
+  { id: "do-hyeon",         family: "Do Hyeon",        label: "도현",           group: "한글 · 제목용", category: "display", script: "ko", subsets: ["korean", "latin"], weights: [400] },
+  { id: "jua",              family: "Jua",             label: "주아 (둥근)",    group: "한글 · 제목용", category: "display", script: "ko", subsets: ["korean", "latin"], weights: [400] },
+  // ---- 한글: 본문용 ----
+  { id: "noto-sans-kr",     family: "Noto Sans KR",    label: "노토 산스",      group: "한글 · 본문용", category: "sans",  script: "ko", subsets: ["korean", "latin"], weights: [400, 700] },
+  { id: "gowun-dodum",      family: "Gowun Dodum",     label: "고운 도담",      group: "한글 · 본문용", category: "sans",  script: "ko", subsets: ["korean", "latin"], weights: [400] },
+  { id: "nanum-myeongjo",   family: "Nanum Myeongjo",  label: "나눔 명조",      group: "한글 · 본문용", category: "serif", script: "ko", subsets: ["korean", "latin"], weights: [400, 700] },
+  { id: "song-myung",       family: "Song Myung",      label: "송명 (명조)",    group: "한글 · 본문용", category: "serif", script: "ko", subsets: ["korean", "latin"], weights: [400] },
+  // ---- 한글: 손글씨 ----
+  { id: "gaegu",            family: "Gaegu",           label: "개구",           group: "한글 · 손글씨", category: "hand", script: "ko", subsets: ["korean", "latin"], weights: [400, 700] },
+  { id: "nanum-pen-script", family: "Nanum Pen Script", label: "나눔 펜 (붓글씨)", group: "한글 · 손글씨", category: "hand", script: "ko", subsets: ["korean", "latin"], weights: [400] },
+  // ---- 영문 ----
+  { id: "montserrat",       family: "Montserrat",      label: "Montserrat",     group: "영문", category: "sans",    script: "en", subsets: ["latin"], weights: [400, 700] },
+  { id: "roboto",           family: "Roboto",          label: "Roboto",         group: "영문", category: "sans",    script: "en", subsets: ["latin"], weights: [400, 700] },
+  { id: "playfair-display", family: "Playfair Display", label: "Playfair Display", group: "영문", category: "serif", script: "en", subsets: ["latin"], weights: [400, 700] },
+  { id: "bebas-neue",       family: "Bebas Neue",      label: "Bebas Neue",     group: "영문", category: "display", script: "en", subsets: ["latin"], weights: [400] },
+  { id: "dancing-script",   family: "Dancing Script",  label: "Dancing Script", group: "영문", category: "hand", script: "en", subsets: ["latin"], weights: [400] },
 ];
 
 mkdirSync(FILES, { recursive: true });
@@ -72,7 +75,7 @@ for (const f of FONTS) {
   }
   if (faces.length) {
     css.push(`/* ${f.family} (${f.label}) */\n` + faces.join("\n"));
-    manifest.push({ id: f.id, family: f.family, label: f.label, category: f.category, script: f.script, weights: f.weights });
+    manifest.push({ id: f.id, family: f.family, label: f.label, group: f.group, category: f.category, script: f.script, weights: f.weights });
   }
 }
 

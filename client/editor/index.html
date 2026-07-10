@@ -50,6 +50,10 @@
             <option value="slide">슬라이드</option>
           </select>
         </label>
+        <div class="menu-sep"></div>
+        <div class="set-row" style="align-items:flex-start">다른 기기 접속
+          <div id="net-addrs" class="net-addrs muted">확인 중…</div>
+        </div>
       </div>
     </div>
 
@@ -106,6 +110,7 @@
         </label>
         <div id="add-fields" class="fields"></div>
         <button id="add-slide-btn" class="primary">순서 끝에 추가</button>
+        <button id="add-after-btn" class="mini" title="현재 선택한 슬라이드 바로 다음에 추가">선택 아래에 추가</button>
         <p id="add-msg" class="msg"></p>
       </div>
 
@@ -168,6 +173,14 @@
         <input id="lib-query" type="search" placeholder="제목·내용 검색 (예: 부활, 구주, 사도신경)" />
       </div>
       <div id="lib-results" class="lib-results"></div>
+    </div>
+  </div>
+
+  <!-- 드래그드롭 안내 오버레이 -->
+  <div id="drop-overlay" class="drop-overlay" hidden>
+    <div class="drop-box">
+      📥 여기에 놓으면 슬라이드로 가져옵니다
+      <span class="muted">이미지 · PDF · PPT(pptx/ppt/odp)</span>
     </div>
   </div>
 

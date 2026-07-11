@@ -89,6 +89,35 @@ register({
 });
 
 register({
+  name: "set_service_slides",
+  description: "예배의 슬라이드 전체를 주어진 배열로 교체한다(id·순서·hidden 보존). 실행취소/다시실행 스냅샷 복원에 쓴다.",
+  input_schema: {
+    type: "object",
+    properties: { service_id: { type: "string" }, slides: { type: "array" } },
+    required: ["service_id", "slides"],
+  },
+  handler: ({ service_id, slides }, { db }) => {
+    if (!db.query("SELECT id FROM services WHERE id = ?").get(service_id)) throw new Error(`unknown service: ${service_id}`);
+    const tx = db.transaction(() => {
+      db.query("DELETE FROM slides WHERE service_id = ?").run(service_id);
+      const ins = db.query(
+        "INSERT INTO slides (id, service_id, position, background, elements, transition, hidden) VALUES (?,?,?,?,?,?,?)"
+      );
+      slides.forEach((s, i) => ins.run(
+        s.id || ulid(), service_id, i,
+        s.background ? JSON.stringify(s.background) : null,
+        JSON.stringify(s.elements ?? []),
+        s.transition ?? "fade",
+        s.hidden ? 1 : 0
+      ));
+      touchService(db, service_id);
+    });
+    tx();
+    return { ok: true, count: slides.length };
+  },
+});
+
+register({
   name: "set_slide_hidden",
   description: "슬라이드를 발표에서 숨김/보임 설정한다. 숨긴 슬라이드는 발표 이동 시 건너뛰지만 편집기엔 남는다.",
   input_schema: {

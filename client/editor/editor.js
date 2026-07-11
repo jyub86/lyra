@@ -172,7 +172,57 @@ async function selectService(id) {
   state.theme = await loadServiceTheme(state.service);
   syncThemeControls();
   setSingleSelection(slides()[0]?.id || null);
+  resetHistory();          // 새 예배 → 실행취소 기록 초기화(현재 상태를 기준으로)
   render();
+}
+
+// ===== 실행취소 / 다시실행 (⌘/Ctrl+Z · ⌘/Ctrl+Shift+Z) =====
+// 슬라이드 전체 스냅샷을 선형 스택으로 기록. 각 커밋 후 refresh()에서 자동 기록.
+let history = [], histIdx = -1, suppressHistory = false;
+function snapshotSlides() {
+  return slides().map((s) => ({
+    id: s.id,
+    elements: structuredClone(s.elements || []),
+    background: s.background ? structuredClone(s.background) : null,
+    transition: s.transition || "fade",
+    hidden: s.hidden ? 1 : 0,
+  }));
+}
+function recordState() {
+  if (suppressHistory || !state.service) return;
+  const snap = snapshotSlides();
+  if (histIdx >= 0 && JSON.stringify(snap) === JSON.stringify(history[histIdx])) return; // 변화 없음
+  history = history.slice(0, histIdx + 1);   // redo 가지 잘라내기
+  history.push(snap);
+  if (history.length > 60) history.shift();
+  histIdx = history.length - 1;
+  updateUndoButtons();
+}
+function resetHistory() { history = []; histIdx = -1; suppressHistory = false; recordState(); }
+function updateUndoButtons() {
+  const u = $("undo-btn"), r = $("redo-btn");
+  if (u) u.disabled = histIdx <= 0;
+  if (r) r.disabled = histIdx >= history.length - 1;
+}
+async function restoreSnapshot(snap) {
+  suppressHistory = true;
+  try {
+    await callTool("set_service_slides", { service_id: state.serviceId, slides: snap });
+    await refresh();
+  } finally { suppressHistory = false; }
+  updateUndoButtons();
+}
+async function undo() {
+  if (histIdx <= 0) { toast("더 되돌릴 게 없어요"); return; }
+  histIdx--;
+  await restoreSnapshot(history[histIdx]);
+  toast("실행 취소");
+}
+async function redo() {
+  if (histIdx >= history.length - 1) { toast("다시 실행할 게 없어요"); return; }
+  histIdx++;
+  await restoreSnapshot(history[histIdx]);
+  toast("다시 실행");
 }
 
 // reflect the service's theme/color/transition into the topbar controls
@@ -192,6 +242,7 @@ async function refresh() {
   state.selectedSet = new Set([...state.selectedSet].filter((id) => exist.has(id)));
   if (!exist.has(state.selected)) state.selected = slides()[0]?.id || null;
   if (state.selected && state.selectedSet.size === 0) state.selectedSet.add(state.selected);
+  recordState();   // 커밋된 변경을 실행취소 스택에 기록(복원 중이면 무시)
   render();
 }
 
@@ -1076,6 +1127,8 @@ async function addSlide(where = "end") {
 }
 
 // ----- 슬라이드 복사 / 붙여넣기 (리스트·타일 멀티셀렉) -----
+// 마지막 복사 종류("slide" | "element") — 붙여넣기가 이걸로 라우팅(슬라이드 이동 후에도 유지)
+let lastCopyKind = null;
 let slideClipboard = [];
 function copySelectedSlides() {
   const sel = slides().filter((s) => state.selectedSet.has(s.id));
@@ -1085,6 +1138,7 @@ function copySelectedSlides() {
     background: s.background ? structuredClone(s.background) : null,
     transition: s.transition || "fade",
   }));
+  lastCopyKind = "slide";
   toast(`${sel.length}개 슬라이드 복사됨 · ⌘/Ctrl+V로 붙여넣기`);
 }
 async function pasteSlides() {
@@ -1112,6 +1166,7 @@ function copyElement() {
   const sel = [...state.editElSet].map((i) => els()[i]).filter(Boolean);
   if (!sel.length) return;
   elementClipboard = sel.map((el) => structuredClone(el));
+  lastCopyKind = "element";
   toast(`요소 ${sel.length}개 복사됨 · ⌘/Ctrl+V로 붙여넣기`);
 }
 async function pasteElement() {
@@ -1523,14 +1578,21 @@ function init() {
     }
     if (!(e.metaKey || e.ctrlKey)) return;
     const k = e.key.toLowerCase();
+    // 실행취소/다시실행
+    if (k === "z") { e.preventDefault(); (e.shiftKey ? redo() : undo()); return; }
+    if (k === "y") { e.preventDefault(); redo(); return; }   // Windows 다시실행
     if (k !== "c" && k !== "v") return;
     e.preventDefault();
-    if (state.editEl != null) {                 // 요소 선택 상태 → 요소 복붙
-      if (k === "c") copyElement(); else pasteElement();
-    } else {                                     // 슬라이드 복붙
-      if (k === "c") copySelectedSlides(); else pasteSlides();
+    if (k === "c") {
+      // 복사: 요소가 선택돼 있으면 요소, 아니면 슬라이드
+      if (state.editEl != null) copyElement(); else copySelectedSlides();
+    } else {
+      // 붙여넣기: 마지막에 복사한 종류로(다른 슬라이드로 이동해도 요소 붙여넣기 가능)
+      if (lastCopyKind === "element") pasteElement(); else pasteSlides();
     }
   });
+  $("undo-btn").onclick = undo;
+  $("redo-btn").onclick = redo;
   $("prev-slide").onclick = () => navSlide(-1);
   $("next-slide").onclick = () => navSlide(1);
   $("del-slide").onclick = deleteSelected;

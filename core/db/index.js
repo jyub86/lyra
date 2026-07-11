@@ -34,7 +34,10 @@ export function getDb() {
   if (_db) return _db;
   mkdirSync(dirname(DB_PATH), { recursive: true });
   _db = new Database(DB_PATH, { create: true });
-  _db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+  // DELETE 저널 모드: WAL 사이드카(-wal/-shm)를 두지 않아 항상 단일 파일(worship.db)로 유지된다.
+  // (WAL이었던 기존 DB는 여기서 자동으로 본 파일에 합쳐지고 사이드카가 삭제됨.)
+  // busy_timeout: server + MCP 등 다중 프로세스의 짧은 쓰기 경합을 재시도로 흡수.
+  _db.exec("PRAGMA journal_mode = DELETE; PRAGMA busy_timeout = 5000; PRAGMA foreign_keys = ON;");
   migrate(_db);
   return _db;
 }

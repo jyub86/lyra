@@ -1,7 +1,8 @@
 -- Sunday Worship PPT — SQLite schema (design §4)
 -- Single local file DB. Content (bible/hymns/readings) + Service > Slide (flat) hierarchy.
 
-PRAGMA journal_mode = WAL;
+-- DELETE 저널 모드 = 사이드카(-wal/-shm) 없이 단일 파일 유지 (getDb와 동일하게)
+PRAGMA journal_mode = DELETE;
 PRAGMA foreign_keys = ON;
 
 -- =====================================================================

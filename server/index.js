@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { existsSync, statSync } from "node:fs";
 import { handleApi } from "../adapters/http.js";
 import { websocket } from "../adapters/ws.js";
+import { closeDb } from "../core/db/index.js";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT || 4321);
@@ -97,3 +98,21 @@ function lanAddresses() {
 }
 console.log(`Lyra → http://localhost:${server.port}  (presenter: http://localhost:${server.port}/presenter)`);
 for (const ip of lanAddresses()) console.log(`  · 다른 기기(같은 네트워크): http://${ip}:${server.port}`);
+
+// 종료 시 DB를 깨끗이 닫는다(창 닫기/Ctrl+C/종료 신호). 진행 중인 -journal도 정리.
+let closing = false;
+function shutdown() {
+  if (closing) return; closing = true;
+  try { closeDb(); } catch {}
+  process.exit(0);
+}
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, shutdown);
+
+// LYRA_OPEN=1 이면 서버가 켜진 뒤 기본 브라우저로 편집기를 연다(더블클릭 런처용).
+if (process.env.LYRA_OPEN) {
+  const url = `http://localhost:${server.port}`;
+  const cmd = process.platform === "darwin" ? ["open", url]
+    : process.platform === "win32" ? ["cmd", "/c", "start", "", url]
+      : ["xdg-open", url];
+  try { Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" }); } catch {}
+}

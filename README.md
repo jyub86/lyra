@@ -67,7 +67,26 @@ scoop install poppler             # 또는: choco install poppler libreoffice-fr
 
 ---
 
-## 설치 & 실행
+## 쉬운 실행 (더블클릭) ⭐
+
+터미널 없이 실행하려면 프로젝트 폴더의 실행 파일을 **더블클릭**하세요.
+
+- **macOS** — `Lyra-mac.command`
+- **Windows** — `Lyra-windows.bat`
+
+더블클릭하면 자동으로 (1) Bun 런타임 설치(최초 1회, 인터넷 필요) → (2) 의존성 설치 →
+(3) `data/source/`에 콘텐츠 JSON이 있으면 시드 → (4) 서버 실행 → (5) 브라우저로 편집기를 엽니다.
+창을 닫으면 종료됩니다.
+
+> macOS에서 “확인되지 않은 개발자” 경고가 뜨면: 파일 **우클릭 → 열기** 한 번이면 이후엔 더블클릭으로 됩니다.
+> (또는 터미널에서 `chmod +x Lyra-mac.command` 후 실행.)
+>
+> 콘텐츠(성경·찬송·교독문)는 저작권 자료라 포함돼 있지 않습니다 — 아래 “콘텐츠 데이터 준비”대로
+> `data/source/`에 JSON을 두면 첫 실행 시 자동 시드됩니다. 없으면 편집·발표는 되지만 성경/찬송/교독문 생성만 비활성입니다.
+
+---
+
+## 설치 & 실행 (수동)
 
 ```bash
 git clone https://github.com/jyub86/lyra.git

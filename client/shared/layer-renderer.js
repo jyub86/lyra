@@ -151,6 +151,7 @@ export function renderElements(root, elements) {
       if (e.font) n.style.fontFamily = `'${e.font}', var(--font-family, sans-serif)`;
       n.style.textAlign = e.align || "center";
       n.style.justifyContent = vAlign(e.valign);
+      if (e.line_height) n.style.lineHeight = e.line_height;
       n.style.fontWeight = e.weight || 600;
     }
     placeElement(n, e);

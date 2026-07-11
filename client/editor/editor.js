@@ -13,7 +13,8 @@ const state = {
   selectedSet: new Set(), // multi-selection
   anchor: null,         // range-select anchor (shift+click)
   mode: "list",         // "list" | "tiles"
-  editEl: null,         // selected free-element index within the primary slide
+  editEl: null,         // primary selected element index (design panel/resize)
+  editElSet: new Set(), // selected element indices (drag-marquee multi-select)
   templates: [],        // design templates (cached)
   editingTemplate: null, // { id, name, kind, draft } while editing a template's design
   fonts: [],            // self-host 웹폰트 목록 (list_fonts)
@@ -47,6 +48,7 @@ function setSingleSelection(id) {
   state.anchor = id;
   state.selectedSet = new Set(id ? [id] : []);
   state.editEl = null;
+  state.editElSet = new Set();
   state.editingTemplate = null;
 }
 
@@ -129,6 +131,7 @@ function wireDrag(el) {
 // List-row click with multi-select (plain / ⌘·Ctrl toggle / Shift range).
 function onRowClick(s, e) {
   state.editEl = null;
+  state.editElSet = new Set();
   state.editingTemplate = null;
   const ids = slides().map((x) => x.id);
   if (e.shiftKey && state.anchor && ids.includes(state.anchor)) {
@@ -262,14 +265,17 @@ function renderList() {
   root.appendChild(elx("p", "list-hint muted", "드래그로 이동 · ⌘/Ctrl·Shift 클릭으로 여러 개 선택해 함께 이동"));
   slides().forEach((s, i) => {
     const sel = state.selectedSet.has(s.id);
-    const row = elx("div", "slide-row" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : ""));
+    const row = elx("div", "slide-row" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.hidden ? " hidden" : ""));
     row.draggable = true;
     row.dataset.id = s.id;
     const meta = elx("div", "row-meta");
     meta.append(elx("span", "badge", slideKind(s)), elx("span", "label", slideLabel(s)));
+    const hide = elx("button", "hide" + (s.hidden ? " on" : ""), s.hidden ? "⊘" : "◉");
+    hide.title = s.hidden ? "발표에 다시 보이기" : "발표에서 숨기기";
+    hide.onclick = (e) => { e.stopPropagation(); toggleHidden(s.id); };
     const del = elx("button", "del danger", "✕");
     del.onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
-    row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, del);
+    row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, hide, del);
     row.onclick = (e) => onRowClick(s, e);
     wireDrag(row);
     root.appendChild(row);
@@ -345,18 +351,33 @@ function renderEditLayer() {
   if (state.mode !== "list" || !selectedSlide()) { layer?.remove(); return; }
   if (!layer) {
     layer = elx("div", "edit-layer");
-    layer.addEventListener("mousedown", (e) => { if (e.target === layer) selectEl(null); });
+    // 빈 곳에서 드래그 → 마퀴 멀티선택(클릭만 하면 선택 해제)
+    layer.addEventListener("mousedown", (e) => { if (e.target === layer) startMarquee(e); });
+    // 더블클릭 → '내용' 입력 포커스. selectEl이 매번 .eh 노드를 교체하므로 리스너는
+    // (교체되지 않는) 레이어에 위임한다. 요소 인덱스는 capture 단계 mousedown으로 추적
+    // (요소의 stopPropagation 이전에 실행). 트리거는 브라우저 네이티브 dblclick(정확한 임계값).
+    layer._dblIndex = -1;
+    layer.addEventListener("mousedown", (e) => {
+      const eh = e.target.closest(".eh");
+      layer._dblIndex = eh ? Number(eh.dataset.elIndex) : -1;
+    }, true);
+    layer.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      if (layer._dblIndex >= 0) focusElementContent(layer._dblIndex);
+    });
     pv.appendChild(layer);
   }
   layer.replaceChildren();
   els().forEach((el, i) => {
-    const h = elx("div", "eh" + (i === state.editEl ? " sel" : ""));
+    const h = elx("div", "eh" + (state.editElSet.has(i) ? " sel" : ""));
+    h.dataset.elIndex = i;
     h.style.left = (el.x ?? 0.4) * 100 + "%";
     h.style.top = (el.y ?? 0.4) * 100 + "%";
     h.style.width = (el.w ?? 0.2) * 100 + "%";
     h.style.height = (el.h ?? 0.12) * 100 + "%";
     h.addEventListener("mousedown", (e) => startMove(e, i));
-    if (i === state.editEl) {
+    // 리사이즈 핸들은 단일 선택일 때만(다중은 이동만)
+    if (i === state.editEl && state.editElSet.size === 1) {
       for (const pos of ["nw", "ne", "sw", "se"]) {
         const k = elx("div", "handle " + pos);
         k.addEventListener("mousedown", (e) => startResize(e, i, pos));
@@ -365,6 +386,47 @@ function renderEditLayer() {
     }
     layer.appendChild(h);
   });
+}
+
+// 캔버스 빈 곳에서 드래그해 사각형 안(겹치는) 요소들을 다중 선택.
+function startMarquee(e) {
+  if (e.button !== 0) return;
+  const pv = $("preview");
+  const layer = pv.querySelector(":scope > .edit-layer");
+  const rect = pv.getBoundingClientRect();
+  const x0 = clamp01((e.clientX - rect.left) / rect.width);
+  const y0 = clamp01((e.clientY - rect.top) / rect.height);
+  const box = elx("div", "marquee");
+  layer.appendChild(box);
+  let moved = false, x1 = x0, y1 = y0;
+  const draw = () => {
+    box.style.left = Math.min(x0, x1) * 100 + "%";
+    box.style.top = Math.min(y0, y1) * 100 + "%";
+    box.style.width = Math.abs(x1 - x0) * 100 + "%";
+    box.style.height = Math.abs(y1 - y0) * 100 + "%";
+  };
+  draw();
+  const mv = (ev) => {
+    moved = true;
+    x1 = clamp01((ev.clientX - rect.left) / rect.width);
+    y1 = clamp01((ev.clientY - rect.top) / rect.height);
+    draw();
+  };
+  const up = () => {
+    document.removeEventListener("mousemove", mv);
+    document.removeEventListener("mouseup", up);
+    box.remove();
+    if (!moved) { selectEl(null); return; }   // 클릭만 → 선택 해제
+    const mx0 = Math.min(x0, x1), my0 = Math.min(y0, y1), mx1 = Math.max(x0, x1), my1 = Math.max(y0, y1);
+    const hit = [];
+    els().forEach((el, i) => {
+      const ex0 = el.x ?? 0.4, ey0 = el.y ?? 0.4, ex1 = ex0 + (el.w ?? 0.2), ey1 = ey0 + (el.h ?? 0.12);
+      if (ex0 < mx1 && ex1 > mx0 && ey0 < my1 && ey1 > my0) hit.push(i); // AABB 겹침
+    });
+    selectEls(hit);
+  };
+  document.addEventListener("mousemove", mv);
+  document.addEventListener("mouseup", up);
 }
 
 // Lightweight repaint during drag (no background rebuild → no video reload).
@@ -376,26 +438,60 @@ function repaintEls() {
 
 function selectEl(i) {
   state.editEl = i;
+  state.editElSet = i == null ? new Set() : new Set([i]);
   if (i != null) showTab("design");
   renderEditLayer();
   renderDesignPanel();
 }
 
+// 여러 요소를 한 번에 선택(마퀴). 첫 요소를 primary(디자인 패널)로.
+function selectEls(indices) {
+  state.editElSet = new Set(indices);
+  state.editEl = indices.length ? indices[0] : null;
+  if (indices.length) showTab("design");
+  renderEditLayer();
+  renderDesignPanel();
+}
+
+// 요소를 선택하고 디자인 패널의 '내용' 입력으로 포커스를 옮긴다(더블클릭 시).
+// 텍스트 요소면 '내용' textarea, 콘텐츠 요소는 첫 편집 입력에 포커스한다.
+function focusElementContent(i) {
+  selectEl(i);                                     // 선택 + 디자인 탭 + 패널 렌더
+  const body = $("el-props");
+  const input = body?.querySelector('[data-field="text"]') || body?.querySelector("textarea, input[type='text'], input:not([type])");
+  if (input) {
+    input.focus();
+    if (input.setSelectionRange) input.setSelectionRange(input.value.length, input.value.length); // 커서 끝으로
+  }
+}
+
 function startMove(e, i) {
   if (e.button !== 0) return;
   e.preventDefault(); e.stopPropagation();
-  if (state.editEl !== i) selectEl(i);
+  // 선택 밖의 요소를 누르면 단일 선택으로, 이미 선택된 그룹이면 그룹을 함께 이동.
+  if (!state.editElSet.has(i)) selectEl(i);
   const rect = $("preview").getBoundingClientRect();
-  const el = els()[i];
-  const sx = e.clientX, sy = e.clientY, ox = el.x ?? 0.4, oy = el.y ?? 0.4;
+  const group = [...state.editElSet];
+  const single = group.length <= 1;
+  const orig = group.map((gi) => ({ i: gi, x: els()[gi].x ?? 0.4, y: els()[gi].y ?? 0.4 }));
+  const sx = e.clientX, sy = e.clientY;
+  let moved = false;
   const mv = (ev) => {
-    let x = clamp01(ox + (ev.clientX - sx) / rect.width);
-    let y = clamp01(oy + (ev.clientY - sy) / rect.height);
-    ({ x, y } = snapMove(x, y, el.w ?? 0.2, el.h ?? 0.12)); // snap to edges/center
-    el.x = x; el.y = y;
+    moved = true;
+    const dx = (ev.clientX - sx) / rect.width, dy = (ev.clientY - sy) / rect.height;
+    if (single) {
+      const el = els()[i];
+      let x = clamp01((orig[0]?.x ?? 0.4) + dx), y = clamp01((orig[0]?.y ?? 0.4) + dy);
+      ({ x, y } = snapMove(x, y, el.w ?? 0.2, el.h ?? 0.12)); // snap only single
+      el.x = x; el.y = y;
+    } else {
+      for (const o of orig) { const el = els()[o.i]; el.x = clamp01(o.x + dx); el.y = clamp01(o.y + dy); }
+    }
     repaintEls(); renderGuides();
   };
-  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); commitEls(); };
+  // 움직였을 때만 저장. 단순 클릭/더블클릭에서 commit→비동기 refresh가
+  // 디자인 패널을 다시 그려 '내용' 입력 포커스를 뺏는 것을 막는다.
+  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); if (moved) commitEls(); };
   document.addEventListener("mousemove", mv);
   document.addEventListener("mouseup", up);
 }
@@ -454,6 +550,18 @@ function deleteEl(i) {
   if (!slide || i == null) return;
   slide.elements = (slide.elements || []).filter((_, j) => j !== i);
   state.editEl = null;
+  state.editElSet = new Set();
+  commitEls();
+}
+
+// 선택된 요소들(단일·다중)을 한 번에 삭제.
+function deleteSelectedEls() {
+  const slide = selectedSlide();
+  if (!slide || !state.editElSet.size) return;
+  const rm = state.editElSet;
+  slide.elements = (slide.elements || []).filter((_, j) => !rm.has(j));
+  state.editEl = null;
+  state.editElSet = new Set();
   commitEls();
 }
 
@@ -491,8 +599,55 @@ const FMT_TOKENS = {
   reading: { title: "{number}, {title}" },
 };
 
+// ---- 색 팔레트: 이 예배에 쓰인 색 + 최근 쓴 색(localStorage) ----
+const isHex = (c) => typeof c === "string" && /^#[0-9a-fA-F]{3,8}$/.test(c);
+function serviceColors() {
+  const set = new Set();
+  const add = (c) => { if (isHex(c)) set.add(c.toLowerCase()); };
+  for (const s of slides()) {
+    if (s.background?.type === "color") add(s.background.value);
+    if (s.background?.type === "gradient") { add(s.background.from); add(s.background.to); }
+    for (const e of s.elements || []) { add(e.color); add(e.fill); add(e.stroke); }
+  }
+  return [...set];
+}
+function recentColors() { try { return JSON.parse(localStorage.getItem("lyra.recentColors") || "[]"); } catch { return []; } }
+function pushRecentColor(hex) {
+  if (!isHex(hex)) return;
+  hex = hex.toLowerCase();
+  const list = [hex, ...recentColors().filter((c) => c !== hex)].slice(0, 12);
+  localStorage.setItem("lyra.recentColors", JSON.stringify(list));
+}
+// 스와치 묶음(최근 → 이 예배). onPick(hex) 호출. 없으면 null.
+function colorSwatches(current, onPick) {
+  const wrap = elx("div", "swatches");
+  const seen = new Set();
+  const addSw = (hex, group) => {
+    if (!isHex(hex) || seen.has(hex.toLowerCase())) return;
+    seen.add(hex.toLowerCase());
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "swatch" + (hex.toLowerCase() === (current || "").toLowerCase() ? " cur" : "");
+    b.style.background = hex; b.title = `${group}: ${hex}`;
+    b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); onPick(hex); };
+    wrap.appendChild(b);
+  };
+  recentColors().forEach((c) => addSw(c, "최근"));
+  serviceColors().forEach((c) => addSw(c, "이 예배"));
+  return wrap.children.length ? wrap : null;
+}
+
 function renderDesignPanel() {
   const empty = $("el-empty"), body = $("el-props");
+  // 다중 선택: 개별 속성 대신 요약 + 일괄 동작
+  if (state.editElSet.size > 1) {
+    empty.hidden = true; body.hidden = false;
+    body.replaceChildren();
+    body.appendChild(elx("div", "section-title", `${state.editElSet.size}개 요소 선택됨`));
+    body.appendChild(elx("p", "hint muted", "드래그로 함께 이동 · 방향키 미세이동 · Del 삭제 · ⌘/Ctrl+C·V 복사/붙여넣기"));
+    const del = elx("button", "mini danger", "선택 요소 삭제"); del.onclick = () => deleteSelectedEls();
+    body.appendChild(del);
+    return;
+  }
   const el = state.editEl != null ? els()[state.editEl] : null;
   if (!el) { empty.hidden = false; body.hidden = true; return; }
   empty.hidden = true; body.hidden = false;
@@ -516,11 +671,17 @@ function renderDesignPanel() {
     const apply = (commit) => {
       el[fieldName] = type === "check" ? input.checked : (type === "range" || opts.num ? Number(input.value) : input.value);
       repaintEls();
-      if (commit) commitEls();
+      if (commit) { commitEls(); if (type === "color") pushRecentColor(el[fieldName]); }
     };
     input.addEventListener("input", () => apply(false));
     input.addEventListener("change", () => apply(true));
+    input.dataset.field = fieldName;   // 더블클릭 → 해당 입력 포커스용
     wrap.appendChild(input);
+    // 색 입력엔 팔레트 스와치(이 예배 색 + 최근 색)를 붙여 빠르게 재사용
+    if (type === "color") {
+      const sw = colorSwatches(el[fieldName], (hex) => { input.value = hex; apply(true); renderDesignPanel(); });
+      if (sw) wrap.appendChild(sw);
+    }
     body.appendChild(wrap);
   };
 
@@ -532,6 +693,21 @@ function renderDesignPanel() {
     const num = document.createElement("input"); num.type = "number"; num.min = min; num.max = max; num.step = 0.1;
     range.value = num.value = el.size ?? def;
     const apply = (v, commit) => { el.size = Number(v); range.value = num.value = el.size; repaintEls(); if (commit) commitEls(); };
+    range.addEventListener("input", () => apply(range.value, false));
+    range.addEventListener("change", () => apply(range.value, true));
+    num.addEventListener("input", () => apply(num.value, false));
+    num.addEventListener("change", () => apply(num.value, true));
+    row.append(range, num); wrap.appendChild(row); body.appendChild(wrap);
+  };
+
+  // 슬라이더 + 숫자 조합으로 임의 숫자 필드 편집(줄 간격 등).
+  const numRow = (label, fieldName, { min, max, step, def }) => {
+    const wrap = elx("label", null, label);
+    const row = elx("div", "size-row");
+    const range = document.createElement("input"); range.type = "range"; range.min = min; range.max = max; range.step = step;
+    const num = document.createElement("input"); num.type = "number"; num.min = min; num.max = max; num.step = step;
+    range.value = num.value = el[fieldName] ?? def;
+    const apply = (v, commit) => { el[fieldName] = Number(v); range.value = num.value = el[fieldName]; repaintEls(); if (commit) commitEls(); };
     range.addEventListener("input", () => apply(range.value, false));
     range.addEventListener("change", () => apply(range.value, true));
     num.addEventListener("input", () => apply(num.value, false));
@@ -556,6 +732,7 @@ function renderDesignPanel() {
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
     field("정렬(가로)", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
     field("정렬(세로)", "select", "valign", { options: [["middle", "가운데"], ["top", "위"], ["bottom", "아래"]] });
+    numRow("줄 간격 (숫자)", "line_height", { min: 1, max: 2.6, step: 0.05, def: 1.3 });
   } else if (el.type === "shape") {
     if (el.shape !== "line") {
       field("채움색", "color", "fill", { def: "#7aa2f7" });
@@ -595,6 +772,7 @@ function renderDesignPanel() {
     field("색", "color", "color", { def: "#ffffff" });
     field("정렬(가로)", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
     field("정렬(세로)", "select", "valign", { options: [["middle", "가운데"], ["top", "위"], ["bottom", "아래"]] });
+    numRow("줄 간격 (숫자)", "line_height", { min: 1, max: 2.6, step: 0.05, def: 1.5 });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
     if (el.type === "bible" && fkey !== "ref") field("절 번호 표시", "check", "show_numbers");
     // 교독문 인도자/회중 스타일 (전체·본문 = 인도자·회중이 함께 있을 때)
@@ -620,7 +798,7 @@ function renderDesignPanel() {
   const actions = elx("div", "el-actions");
   const front = elx("button", "mini", "맨 앞으로"); front.onclick = () => moveElZ(state.editEl, true);
   const back = elx("button", "mini", "맨 뒤로"); back.onclick = () => moveElZ(state.editEl, false);
-  const del = elx("button", "mini danger", "삭제"); del.onclick = () => deleteEl(state.editEl);
+  const del = elx("button", "mini danger", "삭제"); del.onclick = () => deleteSelectedEls();
   actions.append(front, back, del);
   body.appendChild(actions);
 }
@@ -754,6 +932,7 @@ async function editTemplate(id) {
   const tpl = await callTool("get_template", { template_id: id });
   state.editingTemplate = { id, name: tpl.name, kind: tpl.kind, draft: draftFromTemplate(tpl) };
   state.editEl = null;
+  state.editElSet = new Set();
   state.mode = "list";
   showTab("design");
   render();
@@ -779,11 +958,12 @@ function renderTiles() {
   grid.innerHTML = "";
   slides().forEach((s, i) => {
     const sel = state.selectedSet.has(s.id);
-    const tile = elx("div", "tile" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : ""));
+    const tile = elx("div", "tile" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.hidden ? " hidden" : ""));
     tile.draggable = true;
     tile.dataset.id = s.id;
     const cap = elx("div", "cap");
-    cap.innerHTML = `<span class="num">${i + 1}</span><span class="badge">${slideKind(s)}</span><span class="label">${slideLabel(s)}</span><button class="del danger">✕</button>`;
+    cap.innerHTML = `<span class="num">${i + 1}</span><span class="badge">${slideKind(s)}</span><span class="label">${slideLabel(s)}</span><button class="hide${s.hidden ? " on" : ""}" title="${s.hidden ? "발표에 다시 보이기" : "발표에서 숨기기"}">${s.hidden ? "⊘" : "◉"}</button><button class="del danger">✕</button>`;
+    cap.querySelector(".hide").onclick = (e) => { e.stopPropagation(); toggleHidden(s.id); };
     cap.querySelector(".del").onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
     tile.append(buildThumb(s), cap);
     tile.onclick = (e) => onRowClick(s, e);   // same multi-select model as the list
@@ -926,6 +1106,31 @@ async function pasteSlides() {
   toast(`${newIds.length}개 붙여넣음`);
 }
 
+// ----- 요소 복사 / 붙여넣기 (디자인 탭에서 요소 선택 후) -----
+let elementClipboard = [];
+function copyElement() {
+  const sel = [...state.editElSet].map((i) => els()[i]).filter(Boolean);
+  if (!sel.length) return;
+  elementClipboard = sel.map((el) => structuredClone(el));
+  toast(`요소 ${sel.length}개 복사됨 · ⌘/Ctrl+V로 붙여넣기`);
+}
+async function pasteElement() {
+  if (!elementClipboard.length) return;
+  const slide = selectedSlide();
+  if (!slide) return;
+  const base = (slide.elements || []).length;
+  const copies = elementClipboard.map((el) => {
+    const c = structuredClone(el);
+    c.x = clamp01((c.x ?? 0.4) + 0.03);   // 살짝 옮겨 겹치지 않게
+    c.y = clamp01((c.y ?? 0.4) + 0.03);
+    return c;
+  });
+  slide.elements = [...(slide.elements || []), ...copies];
+  await commitEls();
+  selectEls(copies.map((_, k) => base + k));
+  toast(`요소 ${copies.length}개 붙여넣음`);
+}
+
 // ---------- inspector ----------
 function renderInspector() {
   const slide = selectedSlide();
@@ -948,6 +1153,8 @@ function renderBgFields(bg) {
   const type = $("insp-bg-type").value;
   const wrap = $("insp-bg-fields");
   wrap.innerHTML = "";
+  // 라이브 미리보기(저장 X) — 드래그 중 즉시 반영
+  const preview = () => { const s = selectedSlide(); if (s) { s.background = buildBackground(); renderPreview(); } };
   for (const [key, label, kind] of BG_FIELDS[type] || []) {
     const l = document.createElement("label"); l.textContent = label; wrap.appendChild(l);
     let input;
@@ -955,7 +1162,14 @@ function renderBgFields(bg) {
     else if (kind.startsWith("color")) { input = document.createElement("input"); input.type = "color"; input.value = bg?.[key] || kind.split(":")[1]; }
     else { input = document.createElement("input"); input.type = kind.startsWith("number") ? "number" : "text"; input.value = bg?.[key] ?? (kind.includes(":") ? kind.split(":")[1] : ""); }
     input.id = "bg-" + key;
+    if (input.type !== "text") input.addEventListener("input", preview);   // 색/숫자/체크: 라이브 미리보기
+    input.addEventListener("change", () => saveInspector());               // 확정 시 즉시 저장·적용
     wrap.appendChild(input);
+    // 색 입력엔 팔레트 스와치(이 예배 색 + 최근 색)
+    if (kind.startsWith("color")) {
+      const sw = colorSwatches(bg?.[key], (hex) => { input.value = hex; preview(); saveInspector(); });
+      if (sw) wrap.appendChild(sw);
+    }
   }
   if (type === "image" || type === "video") {
     const file = document.createElement("input");
@@ -963,7 +1177,7 @@ function renderBgFields(bg) {
     file.onchange = async () => {
       if (!file.files[0]) return;
       msg("insp-msg", "업로드 중…");
-      try { const { url } = await uploadFile(file.files[0]); $("bg-url").value = url; msg("insp-msg", "업로드 완료"); }
+      try { const { url } = await uploadFile(file.files[0]); $("bg-url").value = url; msg("insp-msg", "업로드 완료"); await saveInspector(); }
       catch (e) { msg("insp-msg", e.message, true); }
     };
     wrap.appendChild(file);
@@ -986,6 +1200,8 @@ async function saveInspector() {
   if (!slide) return;
   try {
     const bg = buildBackground();
+    if (bg?.type === "color") pushRecentColor(bg.value);
+    else if (bg?.type === "gradient") { pushRecentColor(bg.from); pushRecentColor(bg.to); }
     if (state.editingTemplate) {
       slide.background = bg;
       renderPreview();
@@ -993,7 +1209,7 @@ async function saveInspector() {
       await callTool("set_slide_background", { slide_id: slide.id, background: bg });
       await refresh();
     }
-    msg("insp-msg", "배경 저장됨");
+    msg("insp-msg", "배경 적용됨");
   } catch (e) { msg("insp-msg", e.message, true); }
 }
 
@@ -1003,6 +1219,15 @@ async function removeSlide(id) {
   state.selectedSet.delete(id);
   if (state.selected === id) state.selected = null;
   await refresh();
+}
+// 발표에서 숨김/보임 토글(편집기엔 남음). 멀티셀렉이면 선택 전체에 적용.
+async function toggleHidden(id) {
+  const targetIds = state.selectedSet.has(id) && state.selectedSet.size > 1 ? [...state.selectedSet] : [id];
+  const cur = slides().find((s) => s.id === id);
+  const next = !cur?.hidden;
+  for (const sid of targetIds) await callTool("set_slide_hidden", { slide_id: sid, hidden: next });
+  await refresh();
+  toast(next ? `${targetIds.length}개 숨김(발표에서 건너뜀)` : `${targetIds.length}개 다시 보임`);
 }
 async function deleteSelected() {
   const ids = [...state.selectedSet];
@@ -1018,6 +1243,29 @@ async function newService() {
   const worship_part = prompt("예배부 (1부/2부/연합)", "1부") || "1부";
   const { service_id } = await callTool("create_service", { title, date, worship_part });
   await loadServices(service_id);
+}
+
+// 현재 예배 정보(이름·날짜·부) 수정 — 새로 만들지 않고 기존 것을 고친다.
+async function editService() {
+  const s = state.service;
+  if (!s) return;
+  const title = prompt("예배 제목", s.title); if (title == null) return;
+  const date = prompt("날짜 (YYYY-MM-DD)", s.date); if (date == null) return;
+  const worship_part = prompt("예배부 (1부/2부/연합 등)", s.worship_part); if (worship_part == null) return;
+  await callTool("update_service", { service_id: state.serviceId, fields: { title, date, worship_part } });
+  await loadServices(state.serviceId);
+  toast("예배 정보 수정됨");
+}
+
+// 다른 이름으로 저장 — 현재 예배 전체(슬라이드·테마 포함)를 복제해 새 예배로.
+async function duplicateService() {
+  const s = state.service;
+  if (!s) return;
+  const title = prompt("다른 이름으로 저장 — 새 제목", `${s.title} (사본)`);
+  if (title == null) return;
+  const { service_id } = await callTool("duplicate_service", { service_id: state.serviceId, title: title || undefined });
+  await loadServices(service_id);
+  toast("다른 이름으로 저장됨");
 }
 async function presentIndex(i) {
   try { await callTool("present_goto", { service_id: state.serviceId, page_index: i }); msg("add-msg", "발표 화면으로 전송"); }
@@ -1071,10 +1319,15 @@ async function importSlidesFile(file) {
   try {
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch(`/api/import?service_id=${state.serviceId}`, { method: "POST", body: fd });
+    // 현재 선택한 슬라이드 바로 아래로 가져오기(선택 없으면 맨 끝).
+    const idx = slides().findIndex((s) => s.id === state.selected);
+    const posQ = idx >= 0 ? `&position=${idx + 1}` : "";
+    const res = await fetch(`/api/import?service_id=${state.serviceId}${posQ}`, { method: "POST", body: fd });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || "가져오기 실패");
     await refresh();
+    // 여러 파일을 이어서 가져올 때 순서가 유지되도록 마지막 가져온 슬라이드를 선택
+    if (body.slide_ids?.length) { setSingleSelection(body.slide_ids[body.slide_ids.length - 1]); render(); }
     clearInterval(busyTimer); busyTimer = null;
     $("busy-msg").textContent = `${body.slide_ids.length}장 가져왔어요 ✓`;
     $("busy-sub").textContent = "";
@@ -1223,6 +1476,8 @@ function init() {
   renderAddFields();
   $("service-select").onchange = (e) => selectService(e.target.value);
   $("new-service").onclick = newService;
+  $("edit-service").onclick = editService;
+  $("dup-service").onclick = duplicateService;
   $("view-list").onclick = () => { state.mode = "list"; render(); };
   $("view-tiles").onclick = () => { state.mode = "tiles"; render(); };
   $("add-type").onchange = renderAddFields;
@@ -1241,24 +1496,50 @@ function init() {
     const files = [...(e.dataTransfer?.files || [])];
     if (!files.length) return;
     if (!state.serviceId) { toast("먼저 예배를 선택하거나 만들어 주세요"); return; }
-    for (const f of files) await importSlidesFile(f);
+    const IMG_EXT = new Set(["png", "jpg", "jpeg", "webp", "gif", "bmp"]);
+    for (const f of files) {
+      const ext = (f.name.split(".").pop() || "").toLowerCase();
+      if (IMG_EXT.has(ext)) {
+        // 이미지: 새 슬라이드가 아니라 현재 슬라이드에 이미지 요소로 첨부
+        if (!selectedSlide()) { toast("이미지를 붙일 슬라이드를 먼저 선택하세요"); continue; }
+        try { const { url } = await uploadFile(f); await addElement("image", { url }); toast("이미지 첨부됨"); }
+        catch (err) { toast("이미지 첨부 실패: " + err.message); }
+      } else {
+        await importSlidesFile(f);   // PDF/PPT → 슬라이드로 가져오기(선택 아래)
+      }
+    }
   });
 
-  // 슬라이드 복사/붙여넣기 (리스트·타일에서 멀티셀렉 후 ⌘/Ctrl+C·V)
+  // 복사/붙여넣기 (⌘/Ctrl+C·V):
+  //  - 요소가 선택돼 있으면 요소를, 아니면 슬라이드(리스트·타일 멀티셀렉)를 대상으로.
   document.addEventListener("keydown", (e) => {
     const tag = document.activeElement?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-    if (state.editEl != null) return;           // 요소 편집 중이면 요소용 단축키가 우선
+    // 요소 선택이 없을 때 Del/Backspace → 선택한 순서 삭제(멀티셀렉 한 번에).
+    // (요소가 선택된 경우는 요소 삭제 핸들러가 처리)
+    if (state.editEl == null && (e.key === "Delete" || e.key === "Backspace")) {
+      if (state.selectedSet.size) { e.preventDefault(); deleteSelected(); }
+      return;
+    }
     if (!(e.metaKey || e.ctrlKey)) return;
     const k = e.key.toLowerCase();
-    if (k === "c") { copySelectedSlides(); e.preventDefault(); }
-    else if (k === "v") { e.preventDefault(); pasteSlides(); }
+    if (k !== "c" && k !== "v") return;
+    e.preventDefault();
+    if (state.editEl != null) {                 // 요소 선택 상태 → 요소 복붙
+      if (k === "c") copyElement(); else pasteElement();
+    } else {                                     // 슬라이드 복붙
+      if (k === "c") copySelectedSlides(); else pasteSlides();
+    }
   });
   $("prev-slide").onclick = () => navSlide(-1);
   $("next-slide").onclick = () => navSlide(1);
   $("del-slide").onclick = deleteSelected;
   $("present-here").onclick = presentHere;
-  $("insp-bg-type").onchange = () => renderBgFields(selectedSlide()?.background);
+  $("insp-bg-type").onchange = () => {
+    renderBgFields(selectedSlide()?.background);
+    const t = $("insp-bg-type").value;
+    if (t === "theme" || t === "color" || t === "gradient") saveInspector();  // 즉시 적용(이미지/영상은 URL 지정 후)
+  };
   $("insp-save").onclick = saveInspector;
 
   // element toolbar + design panel
@@ -1276,16 +1557,18 @@ function init() {
     if (state.mode !== "list" || state.editEl == null) return;
     const tag = document.activeElement?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-    const el = els()[state.editEl];
-    if (!el) return;
-    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteEl(state.editEl); }
+    const group = [...state.editElSet].map((gi) => els()[gi]).filter(Boolean);
+    if (!group.length) return;
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSelectedEls(); }
     else if (e.key.startsWith("Arrow")) {
       e.preventDefault();
       const d = 0.005;
-      if (e.key === "ArrowLeft") el.x = clamp01((el.x ?? 0.4) - d);
-      if (e.key === "ArrowRight") el.x = clamp01((el.x ?? 0.4) + d);
-      if (e.key === "ArrowUp") el.y = clamp01((el.y ?? 0.4) - d);
-      if (e.key === "ArrowDown") el.y = clamp01((el.y ?? 0.4) + d);
+      for (const el of group) {   // 선택된 요소들을 함께 nudge
+        if (e.key === "ArrowLeft") el.x = clamp01((el.x ?? 0.4) - d);
+        if (e.key === "ArrowRight") el.x = clamp01((el.x ?? 0.4) + d);
+        if (e.key === "ArrowUp") el.y = clamp01((el.y ?? 0.4) - d);
+        if (e.key === "ArrowDown") el.y = clamp01((el.y ?? 0.4) + d);
+      }
       repaintEls();
       clearTimeout(window.__nudgeT);
       window.__nudgeT = setTimeout(commitEls, 300);

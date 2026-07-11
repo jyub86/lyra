@@ -77,7 +77,7 @@ register({
   },
   handler: ({ slide_id, fields }, { db }) => {
     const jsonCols = new Set(["elements", "background"]);
-    const allowed = ["elements", "background", "transition"];
+    const allowed = ["elements", "background", "transition", "hidden"];
     const keys = Object.keys(fields).filter((k) => allowed.includes(k));
     if (keys.length === 0) throw new Error("no updatable fields provided");
     const set = keys.map((k) => `${k} = ?`).join(", ");
@@ -85,6 +85,21 @@ register({
     db.query(`UPDATE slides SET ${set} WHERE id = ?`).run(...vals, slide_id);
     touchService(db, serviceIdForSlide(db, slide_id));
     return { ok: true };
+  },
+});
+
+register({
+  name: "set_slide_hidden",
+  description: "슬라이드를 발표에서 숨김/보임 설정한다. 숨긴 슬라이드는 발표 이동 시 건너뛰지만 편집기엔 남는다.",
+  input_schema: {
+    type: "object",
+    properties: { slide_id: { type: "string" }, hidden: { type: "boolean" } },
+    required: ["slide_id", "hidden"],
+  },
+  handler: ({ slide_id, hidden }, { db }) => {
+    db.query("UPDATE slides SET hidden = ? WHERE id = ?").run(hidden ? 1 : 0, slide_id);
+    touchService(db, serviceIdForSlide(db, slide_id));
+    return { ok: true, hidden: !!hidden };
   },
 });
 

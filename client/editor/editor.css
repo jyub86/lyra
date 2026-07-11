@@ -89,6 +89,8 @@ a { color: var(--accent); text-decoration: none; }
 .eh { position: absolute; box-sizing: border-box; cursor: move; border: 1px solid transparent; }
 .eh:hover { border-color: rgba(122,162,247,.5); }
 .eh.sel { border: 1px solid var(--accent); }
+/* 드래그 멀티선택 사각형 */
+.marquee { position: absolute; border: 1px dashed var(--accent, #7aa2f7); background: rgba(122,162,247,.12); pointer-events: none; z-index: 6; }
 .eh .handle { position: absolute; width: 10px; height: 10px; background: var(--accent); border: 1px solid #0b0e14; border-radius: 2px; }
 .eh .handle.nw { left: -5px; top: -5px; cursor: nwse-resize; }
 .eh .handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
@@ -196,3 +198,17 @@ textarea { resize: vertical; }
   color: #e8e8ea; font-size: 20px; font-weight: 700; text-align: center;
 }
 .drop-box .muted { font-size: 13px; font-weight: 400; }
+
+/* 슬라이드 숨기기(발표에서 건너뜀) */
+.hide { background: transparent; border: none; cursor: pointer; font-size: 13px; line-height: 1; padding: 2px 4px; opacity: .6; }
+.hide:hover { opacity: 1; }
+.hide.on { opacity: 1; }
+.slide-row.hidden .thumb, .tile.hidden .thumb { opacity: .38; }
+.slide-row.hidden .label, .tile.hidden .label { text-decoration: line-through; opacity: .6; }
+.tile.hidden { opacity: .8; }
+
+/* 색 팔레트 스와치 (이 예배 색 + 최근 색) */
+.swatches { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.swatch { width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); padding: 0; cursor: pointer; }
+.swatch:hover { border-color: var(--accent); transform: scale(1.12); }
+.swatch.cur { box-shadow: 0 0 0 2px var(--accent); }

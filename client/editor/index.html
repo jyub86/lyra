@@ -13,6 +13,8 @@
     <strong class="brand">Lyra</strong>
     <select id="service-select" title="예배 순서 선택"></select>
     <button id="new-service" class="icon-btn" title="새 예배 순서">＋</button>
+    <button id="edit-service" class="icon-btn" title="현재 예배 이름·날짜 수정">✎</button>
+    <button id="dup-service" class="icon-btn" title="다른 이름으로 저장(복제)">⧉</button>
     <span class="seg" role="group" aria-label="보기 전환">
       <button id="view-list" class="seg-btn active">리스트</button>
       <button id="view-tiles" class="seg-btn">타일</button>
@@ -109,8 +111,8 @@
           <select id="add-type"></select>
         </label>
         <div id="add-fields" class="fields"></div>
-        <button id="add-slide-btn" class="primary">순서 끝에 추가</button>
-        <button id="add-after-btn" class="mini" title="현재 선택한 슬라이드 바로 다음에 추가">선택 아래에 추가</button>
+        <button id="add-after-btn" class="primary" title="현재 선택한 슬라이드 바로 다음에 추가">선택 아래에 추가</button>
+        <button id="add-slide-btn" class="mini" title="예배 순서 맨 끝에 추가">순서 끝에 추가</button>
         <p id="add-msg" class="msg"></p>
       </div>
 
@@ -179,8 +181,8 @@
   <!-- 드래그드롭 안내 오버레이 -->
   <div id="drop-overlay" class="drop-overlay" hidden>
     <div class="drop-box">
-      📥 여기에 놓으면 슬라이드로 가져옵니다
-      <span class="muted">이미지 · PDF · PPT(pptx/ppt/odp)</span>
+      📥 여기에 놓기
+      <span class="muted">이미지 → 현재 슬라이드에 첨부 · PDF/PPT → 슬라이드로 가져오기</span>
     </div>
   </div>
 

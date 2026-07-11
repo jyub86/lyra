@@ -45,10 +45,16 @@ export async function handleApi(req, url) {
     const serviceId = url.searchParams.get("service_id") || form?.get("service_id");
     if (!file || typeof file === "string") return json({ error: "no file" }, 400);
     if (!serviceId) return json({ error: "service_id required" }, 400);
+    // position 지정 시 그 위치부터 순서대로 삽입(선택 슬라이드 아래로), 생략 시 맨 끝.
+    const posRaw = url.searchParams.get("position");
+    let position = posRaw != null && posRaw !== "" ? Number(posRaw) : undefined;
     try {
       const slides = await fileToSlides(file.name, await file.arrayBuffer());
       const slide_ids = [];
-      for (const s of slides) slide_ids.push((await execute("add_slide", { service_id: serviceId, ...s })).slide_id);
+      for (const s of slides) {
+        slide_ids.push((await execute("add_slide", { service_id: serviceId, ...s, position })).slide_id);
+        if (position != null) position += 1;
+      }
       return json({ slide_ids });
     } catch (e) {
       return json({ error: e.message }, 500);

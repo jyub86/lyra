@@ -152,18 +152,23 @@ function writeService(db, meta, slides) {
       `INSERT INTO services (id, title, date, worship_part, theme_id, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(id, meta.title, meta.date, meta.worship_part, meta.theme_id || "dark-blue", ts, ts);
-    if (meta.theme_overrides != null) db.query("UPDATE services SET theme_overrides = ? WHERE id = ?").run(JSON.stringify(meta.theme_overrides), id);
+    if (meta.theme_overrides != null) {
+      // import은 객체, duplicate는 DB 문자열을 넘긴다 — 둘 다 이중 인코딩 없이 저장.
+      const ov = typeof meta.theme_overrides === "string" ? meta.theme_overrides : JSON.stringify(meta.theme_overrides);
+      db.query("UPDATE services SET theme_overrides = ? WHERE id = ?").run(ov, id);
+    }
     if (meta.transition != null) db.query("UPDATE services SET transition = ? WHERE id = ?").run(meta.transition, id);
     const insert = db.query(
-      `INSERT INTO slides (id, service_id, position, background, elements, transition)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO slides (id, service_id, position, background, elements, transition, hidden)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
     slides.forEach((s, i) => {
       insert.run(
         ulid(), id, i,
         s.background ? JSON.stringify(s.background) : null,
         JSON.stringify(s.elements ?? []),
-        s.transition ?? "fade"
+        s.transition ?? "fade",
+        s.hidden ? 1 : 0
       );
     });
   });
@@ -222,8 +227,8 @@ register({
   handler: ({ service_id, assets = true }, { db }) => {
     const s = db.query("SELECT * FROM services WHERE id = ?").get(service_id);
     if (!s) throw new Error(`unknown service: ${service_id}`);
-    const slides = slidesOf(db, service_id).map(({ background, elements, transition }) =>
-      ({ background, elements, transition }));
+    const slides = slidesOf(db, service_id).map(({ background, elements, transition, hidden }) =>
+      ({ background, elements, transition, hidden }));
     // 참조된 업로드 파일을 base64로 번들 (다른 머신에서도 이미지 유지)
     const bundled = [];
     if (assets) {

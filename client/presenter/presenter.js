@@ -106,8 +106,10 @@ function connectWs() {
 // ---- local keyboard (drives tools so editor stays in sync) ----
 function go(delta) {
   const slides = flatSlides();
-  const next = clamp(state.index + delta, 0, slides.length - 1);
-  if (next !== state.index) callTool("present_goto", { service_id: state.service?.id, page_index: next }).catch(() => {});
+  let i = state.index + delta;
+  while (i >= 0 && i < slides.length && slides[i]?.hidden) i += delta;   // 숨긴 슬라이드 건너뛰기
+  if (i < 0 || i >= slides.length) return;                              // 그 방향에 보이는 슬라이드 없음
+  if (i !== state.index) callTool("present_goto", { service_id: state.service?.id, page_index: i }).catch(() => {});
 }
 document.addEventListener("keydown", (e) => {
   if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); go(1); }

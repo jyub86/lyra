@@ -25,6 +25,8 @@ export function migrate(db) {
   // v4.1: additive columns on services (kept for DBs created before v4.1)
   ensureColumn(db, "services", "theme_overrides", "TEXT");
   ensureColumn(db, "services", "transition", "TEXT DEFAULT 'none'");
+  // v4.5: 슬라이드 숨기기(발표에서 건너뜀)
+  ensureColumn(db, "slides", "hidden", "INTEGER NOT NULL DEFAULT 0");
   return db;
 }
 

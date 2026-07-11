@@ -112,7 +112,8 @@ CREATE TABLE IF NOT EXISTS slides (
   position    INTEGER NOT NULL,        -- 예배 순서 내 슬라이드 순번 (연속)
   background  TEXT,                    -- JSON (null = 테마 기본)
   elements    TEXT NOT NULL DEFAULT '[]', -- JSON 배열: text/shape/image + bible/hymn/reading 콘텐츠 요소
-  transition  TEXT DEFAULT 'fade'
+  transition  TEXT DEFAULT 'fade',
+  hidden      INTEGER NOT NULL DEFAULT 0  -- 1 = 발표에서 건너뜀(편집기엔 남김)
 );
 CREATE INDEX IF NOT EXISTS idx_slides_service ON slides(service_id, position);
 

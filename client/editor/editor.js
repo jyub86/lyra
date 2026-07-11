@@ -1312,6 +1312,18 @@ async function editService() {
   toast("예배 정보 수정됨");
 }
 
+// 현재 예배 순서 삭제(슬라이드 전부 함께). 되돌릴 수 없어 확인 후 진행.
+async function deleteService() {
+  const s = state.service;
+  if (!s) return;
+  if (!confirm(`예배 순서 "${s.title}" 을(를) 삭제할까요?\n안의 슬라이드가 모두 함께 삭제되며 되돌릴 수 없습니다.`)) return;
+  await callTool("delete_service", { service_id: state.serviceId });
+  state.serviceId = null;
+  state.service = null;
+  await loadServices();   // 남은 예배 선택(없으면 빈 화면)
+  toast("예배 순서 삭제됨");
+}
+
 // 다른 이름으로 저장 — 현재 예배 전체(슬라이드·테마 포함)를 복제해 새 예배로.
 async function duplicateService() {
   const s = state.service;
@@ -1533,6 +1545,7 @@ function init() {
   $("new-service").onclick = newService;
   $("edit-service").onclick = editService;
   $("dup-service").onclick = duplicateService;
+  $("del-service").onclick = deleteService;
   $("view-list").onclick = () => { state.mode = "list"; render(); };
   $("view-tiles").onclick = () => { state.mode = "tiles"; render(); };
   $("add-type").onchange = renderAddFields;

@@ -52,18 +52,23 @@ brew install --cask libreoffice   # .pptx 임포트
 brew install poppler              # PDF 임포트/검색
 # Linux (Debian/Ubuntu)
 sudo apt install libreoffice poppler-utils
-# Windows (winget + scoop, 관리자 PowerShell)
-winget install -e --id TheDocumentFoundation.LibreOffice
-scoop install poppler             # 또는: choco install poppler libreoffice-fresh
 ```
 
-> **Windows 도구 참고**
-> - **LibreOffice**는 기본 설치 경로(`C:\Program Files\LibreOffice\program\soffice.exe`)를
->   앱이 자동 탐지하므로 PATH 등록이 필요 없습니다.
-> - **poppler**(`pdftoppm`·`pdftotext`)는 반드시 **PATH에 있어야** 합니다.
->   `scoop`/`choco`로 설치하면 자동 등록됩니다. 압축본을 직접 받았다면
->   `poppler-…\Library\bin` 폴더를 시스템 PATH에 추가하세요.
-> - 임포트/검색 기능을 안 쓰면 둘 다 없어도 됩니다(편집·발표·PPT/ODP 내용검색은 순수 동작).
+> **Windows — 패키지 매니저 없이 (권장)**
+>
+> 대부분의 Windows에는 scoop/choco가 없습니다. 아래처럼 **설치 파일/압축본**으로 하세요.
+> (임포트/검색 기능을 안 쓰면 둘 다 필요 없습니다 — 편집·발표·PPT/ODP 내용검색은 순수 동작.)
+>
+> 1. **LibreOffice** (`.pptx/.ppt/.odp` 가져오기)
+>    - <https://www.libreoffice.org/download> 에서 **설치 파일(.msi)** 을 받아 설치.
+>    - 기본 경로(`C:\Program Files\LibreOffice\program\soffice.exe`)를 **앱이 자동 탐지** → PATH 등록 불필요.
+>    - (winget 사용자라면: `winget install -e --id TheDocumentFoundation.LibreOffice`)
+> 2. **poppler** (PDF 가져오기/검색) — **PATH 편집 없이**:
+>    - <https://github.com/oschwartz10612/poppler-windows/releases> 에서 `Release-…zip` 다운로드.
+>    - 압축을 풀어 **폴더째로 프로젝트의 `tools/` 안에** 넣습니다.
+>      예: `tools/poppler-24.08.0/Library/bin/pdftoppm.exe`
+>    - 끝. 앱이 `tools/*/Library/bin` 을 자동 탐지합니다. (자세히: [`tools/README.md`](./tools/README.md))
+>    - 대안: 환경변수 `LYRA_POPPLER` 에 poppler의 `bin` 폴더 경로 지정, 또는 그 폴더를 시스템 PATH에 추가.
 
 ---
 

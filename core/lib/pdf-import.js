@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSy
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { saveUpload } from "./uploads.js";
+import { findPoppler } from "./poppler.js";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // presentation docs LibreOffice can read
@@ -58,14 +59,15 @@ function imageSlide(url) {
 }
 
 async function pdfToImageUrls(bytes) {
-  if (!Bun.which("pdftoppm")) {
-    throw new Error("PDF→이미지 변환 도구(poppler)가 없습니다. macOS: brew install poppler · Windows: poppler 설치 후 PATH 등록 · Linux: apt install poppler-utils");
+  const pdftoppm = findPoppler("pdftoppm");
+  if (!pdftoppm) {
+    throw new Error("PDF→이미지 변환 도구(poppler)가 없습니다. macOS: brew install poppler · Windows: poppler 압축본을 tools/ 폴더에 풀거나 LYRA_POPPLER로 지정(PATH 등록도 가능) · Linux: apt install poppler-utils");
   }
   const dir = mkdtempSync(join(tmpdir(), "lyra-pdf-"));
   try {
     const pdfPath = join(dir, "in.pdf");
     writeFileSync(pdfPath, Buffer.from(bytes));
-    const proc = Bun.spawnSync(["pdftoppm", "-png", "-r", "150", pdfPath, join(dir, "page")]);
+    const proc = Bun.spawnSync([pdftoppm, "-png", "-r", "150", pdfPath, join(dir, "page")]);
     if (proc.exitCode !== 0) {
       throw new Error("pdftoppm 변환 실패 (poppler 확인). PPT는 LibreOffice로 자동 변환됩니다.");
     }

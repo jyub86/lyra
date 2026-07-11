@@ -5,6 +5,7 @@
 // Failures degrade to text:"" so the file is still indexed/searchable by name.
 import { readFileSync } from "node:fs";
 import { unzipSync, strFromU8 } from "fflate";
+import { findPoppler } from "./poppler.js";
 
 function runText(cmd) {
   try {
@@ -56,8 +57,8 @@ function extractOdp(path) {
 }
 
 function extractPdf(path) {
-  const text = runText(["pdftotext", "-layout", path, "-"]);
-  const info = runText(["pdfinfo", path]);
+  const text = runText([findPoppler("pdftotext") || "pdftotext", "-layout", path, "-"]);
+  const info = runText([findPoppler("pdfinfo") || "pdfinfo", path]);
   const m = info.match(/Pages:\s+(\d+)/);
   const pages = m ? Number(m[1]) : ((text.match(/\f/g) || []).length + 1 || null);
   return { text: text.replace(/\f/g, " ").replace(/\s+/g, " ").trim(), pages };

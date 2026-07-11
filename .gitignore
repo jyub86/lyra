@@ -11,6 +11,10 @@ data/uploads/
 # Source content (copyrighted: 개역개정 / 새찬송가 / 교독문) — not distributed
 data/source/
 
+# 외부 바이너리 드롭인(poppler 등) — 저장소엔 안 올림, README만 유지
+/tools/*
+!/tools/README.md
+
 # OS / editor
 .DS_Store
 *.log

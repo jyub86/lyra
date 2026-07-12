@@ -24,7 +24,7 @@ async function loadService(serviceId) {
 function makeStage(slide) {
   const el = document.createElement("div");
   el.className = "slide-layers";
-  renderSlideWithLayers(el, slide, state.theme);
+  renderSlideWithLayers(el, slide, state.theme, { live: true });   // 발표: 영상 요소 소리 재생
   return el;
 }
 

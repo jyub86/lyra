@@ -81,10 +81,16 @@ function elx(tag, cls, text) {
 // A mini live preview of a slide (shared by list rows and tiles).
 // Video backgrounds are swapped for a placeholder to avoid many <video> elements.
 function thumbSlide(s) {
+  let out = s;
+  // 영상 배경/요소는 썸네일에서 <video> 대신 플레이스홀더로(여러 개 동시 재생 방지)
   if (s.background?.type === "video") {
-    return { ...s, background: { type: "gradient", from: "#1f2933", to: "#0b0e14", angle: 135 } };
+    out = { ...out, background: { type: "gradient", from: "#1f2933", to: "#0b0e14", angle: 135 } };
   }
-  return s;
+  if ((s.elements || []).some((e) => e.type === "video")) {
+    out = { ...out, elements: (out.elements || []).map((e) =>
+      e.type === "video" ? { type: "shape", shape: "rect", x: e.x, y: e.y, w: e.w, h: e.h, fill: "#0b0e14", stroke: "#556", stroke_width: 1 } : e) };
+  }
+  return out;
 }
 function buildThumb(s) {
   const t = elx("div", "thumb");
@@ -592,12 +598,15 @@ const ADD_DEFAULTS = {
   bible: () => ({ type: "bible", x: 0.1, y: 0.25, w: 0.8, h: 0.5, size: 3.2, align: "center", weight: 600, line_height: 1.5, show_numbers: true, params: {}, content: null }),
   hymn: () => ({ type: "hymn", x: 0.1, y: 0.25, w: 0.8, h: 0.5, size: 3.2, align: "center", weight: 600, params: {}, content: null }),
   reading: () => ({ type: "reading", x: 0.08, y: 0.2, w: 0.84, h: 0.6, size: 2.9, align: "center", weight: 600, params: {}, content: null }),
+  image: () => ({ type: "image", x: 0.35, y: 0.32, w: 0.3, h: 0.3, fit: "contain" }),
+  // 영상 요소: 로컬 업로드/URL. muted:false = 발표에서 소리 재생.
+  video: () => ({ type: "video", x: 0.25, y: 0.2, w: 0.5, h: 0.5, url: "", fit: "contain", loop: true, muted: false }),
 };
 
 async function addElement(kind, extra) {
   const slide = selectedSlide();
   if (!slide) { msg("add-msg", "슬라이드를 먼저 선택하세요.", true); return; }
-  const el = kind === "image" ? { type: "image", x: 0.35, y: 0.32, w: 0.3, h: 0.3, ...extra } : ADD_DEFAULTS[kind]();
+  const el = { ...ADD_DEFAULTS[kind](), ...extra };
   slide.elements = [...(slide.elements || []), el];
   state.editEl = slide.elements.length - 1;
   await commitEls();
@@ -804,6 +813,33 @@ function renderDesignPanel() {
     }
   } else if (el.type === "image") {
     body.appendChild(elx("p", "muted", "이미지는 캔버스에서 드래그·크기조절하세요."));
+  } else if (el.type === "video") {
+    // URL 직접 입력
+    { const wrap = elx("label", null, "영상 URL");
+      const input = document.createElement("input"); input.type = "text"; input.value = el.url || "";
+      input.placeholder = "https://…  또는 아래에서 파일 선택";
+      input.oninput = () => { el.url = input.value; };
+      input.onchange = () => { el.url = input.value; repaintEls(); commitEls(); };
+      wrap.appendChild(input); body.appendChild(wrap);
+      // 로컬 파일 업로드
+      const file = document.createElement("input"); file.type = "file"; file.accept = "video/*";
+      file.onchange = async () => {
+        if (!file.files[0]) return;
+        msg("add-msg", "영상 업로드 중…");
+        try { const { url } = await uploadFile(file.files[0]); el.url = url; input.value = url; repaintEls(); commitEls(); msg("add-msg", "업로드 완료"); }
+        catch (e) { msg("add-msg", e.message, true); }
+      };
+      body.appendChild(file);
+    }
+    field("반복 재생", "check", "loop");
+    // 소리: 체크 = 소리 켜짐(= muted:false). 소리는 발표 화면에서만 재생됨.
+    { const wrap = elx("label", null, "소리 (발표 화면에서)");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !el.muted;
+      cb.onchange = () => { el.muted = !cb.checked; repaintEls(); commitEls(); };
+      wrap.appendChild(cb); body.appendChild(wrap);
+    }
+    field("채움", "select", "fit", { options: [["contain", "전체 보이기"], ["cover", "꽉 채우기"]] });
+    body.appendChild(elx("p", "hint muted", "편집 미리보기는 음소거이고, 소리는 발표 화면에서 재생됩니다."));
   } else if (["bible", "hymn", "reading"].includes(el.type)) {
     { // 표시 항목(field): 바꾸면 즉시 반영 + 패널 갱신(절 번호 표시 노출 여부)
       const wrap = elx("label", null, "표시 항목");
@@ -1573,6 +1609,7 @@ function init() {
     if (!files.length) return;
     if (!state.serviceId) { toast("먼저 예배를 선택하거나 만들어 주세요"); return; }
     const IMG_EXT = new Set(["png", "jpg", "jpeg", "webp", "gif", "bmp"]);
+    const VIDEO_EXT = new Set(["mp4", "webm", "mov", "m4v", "ogv", "ogg"]);
     for (const f of files) {
       const ext = (f.name.split(".").pop() || "").toLowerCase();
       if (IMG_EXT.has(ext)) {
@@ -1580,6 +1617,11 @@ function init() {
         if (!selectedSlide()) { toast("이미지를 붙일 슬라이드를 먼저 선택하세요"); continue; }
         try { const { url } = await uploadFile(f); await addElement("image", { url }); toast("이미지 첨부됨"); }
         catch (err) { toast("이미지 첨부 실패: " + err.message); }
+      } else if (VIDEO_EXT.has(ext)) {
+        // 영상: 현재 슬라이드에 영상 요소로 첨부(소리는 발표 화면에서 재생)
+        if (!selectedSlide()) { toast("영상을 붙일 슬라이드를 먼저 선택하세요"); continue; }
+        try { const { url } = await uploadFile(f); await addElement("video", { url }); toast("영상 첨부됨(발표 화면에서 소리 재생)"); }
+        catch (err) { toast("영상 첨부 실패: " + err.message); }
       } else {
         await importSlidesFile(f);   // PDF/PPT → 슬라이드로 가져오기(선택 아래)
       }

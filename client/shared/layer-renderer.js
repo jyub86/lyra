@@ -114,14 +114,26 @@ function placeElement(n, e) {
   n.style.height = (e.h ?? 0.15) * 100 + "%";
 }
 
-// Render the elements layer.
-export function renderElements(root, elements) {
+// Render the elements layer. opts.live=true(발표)면 영상 요소가 소리를 낸다(편집/썸네일은 음소거).
+export function renderElements(root, elements, opts = {}) {
   root.replaceChildren();
   for (const e of elements || []) {
     let n;
     if (e.type === "image") {
       n = document.createElement("img");
       n.className = "el el-image"; n.src = e.url; if (e.fit) n.style.objectFit = e.fit;
+    } else if (e.type === "video") {
+      // 영상 요소(로컬 업로드 /uploads/… 또는 URL). 소리는 발표에서만.
+      n = document.createElement("video");
+      n.className = "el el-video";
+      if (e.url) n.src = e.url;
+      n.style.objectFit = e.fit || "contain";
+      n.loop = e.loop !== false;
+      n.autoplay = true; n.playsInline = true;
+      n.muted = opts.live ? !!e.muted : true;   // 편집 미리보기·썸네일은 항상 음소거
+      if (e.controls) n.controls = true;
+      if (e.playback_rate) n.playbackRate = e.playback_rate;
+      n.play?.().catch(() => {});
     } else if (e.type === "shape") {
       n = el("div", "el el-shape el-" + (e.shape || "rect"));
       n.style.background = e.shape === "line" ? "transparent" : (e.fill || "transparent");
@@ -159,7 +171,7 @@ export function renderElements(root, elements) {
   }
 }
 
-export function renderSlideWithLayers(container, slide, theme) {
+export function renderSlideWithLayers(container, slide, theme, opts = {}) {
   container.classList.add("slide-layers");
   applyTheme(container, theme);
 
@@ -172,7 +184,7 @@ export function renderSlideWithLayers(container, slide, theme) {
   }
   const bg = slide.background ?? (theme && theme.background) ?? { type: "color", value: "#000" };
   renderBackground(bgEl, bg);
-  renderElements(elemEl, slide.elements || []);
+  renderElements(elemEl, slide.elements || [], opts);
 }
 
 function mk(cls) { const n = document.createElement("div"); n.className = cls; return n; }

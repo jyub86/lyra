@@ -25,6 +25,7 @@
   word-break: break-word; white-space: pre-wrap; overflow: hidden;
 }
 .el-image { object-fit: contain; }
+.el-video { object-fit: contain; background: #000; }
 .el-ellipse { border-radius: 50%; }
 
 /* content elements (bible / hymn / reading) — sized by element font-size (em-relative inside) */

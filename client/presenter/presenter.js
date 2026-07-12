@@ -54,19 +54,26 @@ function transitionTo(newIndex) {
 
   const outgoing = state.stage;
   const incoming = makeStage(slide);
-  deck.appendChild(incoming);
+  deck.appendChild(incoming);   // incoming = 위(나중 DOM)
   state.stage = incoming;
 
-  // initial offset, then animate to rest
   incoming.style.transition = "none";
-  if (transition === "fade") incoming.style.opacity = "0";
-  else incoming.style.transform = `translateX(${dir > 0 ? 100 : -100}%)`;
-  void incoming.offsetWidth; // reflow
-  const ease = `opacity ${DUR}ms ease, transform ${DUR}ms ease`;
-  incoming.style.transition = ease;
-  outgoing.style.transition = ease;
-  if (transition === "fade") { incoming.style.opacity = "1"; outgoing.style.opacity = "0"; }
-  else { incoming.style.transform = "translateX(0)"; outgoing.style.transform = `translateX(${dir > 0 ? -100 : 100}%)`; }
+  if (transition === "fade") {
+    // 교차 페이드(둘 다 반투명)를 하면 뒤 검정이 비쳐 중간이 어두워진다.
+    // 대신 기존 슬라이드는 불투명하게 두고 새 슬라이드만 그 위에서 페이드인 → 어두워지지 않음.
+    incoming.style.opacity = "0";
+    void incoming.offsetWidth; // reflow
+    incoming.style.transition = `opacity ${DUR}ms ease`;
+    incoming.style.opacity = "1";
+  } else { // slide: 나란히 밀기(둘 다 불투명이라 검정 문제 없음)
+    incoming.style.transform = `translateX(${dir > 0 ? 100 : -100}%)`;
+    void incoming.offsetWidth; // reflow
+    const ease = `transform ${DUR}ms ease`;
+    incoming.style.transition = ease;
+    outgoing.style.transition = ease;
+    incoming.style.transform = "translateX(0)";
+    outgoing.style.transform = `translateX(${dir > 0 ? -100 : 100}%)`;
+  }
 
   setTimeout(() => {
     outgoing.remove();

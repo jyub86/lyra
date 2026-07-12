@@ -111,9 +111,31 @@ function go(delta) {
   if (i < 0 || i >= slides.length) return;                              // 그 방향에 보이는 슬라이드 없음
   if (i !== state.index) callTool("present_goto", { service_id: state.service?.id, page_index: i }).catch(() => {});
 }
+// ---- 슬라이드 번호 입력 → 점프 (별도 UI 없이: 숫자 타이핑 후 Enter, PowerPoint식) ----
+let gotoBuf = "", gotoTimer = null;
+function clearGoto() { clearTimeout(gotoTimer); gotoBuf = ""; }
+function bufDigit(d) {
+  gotoBuf = (gotoBuf + d).slice(0, 4);
+  clearTimeout(gotoTimer); gotoTimer = setTimeout(clearGoto, 3000);   // 3초 입력 없으면 취소
+}
+function commitGoto() {
+  if (!gotoBuf) return;
+  const n = parseInt(gotoBuf, 10);
+  clearGoto();
+  if (!Number.isFinite(n)) return;
+  const i = clamp(n - 1, 0, Math.max(0, flatSlides().length - 1));   // 1-based 번호 → index
+  callTool("present_goto", { service_id: state.service?.id, page_index: i }).catch(() => {});
+}
+
 document.addEventListener("keydown", (e) => {
-  if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); go(1); }
-  else if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); go(-1); }
+  // 번호 입력(화면 표시 없음)
+  if (/^[0-9]$/.test(e.key)) { e.preventDefault(); bufDigit(e.key); return; }
+  if (e.key === "Enter") { e.preventDefault(); commitGoto(); return; }
+  if (e.key === "Backspace") { e.preventDefault(); gotoBuf = gotoBuf.slice(0, -1); return; }
+  if (e.key === "Escape") { clearGoto(); return; }
+  // 이동/제어
+  if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); clearGoto(); go(1); }
+  else if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); clearGoto(); go(-1); }
   else if (e.key.toLowerCase() === "b") { callTool("present_blackout", { on: !state.blackout }).catch(() => {}); }
   else if (e.key.toLowerCase() === "f") { document.documentElement.requestFullscreen?.(); }
 });

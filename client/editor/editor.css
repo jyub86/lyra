@@ -216,3 +216,14 @@ textarea { resize: vertical; }
 /* 비활성 버튼(실행취소/다시실행 등) */
 button:disabled { opacity: .35; cursor: default; }
 button:disabled:hover { border-color: var(--line); }
+
+/* 리치 텍스트 '내용' 편집기 (부분 색상) */
+.rt-editor {
+  min-height: 46px; max-height: 180px; overflow: auto; padding: 6px 9px;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--panel2);
+  font-size: 13px; line-height: 1.4; white-space: pre-wrap; word-break: break-word;
+}
+.rt-editor:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.rt-bar { display: flex; gap: 4px; align-items: center; margin-top: 5px; flex-wrap: wrap; }
+.rt-bar input[type="color"] { width: 28px; height: 24px; padding: 1px; border-radius: 5px; }
+.rt-bar .mini { padding: 3px 8px; font-size: 11px; }

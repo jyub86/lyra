@@ -107,6 +107,45 @@ function vAlign(v) {
   return v === "top" ? "flex-start" : v === "bottom" ? "flex-end" : "center";
 }
 
+// 텍스트 효과: 그림자 · 외곽선(테두리). em 기준이라 글자 크기에 비례.
+function applyTextEffects(n, e) {
+  if (e.shadow) {
+    const blur = e.shadow_blur ?? 0.12;
+    n.style.textShadow = `0.05em 0.06em ${blur}em ${e.shadow_color || "#000000"}`;
+  }
+  if (e.outline_width) {
+    n.style.webkitTextStroke = `${e.outline_width}px ${e.outline_color || "#000000"}`;
+    n.style.paintOrder = "stroke fill";   // 외곽선이 글자를 덜 먹도록
+  }
+}
+
+// 리치 텍스트(부분 색상 등) HTML 위생 처리 — span/font/b/i/u/br/div/p + 안전한 style만 허용.
+const RT_TAGS = new Set(["SPAN", "FONT", "B", "STRONG", "I", "EM", "U", "BR", "DIV", "P"]);
+const RT_STYLE = /^(color|font-weight|font-style|text-decoration|background-color)$/i;
+function filterStyle(style) {
+  return String(style).split(";").map((s) => s.trim()).filter(Boolean)
+    .filter((s) => RT_STYLE.test(s.split(":")[0].trim())).join("; ");
+}
+function sanitizeHtml(html) {
+  const tpl = document.createElement("template");
+  tpl.innerHTML = String(html);
+  const walk = (node) => {
+    for (const c of [...node.childNodes]) {
+      if (c.nodeType === 1) {
+        if (!RT_TAGS.has(c.tagName)) { c.replaceWith(...c.childNodes); continue; } // 허용 안 된 태그는 벗겨냄
+        for (const a of [...c.attributes]) {
+          if (a.name === "color") continue;                                        // <font color>
+          if (a.name === "style") { const f = filterStyle(a.value); if (f) c.setAttribute("style", f); else c.removeAttribute("style"); continue; }
+          c.removeAttribute(a.name);                                               // 나머지 속성(onclick 등) 제거
+        }
+        walk(c);
+      } else if (c.nodeType !== 3) { c.remove(); }                                 // 텍스트 노드 외 기타 제거
+    }
+  };
+  walk(tpl.content);
+  return tpl.innerHTML;
+}
+
 function placeElement(n, e) {
   n.style.left = (e.x ?? 0.4) * 100 + "%";
   n.style.top = (e.y ?? 0.4) * 100 + "%";
@@ -156,8 +195,11 @@ export function renderElements(root, elements, opts = {}) {
       else renderReadingBody(n, e.content, e.field, e.format, {
         leader_color: e.leader_color, congregation_color: e.congregation_color, unison_color: e.unison_color, show_tags: e.show_tags,
       });
+      applyTextEffects(n, e);   // 성경/가사도 그림자·외곽선(영상 위 가독성)
     } else {
-      n = el("div", "el el-text", e.text ?? "");
+      n = el("div", "el el-text");
+      if (e.html) n.innerHTML = sanitizeHtml(e.html);   // 부분 색상 등 리치 텍스트
+      else n.textContent = e.text ?? "";
       n.style.fontSize = (e.size ?? 4) + "cqw";
       if (e.color) n.style.color = e.color;
       if (e.font) n.style.fontFamily = `'${e.font}', var(--font-family, sans-serif)`;
@@ -165,6 +207,7 @@ export function renderElements(root, elements, opts = {}) {
       n.style.justifyContent = vAlign(e.valign);
       if (e.line_height) n.style.lineHeight = e.line_height;
       n.style.fontWeight = e.weight || 600;
+      applyTextEffects(n, e);
     }
     placeElement(n, e);
     root.appendChild(n);

@@ -792,15 +792,51 @@ function renderDesignPanel() {
     wrap.appendChild(sel); body.appendChild(wrap);
   };
 
+  // 리치 텍스트 '내용' 편집기: 일부만 선택해 색/굵기 적용(부분 색상). el.html에 저장, el.text=평문.
+  const richTextField = () => {
+    const wrap = elx("label", null, "내용 (일부 선택 후 색/굵기 적용 가능)");
+    const ed = document.createElement("div");
+    ed.className = "rt-editor"; ed.contentEditable = "true"; ed.dataset.field = "text";
+    if (el.html) ed.innerHTML = el.html; else ed.textContent = el.text ?? "";
+    const save = (commit) => { el.html = ed.innerHTML; el.text = ed.innerText; repaintEls(); if (commit) commitEls(); };
+    ed.addEventListener("input", () => save(false));   // 타이핑: 라이브 미리보기(커밋은 blur에)
+    ed.addEventListener("blur", () => save(true));
+    // 서식 툴바
+    const bar = elx("div", "rt-bar");
+    const color = document.createElement("input"); color.type = "color"; color.value = "#ffcc00";
+    const btn = (label, fn) => { const b = elx("button", "mini", label); b.onmousedown = (e) => e.preventDefault(); b.onclick = () => { ed.focus(); fn(); save(false); }; return b; };
+    bar.append(color,
+      btn("선택 색", () => document.execCommand("foreColor", false, color.value)),
+      btn("굵게", () => document.execCommand("bold")),
+      btn("서식 지움", () => document.execCommand("removeFormat")));
+    wrap.append(ed, bar); body.appendChild(wrap);
+  };
+
+  // 텍스트 효과(그림자·외곽선) — 텍스트·성경/가사 공통. 영상 위 가독성용.
+  const effectFields = () => {
+    body.appendChild(elx("div", "section-title", "효과"));
+    { const wrap = elx("label", null, "그림자");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!el.shadow;
+      cb.onchange = () => { el.shadow = cb.checked; repaintEls(); commitEls(); renderDesignPanel(); };
+      wrap.appendChild(cb); body.appendChild(wrap); }
+    if (el.shadow) {
+      field("그림자 색", "color", "shadow_color", { def: "#000000" });
+      numRow("그림자 번짐", "shadow_blur", { min: 0, max: 0.4, step: 0.02, def: 0.12 });
+    }
+    numRow("외곽선 두께(px)", "outline_width", { min: 0, max: 8, step: 0.5, def: 0 });
+    field("외곽선 색", "color", "outline_color", { def: "#000000" });
+  };
+
   if (el.type === "text") {
-    field("내용", "textarea", "text");
+    richTextField();
     sizeRow(1.5, 12);
     fontField();
-    field("색", "color", "color", { def: "#ffffff" });
+    field("색(전체 기본)", "color", "color", { def: "#ffffff" });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
     field("정렬(가로)", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
     field("정렬(세로)", "select", "valign", { options: [["middle", "가운데"], ["top", "위"], ["bottom", "아래"]] });
     numRow("줄 간격 (숫자)", "line_height", { min: 1, max: 2.6, step: 0.05, def: 1.3 });
+    effectFields();
   } else if (el.type === "shape") {
     if (el.shape !== "line") {
       field("채움색", "color", "fill", { def: "#7aa2f7" });
@@ -888,6 +924,7 @@ function renderDesignPanel() {
     }
     const refetch = elx("button", "mini accent", "다시 가져오기"); refetch.onclick = () => fetchContentElement(state.editEl);
     body.appendChild(refetch);
+    effectFields();   // 성경/찬송/교독문도 그림자·외곽선(영상 위 가독성)
   }
 
   const actions = elx("div", "el-actions");

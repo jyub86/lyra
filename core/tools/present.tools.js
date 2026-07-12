@@ -39,6 +39,24 @@ register({
 });
 
 register({
+  name: "present_set_service",
+  description: "발표 대상 서비스를 지정한다. 현재와 다르면 첫 슬라이드로 이동하고 발표 화면이 따라온다(같으면 유지). " +
+    "편집기가 현재 예배를 발표 화면과 동기화하는 데 쓴다 — 새 예배를 열면 발표 화면·새로고침도 그 예배를 따라간다.",
+  input_schema: {
+    type: "object",
+    properties: { service_id: { type: "string" } },
+    required: ["service_id"],
+  },
+  handler: ({ service_id }, { bus }) => {
+    if (service_id === current.service_id) return { ok: true, ...current };
+    current.service_id = service_id;
+    current.index = 0;
+    current.blackout = false;
+    return emit(bus, "goto");
+  },
+});
+
+register({
   name: "present_blackout",
   description: "발표 화면을 검은 화면으로 전환/해제한다.",
   input_schema: {

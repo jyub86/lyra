@@ -161,7 +161,12 @@ async function loadServices(selectId) {
     o.textContent = `${s.date} ${s.worship_part} · ${s.title}`;
     sel.appendChild(o);
   }
-  const target = selectId || state.services[0]?.id;
+  // 초기 로드(명시적 선택 없음)에선 현재 발표 중인 예배를 우선 선택 → 진행 중 발표를 끊지 않고 동기화.
+  let target = selectId;
+  if (!target) {
+    const ps = await callTool("get_presentation_state").catch(() => ({}));
+    target = (ps?.service_id && state.services.some((s) => s.id === ps.service_id)) ? ps.service_id : state.services[0]?.id;
+  }
   if (target) { sel.value = target; await selectService(target); }
   else { state.service = null; render(); }
 }
@@ -174,6 +179,9 @@ async function selectService(id) {
   setSingleSelection(slides()[0]?.id || null);
   resetHistory();          // 새 예배 → 실행취소 기록 초기화(현재 상태를 기준으로)
   render();
+  // 발표 화면 동기화: 현재 편집 중인 예배를 발표 대상으로(다르면 첫 슬라이드로, 같으면 유지).
+  // 새 세션을 열면 발표 화면 재오픈·새로고침도 이 예배를 따라온다.
+  callTool("present_set_service", { service_id: id }).catch(() => {});
 }
 
 // ===== 실행취소 / 다시실행 (⌘/Ctrl+Z · ⌘/Ctrl+Shift+Z) =====

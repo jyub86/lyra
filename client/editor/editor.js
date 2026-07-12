@@ -927,6 +927,9 @@ function renderDesignPanel() {
     effectFields();   // 성경/찬송/교독문도 그림자·외곽선(영상 위 가독성)
   }
 
+  // 투명도 — 모든 요소 공통(0=완전 투명, 1=불투명). 영상·이미지·도형·텍스트 모두 적용.
+  numRow("투명도 (0~1)", "opacity", { min: 0, max: 1, step: 0.05, def: 1 });
+
   const actions = elx("div", "el-actions");
   const front = elx("button", "mini", "맨 앞으로"); front.onclick = () => moveElZ(state.editEl, true);
   const back = elx("button", "mini", "맨 뒤로"); back.onclick = () => moveElZ(state.editEl, false);

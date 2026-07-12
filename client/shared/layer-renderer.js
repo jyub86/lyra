@@ -210,6 +210,7 @@ export function renderElements(root, elements, opts = {}) {
       applyTextEffects(n, e);
     }
     placeElement(n, e);
+    if (e.opacity != null) n.style.opacity = e.opacity;   // 요소 투명도(0~1). 기본=불투명
     root.appendChild(n);
   }
 }

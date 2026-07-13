@@ -109,11 +109,17 @@ a { color: var(--accent); text-decoration: none; }
   background: #1a1f2e; border: 1px solid #2a3350; border-radius: 8px;
   padding: 4px 6px; box-shadow: 0 6px 20px rgba(0,0,0,.5);
 }
-.inline-fmt input[type=color] {
-  width: 26px; height: 24px; padding: 0; border: none; background: none; cursor: pointer;
+.inline-fmt .fmt-sw {
+  width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.35); cursor: pointer;
+}
+.inline-fmt .fmt-sw:hover { transform: scale(1.15); }
+.inline-fmt .fmt-color {
+  width: 24px; height: 22px; padding: 0; border: 1px solid #2a3350; border-radius: 4px;
+  background: none; cursor: pointer;
 }
 .inline-fmt .fmt-btn {
-  min-width: 26px; height: 24px; padding: 0 6px; border-radius: 5px;
+  min-width: 24px; height: 22px; padding: 0 6px; border-radius: 5px;
   border: 1px solid #2a3350; background: #131722; color: #e8eaf0; cursor: pointer; font-weight: 700;
 }
 .inline-fmt .fmt-btn:hover { background: #202840; }

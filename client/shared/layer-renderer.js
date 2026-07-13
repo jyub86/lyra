@@ -198,8 +198,12 @@ export function renderElements(root, elements, opts = {}) {
       applyTextEffects(n, e);   // 성경/가사도 그림자·외곽선(영상 위 가독성)
     } else {
       n = el("div", "el el-text");
-      if (e.html) n.innerHTML = sanitizeHtml(e.html);   // 부분 색상 등 리치 텍스트
-      else n.textContent = e.text ?? "";
+      // 텍스트는 단일 내부 블록에 담는다. .el-text가 flex(세로정렬)라, 부분 색상으로
+      // 생기는 <font>+텍스트 조각이 각각 flex 아이템(=별도 줄)이 되는 것을 막는다.
+      const inner = el("div", "el-text-inner");
+      if (e.html) inner.innerHTML = sanitizeHtml(e.html);   // 부분 색상 등 리치 텍스트(inline 흐름 유지)
+      else inner.textContent = e.text ?? "";
+      n.appendChild(inner);
       n.style.fontSize = (e.size ?? 4) + "cqw";
       if (e.color) n.style.color = e.color;
       if (e.font) n.style.fontFamily = `'${e.font}', var(--font-family, sans-serif)`;

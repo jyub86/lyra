@@ -544,25 +544,30 @@ function isTypingTarget() {
 
 // ----- 인라인 편집용 플로팅 서식 바 (드래그로 글자 선택 → 색/굵기 적용) -----
 // 색 도구가 캔버스 위에 떠서, 선택을 유지한 채 부분 색상을 적용한다(패널로 가면 선택이 풀림).
+// 스와치(버튼)는 mousedown 기본동작을 막아 편집 포커스를 뺏지 않는다 → 색이 확실히 적용됨.
+const FMT_SWATCHES = ["#ffffff", "#ffd43b", "#ff6b6b", "#4dabf7", "#69db7c", "#000000"];
 let fmtBar = null, fmtNode = null, fmtRange = null;
 function getFmtBar() {
   if (fmtBar && fmtBar.isConnected) return fmtBar;
   const bar = elx("div", "inline-fmt"); bar.hidden = true;
-  const color = document.createElement("input");
-  color.type = "color"; color.value = "#ffcc00"; color.title = "선택한 글자 색";
-  color.addEventListener("input", () => applyFmt(() => document.execCommand("foreColor", false, color.value)));
-  const mk = (label, title, fn) => {
-    const b = elx("button", "fmt-btn", label); b.title = title;
-    b.onmousedown = (e) => e.preventDefault();     // 클릭해도 선택 유지
-    b.onclick = () => applyFmt(fn);
-    return b;
-  };
-  bar.append(color, mk("B", "굵게", () => document.execCommand("bold")), mk("✕", "서식 지움", () => document.execCommand("removeFormat")));
-  bar.addEventListener("mousedown", (e) => { if (e.target === bar) e.preventDefault(); });
+  const keepFocus = (b) => { b.onmousedown = (e) => e.preventDefault(); return b; };  // 편집 포커스 유지(색 확실히 적용)
+  for (const c of FMT_SWATCHES) {
+    const sw = keepFocus(elx("button", "fmt-sw")); sw.style.background = c; sw.title = c;
+    sw.onclick = () => applyFmt(() => document.execCommand("foreColor", false, c));
+    bar.appendChild(sw);
+  }
+  // 커스텀 색(네이티브 피커). 피커는 포커스를 가져가지만 저장된 선택을 복원해 적용한다(preventDefault 안 함=피커 열림).
+  const custom = document.createElement("input");
+  custom.type = "color"; custom.className = "fmt-color"; custom.value = "#ffcc00"; custom.title = "커스텀 색";
+  custom.addEventListener("input", () => applyFmt(() => document.execCommand("foreColor", false, custom.value)));
+  bar.appendChild(custom);
+  const mk = (label, title, fn) => { const b = keepFocus(elx("button", "fmt-btn", label)); b.title = title; b.onclick = () => applyFmt(fn); return b; };
+  bar.append(mk("B", "굵게", () => document.execCommand("bold")), mk("✕", "서식 지움", () => document.execCommand("removeFormat")));
   document.body.appendChild(bar);
   fmtBar = bar; return bar;
 }
 function hideFmtBar() { if (fmtBar) fmtBar.hidden = true; }
+function fmtBarHasFocus() { return !!(fmtBar && fmtBar.contains(document.activeElement)); }
 // 저장해둔 선택영역을 복원한 뒤 서식 적용 → el에 라이브 저장(커밋은 blur).
 function applyFmt(fn) {
   if (fmtNode == null || state.inlineEdit == null) return;
@@ -574,10 +579,16 @@ function applyFmt(fn) {
   const el = els()[state.inlineEdit];
   if (el) { el.html = fmtNode.innerHTML; el.text = fmtNode.innerText; }
 }
+// 편집 대상 = 렌더된 텍스트의 내부 블록(.el-text-inner).
+function inlineNode(i) {
+  const box = $("preview")?.querySelectorAll(":scope > .layer-elements > .el")[i];
+  return box ? (box.querySelector(".el-text-inner") || box) : null;
+}
 // 인라인 편집 중, 노드 안에서 드래그 선택하면 서식 바를 선택 위에 띄운다.
 document.addEventListener("selectionchange", () => {
   if (state.inlineEdit == null) { hideFmtBar(); return; }
-  const node = $("preview")?.querySelectorAll(":scope > .layer-elements > .el")[state.inlineEdit];
+  if (fmtBarHasFocus()) return;                       // 바(커스텀 색 피커) 조작 중엔 유지
+  const node = inlineNode(state.inlineEdit);
   const sel = window.getSelection();
   if (!node || !sel.rangeCount) { hideFmtBar(); return; }
   const range = sel.getRangeAt(0);
@@ -601,9 +612,10 @@ function startInlineEdit(i, opts = {}) {
   const pv = $("preview");
   const layer = pv.querySelector(":scope > .edit-layer");
   if (layer) layer.style.pointerEvents = "none";     // 렌더 노드가 클릭/커서를 받도록
-  const node = pv.querySelectorAll(":scope > .layer-elements > .el")[i];
+  const box = pv.querySelectorAll(":scope > .layer-elements > .el")[i];
+  const node = box ? (box.querySelector(".el-text-inner") || box) : null;
   if (!node) { state.inlineEdit = null; if (layer) layer.style.pointerEvents = ""; return; }
-  node.classList.add("inline-editing");
+  box.classList.add("inline-editing");
   node.contentEditable = "true";
   node.spellcheck = false;
   if (el.html) node.innerHTML = el.html; else node.textContent = el.text ?? "";  // 편집용 원본
@@ -617,12 +629,14 @@ function startInlineEdit(i, opts = {}) {
     if (e.key === "Escape") { e.preventDefault(); node.blur(); return; }
     e.stopPropagation();                             // 전역 단축키로 새지 않게(Del 등)
   };
-  const finish = () => {
+  const finish = (ev) => {
+    // 서식 바(커스텀 색 피커 등)로 포커스가 옮겨간 blur면 편집을 끝내지 않는다.
+    if (ev && fmtBar && (fmtBar.contains(ev.relatedTarget) || fmtBarHasFocus())) return;
     node.removeEventListener("input", onInput);
     node.removeEventListener("keydown", onKey);
     node.removeEventListener("blur", finish);
     node.contentEditable = "false";
-    node.classList.remove("inline-editing");
+    box.classList.remove("inline-editing");
     state.inlineEdit = null;
     hideFmtBar(); fmtNode = null;                     // 플로팅 서식 바 닫기
     if (layer) layer.style.pointerEvents = "";       // edit-layer는 refresh에도 재사용되므로 꼭 복구

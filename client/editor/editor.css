@@ -96,6 +96,12 @@ a { color: var(--accent); text-decoration: none; }
 .eh .handle.ne { right: -5px; top: -5px; cursor: nesw-resize; }
 .eh .handle.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
 .eh .handle.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+/* 캔버스 인라인 텍스트 편집 중인 요소 */
+.slide-layers .el.inline-editing {
+  outline: 2px solid var(--accent, #7aa2f7); outline-offset: 2px;
+  cursor: text; caret-color: var(--accent, #7aa2f7);
+  overflow: visible;   /* 편집 중엔 잘리지 않게 */
+}
 /* snap guide lines */
 .guide-v { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed #f7768e; pointer-events: none; z-index: 6; }
 .guide-h { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed #f7768e; pointer-events: none; z-index: 6; }

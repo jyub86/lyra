@@ -15,6 +15,7 @@ const state = {
   mode: "list",         // "list" | "tiles"
   editEl: null,         // primary selected element index (design panel/resize)
   editElSet: new Set(), // selected element indices (drag-marquee multi-select)
+  inlineEdit: null,     // 캔버스에서 인라인 편집 중인 텍스트 요소 index (null=아님)
   templates: [],        // design templates (cached)
   editingTemplate: null, // { id, name, kind, draft } while editing a template's design
   fonts: [],            // self-host 웹폰트 목록 (list_fonts)
@@ -428,7 +429,10 @@ function renderEditLayer() {
     }, true);
     layer.addEventListener("dblclick", (e) => {
       e.preventDefault();
-      if (layer._dblIndex >= 0) focusElementContent(layer._dblIndex);
+      if (layer._dblIndex < 0) return;
+      // 텍스트는 캔버스에서 바로 인라인 편집, 콘텐츠 요소(성경/찬송/교독)는 패널 params로.
+      if (els()[layer._dblIndex]?.type === "text") startInlineEdit(layer._dblIndex);
+      else focusElementContent(layer._dblIndex);
     });
     pv.appendChild(layer);
   }
@@ -530,6 +534,57 @@ function focusElementContent(i) {
   }
 }
 
+// 입력 중(텍스트 필드·contentEditable)인지 — 전역 단축키(Del/방향키/복사 등)가
+// 편집을 가로채지 않도록 가드에 사용.
+function isTypingTarget() {
+  const a = document.activeElement;
+  if (!a) return false;
+  return a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable;
+}
+
+// 캔버스에서 텍스트 요소를 바로 인라인 편집(더블클릭·텍스트 추가 시). 렌더된 노드를
+// contentEditable로 만들어 그 자리에서 입력 → blur/Esc에 저장. 편집 중엔 edit-layer를
+// 통과시켜(pointer-events:none) 커서·선택이 노드에 닿게 한다.
+function startInlineEdit(i, opts = {}) {
+  const el = els()[i];
+  if (!el || el.type !== "text") { focusElementContent(i); return; }
+  selectEl(i);                                       // 선택 + 디자인 탭 + 패널
+  state.inlineEdit = i;
+  const pv = $("preview");
+  const layer = pv.querySelector(":scope > .edit-layer");
+  if (layer) layer.style.pointerEvents = "none";     // 렌더 노드가 클릭/커서를 받도록
+  const node = pv.querySelectorAll(":scope > .layer-elements > .el")[i];
+  if (!node) { state.inlineEdit = null; if (layer) layer.style.pointerEvents = ""; return; }
+  node.classList.add("inline-editing");
+  node.contentEditable = "true";
+  node.spellcheck = false;
+  if (el.html) node.innerHTML = el.html; else node.textContent = el.text ?? "";  // 편집용 원본
+  node.focus();
+  const sel = window.getSelection(), range = document.createRange();
+  range.selectNodeContents(node);
+  if (!opts.selectAll) range.collapse(false);        // 기본: 커서 끝 / 새 요소: 전체 선택
+  sel.removeAllRanges(); sel.addRange(range);
+  const onInput = () => { el.html = node.innerHTML; el.text = node.innerText; };  // 라이브(리페인트 X: 포커스 유지)
+  const onKey = (e) => {
+    if (e.key === "Escape") { e.preventDefault(); node.blur(); return; }
+    e.stopPropagation();                             // 전역 단축키로 새지 않게(Del 등)
+  };
+  const finish = () => {
+    node.removeEventListener("input", onInput);
+    node.removeEventListener("keydown", onKey);
+    node.removeEventListener("blur", finish);
+    node.contentEditable = "false";
+    node.classList.remove("inline-editing");
+    state.inlineEdit = null;
+    if (layer) layer.style.pointerEvents = "";       // edit-layer는 refresh에도 재사용되므로 꼭 복구
+    el.html = node.innerHTML; el.text = node.innerText;
+    commitEls();                                     // 저장 + refresh(정식 렌더로 복귀)
+  };
+  node.addEventListener("input", onInput);
+  node.addEventListener("keydown", onKey);
+  node.addEventListener("blur", finish);
+}
+
 function startMove(e, i) {
   if (e.button !== 0) return;
   e.preventDefault(); e.stopPropagation();
@@ -611,6 +666,7 @@ async function addElement(kind, extra) {
   state.editEl = slide.elements.length - 1;
   await commitEls();
   selectEl(state.editEl);
+  if (kind === "text") startInlineEdit(state.editEl, { selectAll: true }); // 추가하자마자 캔버스에서 입력
 }
 
 function deleteEl(i) {
@@ -1671,8 +1727,7 @@ function init() {
   // 복사/붙여넣기 (⌘/Ctrl+C·V):
   //  - 요소가 선택돼 있으면 요소를, 아니면 슬라이드(리스트·타일 멀티셀렉)를 대상으로.
   document.addEventListener("keydown", (e) => {
-    const tag = document.activeElement?.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (isTypingTarget()) return;   // 입력·인라인 편집 중엔 전역 단축키 무시
     // 요소 선택이 없을 때 Del/Backspace → 선택한 순서 삭제(멀티셀렉 한 번에).
     // (요소가 선택된 경우는 요소 삭제 핸들러가 처리)
     if (state.editEl == null && (e.key === "Delete" || e.key === "Backspace")) {
@@ -1720,8 +1775,7 @@ function init() {
   // keyboard: Delete removes selected element, arrows nudge
   document.addEventListener("keydown", (e) => {
     if (state.mode !== "list" || state.editEl == null) return;
-    const tag = document.activeElement?.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (isTypingTarget()) return;   // 입력·인라인 편집 중엔 Del/방향키가 요소를 지우거나 옮기지 않게
     const group = [...state.editElSet].map((gi) => els()[gi]).filter(Boolean);
     if (!group.length) return;
     if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); deleteSelectedEls(); }

@@ -109,6 +109,7 @@ a { color: var(--accent); text-decoration: none; }
   background: #1a1f2e; border: 1px solid #2a3350; border-radius: 8px;
   padding: 4px 6px; box-shadow: 0 6px 20px rgba(0,0,0,.5);
 }
+.inline-fmt .fmt-swatches { display: flex; gap: 4px; align-items: center; }
 .inline-fmt .fmt-sw {
   width: 20px; height: 20px; padding: 0; border-radius: 50%;
   border: 1px solid rgba(255,255,255,.35); cursor: pointer;

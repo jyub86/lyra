@@ -544,27 +544,45 @@ function isTypingTarget() {
 
 // ----- 인라인 편집용 플로팅 서식 바 (드래그로 글자 선택 → 색/굵기 적용) -----
 // 색 도구가 캔버스 위에 떠서, 선택을 유지한 채 부분 색상을 적용한다(패널로 가면 선택이 풀림).
-// 스와치(버튼)는 mousedown 기본동작을 막아 편집 포커스를 뺏지 않는다 → 색이 확실히 적용됨.
-const FMT_SWATCHES = ["#ffffff", "#ffd43b", "#ff6b6b", "#4dabf7", "#69db7c", "#000000"];
+// 스와치=최근 쓴 색 6종(부족하면 기본색으로 채움). 버튼은 mousedown 기본동작을 막아
+// 편집 포커스를 뺏지 않는다 → 색이 확실히 적용됨.
+const FMT_DEFAULT_COLORS = ["#ffffff", "#ffd43b", "#ff6b6b", "#4dabf7", "#69db7c", "#000000"];
+function fmtSwatchColors() {
+  const out = [...recentColors()];                    // 최근 색 우선
+  for (const c of FMT_DEFAULT_COLORS) { if (out.length >= 6) break; if (!out.includes(c.toLowerCase())) out.push(c); }
+  return out.slice(0, 6);
+}
 let fmtBar = null, fmtNode = null, fmtRange = null;
 function getFmtBar() {
   if (fmtBar && fmtBar.isConnected) return fmtBar;
   const bar = elx("div", "inline-fmt"); bar.hidden = true;
-  const keepFocus = (b) => { b.onmousedown = (e) => e.preventDefault(); return b; };  // 편집 포커스 유지(색 확실히 적용)
-  for (const c of FMT_SWATCHES) {
-    const sw = keepFocus(elx("button", "fmt-sw")); sw.style.background = c; sw.title = c;
-    sw.onclick = () => applyFmt(() => document.execCommand("foreColor", false, c));
-    bar.appendChild(sw);
-  }
+  bar.appendChild(elx("div", "fmt-swatches"));        // 최근 색(보여줄 때마다 채움)
   // 커스텀 색(네이티브 피커). 피커는 포커스를 가져가지만 저장된 선택을 복원해 적용한다(preventDefault 안 함=피커 열림).
   const custom = document.createElement("input");
   custom.type = "color"; custom.className = "fmt-color"; custom.value = "#ffcc00"; custom.title = "커스텀 색";
-  custom.addEventListener("input", () => applyFmt(() => document.execCommand("foreColor", false, custom.value)));
+  custom.addEventListener("input", () => applyColor(custom.value));
   bar.appendChild(custom);
+  const keepFocus = (b) => { b.onmousedown = (e) => e.preventDefault(); return b; };  // 편집 포커스 유지
   const mk = (label, title, fn) => { const b = keepFocus(elx("button", "fmt-btn", label)); b.title = title; b.onclick = () => applyFmt(fn); return b; };
   bar.append(mk("B", "굵게", () => document.execCommand("bold")), mk("✕", "서식 지움", () => document.execCommand("removeFormat")));
   document.body.appendChild(bar);
   fmtBar = bar; return bar;
+}
+// 최근 색 스와치를 다시 그린다(바를 띄울 때마다). 최근에 쓴 색이 앞으로 온다.
+function renderFmtSwatches() {
+  const sws = fmtBar?.querySelector(".fmt-swatches");
+  if (!sws) return;
+  sws.replaceChildren();
+  for (const c of fmtSwatchColors()) {
+    const sw = elx("button", "fmt-sw"); sw.style.background = c; sw.title = c;
+    sw.onmousedown = (e) => e.preventDefault();       // 포커스 유지(색 확실히 적용)
+    sw.onclick = () => applyColor(c);
+    sws.appendChild(sw);
+  }
+}
+function applyColor(hex) {
+  applyFmt(() => document.execCommand("foreColor", false, hex));
+  pushRecentColor(hex);                                // 방금 쓴 색을 최근 목록 맨 앞으로
 }
 function hideFmtBar() { if (fmtBar) fmtBar.hidden = true; }
 function fmtBarHasFocus() { return !!(fmtBar && fmtBar.contains(document.activeElement)); }
@@ -595,6 +613,7 @@ document.addEventListener("selectionchange", () => {
   if (range.collapsed || !node.contains(range.commonAncestorContainer)) { hideFmtBar(); return; }
   fmtNode = node; fmtRange = range.cloneRange();
   const bar = getFmtBar();
+  renderFmtSwatches();                                 // 최근 색으로 갱신
   const r = range.getBoundingClientRect();
   bar.hidden = false;
   bar.style.left = (r.left + r.width / 2) + "px";

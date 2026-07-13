@@ -102,6 +102,21 @@ a { color: var(--accent); text-decoration: none; }
   cursor: text; caret-color: var(--accent, #7aa2f7);
   overflow: visible;   /* 편집 중엔 잘리지 않게 */
 }
+/* 인라인 편집 중 선택 위에 뜨는 플로팅 서식 바 */
+.inline-fmt {
+  position: fixed; z-index: 9999; transform: translate(-50%, -100%);
+  display: flex; gap: 4px; align-items: center;
+  background: #1a1f2e; border: 1px solid #2a3350; border-radius: 8px;
+  padding: 4px 6px; box-shadow: 0 6px 20px rgba(0,0,0,.5);
+}
+.inline-fmt input[type=color] {
+  width: 26px; height: 24px; padding: 0; border: none; background: none; cursor: pointer;
+}
+.inline-fmt .fmt-btn {
+  min-width: 26px; height: 24px; padding: 0 6px; border-radius: 5px;
+  border: 1px solid #2a3350; background: #131722; color: #e8eaf0; cursor: pointer; font-weight: 700;
+}
+.inline-fmt .fmt-btn:hover { background: #202840; }
 /* snap guide lines */
 .guide-v { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed #f7768e; pointer-events: none; z-index: 6; }
 .guide-h { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed #f7768e; pointer-events: none; z-index: 6; }

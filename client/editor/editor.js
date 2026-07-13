@@ -542,6 +542,54 @@ function isTypingTarget() {
   return a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable;
 }
 
+// ----- 인라인 편집용 플로팅 서식 바 (드래그로 글자 선택 → 색/굵기 적용) -----
+// 색 도구가 캔버스 위에 떠서, 선택을 유지한 채 부분 색상을 적용한다(패널로 가면 선택이 풀림).
+let fmtBar = null, fmtNode = null, fmtRange = null;
+function getFmtBar() {
+  if (fmtBar && fmtBar.isConnected) return fmtBar;
+  const bar = elx("div", "inline-fmt"); bar.hidden = true;
+  const color = document.createElement("input");
+  color.type = "color"; color.value = "#ffcc00"; color.title = "선택한 글자 색";
+  color.addEventListener("input", () => applyFmt(() => document.execCommand("foreColor", false, color.value)));
+  const mk = (label, title, fn) => {
+    const b = elx("button", "fmt-btn", label); b.title = title;
+    b.onmousedown = (e) => e.preventDefault();     // 클릭해도 선택 유지
+    b.onclick = () => applyFmt(fn);
+    return b;
+  };
+  bar.append(color, mk("B", "굵게", () => document.execCommand("bold")), mk("✕", "서식 지움", () => document.execCommand("removeFormat")));
+  bar.addEventListener("mousedown", (e) => { if (e.target === bar) e.preventDefault(); });
+  document.body.appendChild(bar);
+  fmtBar = bar; return bar;
+}
+function hideFmtBar() { if (fmtBar) fmtBar.hidden = true; }
+// 저장해둔 선택영역을 복원한 뒤 서식 적용 → el에 라이브 저장(커밋은 blur).
+function applyFmt(fn) {
+  if (fmtNode == null || state.inlineEdit == null) return;
+  fmtNode.focus();
+  if (fmtRange) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(fmtRange); }
+  fn();
+  const s2 = window.getSelection();
+  if (s2.rangeCount && !s2.getRangeAt(0).collapsed) fmtRange = s2.getRangeAt(0).cloneRange();  // 적용 후 갱신
+  const el = els()[state.inlineEdit];
+  if (el) { el.html = fmtNode.innerHTML; el.text = fmtNode.innerText; }
+}
+// 인라인 편집 중, 노드 안에서 드래그 선택하면 서식 바를 선택 위에 띄운다.
+document.addEventListener("selectionchange", () => {
+  if (state.inlineEdit == null) { hideFmtBar(); return; }
+  const node = $("preview")?.querySelectorAll(":scope > .layer-elements > .el")[state.inlineEdit];
+  const sel = window.getSelection();
+  if (!node || !sel.rangeCount) { hideFmtBar(); return; }
+  const range = sel.getRangeAt(0);
+  if (range.collapsed || !node.contains(range.commonAncestorContainer)) { hideFmtBar(); return; }
+  fmtNode = node; fmtRange = range.cloneRange();
+  const bar = getFmtBar();
+  const r = range.getBoundingClientRect();
+  bar.hidden = false;
+  bar.style.left = (r.left + r.width / 2) + "px";
+  bar.style.top = (r.top - 8) + "px";
+});
+
 // 캔버스에서 텍스트 요소를 바로 인라인 편집(더블클릭·텍스트 추가 시). 렌더된 노드를
 // contentEditable로 만들어 그 자리에서 입력 → blur/Esc에 저장. 편집 중엔 edit-layer를
 // 통과시켜(pointer-events:none) 커서·선택이 노드에 닿게 한다.
@@ -576,6 +624,7 @@ function startInlineEdit(i, opts = {}) {
     node.contentEditable = "false";
     node.classList.remove("inline-editing");
     state.inlineEdit = null;
+    hideFmtBar(); fmtNode = null;                     // 플로팅 서식 바 닫기
     if (layer) layer.style.pointerEvents = "";       // edit-layer는 refresh에도 재사용되므로 꼭 복구
     el.html = node.innerHTML; el.text = node.innerText;
     commitEls();                                     // 저장 + refresh(정식 렌더로 복귀)
@@ -855,12 +904,23 @@ function renderDesignPanel() {
     ed.className = "rt-editor"; ed.contentEditable = "true"; ed.dataset.field = "text";
     if (el.html) ed.innerHTML = el.html; else ed.textContent = el.text ?? "";
     const save = (commit) => { el.html = ed.innerHTML; el.text = ed.innerText; repaintEls(); if (commit) commitEls(); };
-    ed.addEventListener("input", () => save(false));   // 타이핑: 라이브 미리보기(커밋은 blur에)
+    // 선택영역 추적: 색 입력(네이티브 피커) 상호작용으로 선택이 풀려도 복원해 적용.
+    let range = null;
+    const track = () => { const s = window.getSelection(); if (s.rangeCount && ed.contains(s.anchorNode)) range = s.getRangeAt(0).cloneRange(); };
+    ed.addEventListener("keyup", track);
+    ed.addEventListener("mouseup", track);
+    ed.addEventListener("input", () => { track(); save(false); });  // 타이핑: 라이브(커밋은 blur)
     ed.addEventListener("blur", () => save(true));
+    const apply = (fn) => {
+      ed.focus();
+      if (range) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(range); }
+      fn(); track(); save(false);
+    };
     // 서식 툴바
     const bar = elx("div", "rt-bar");
-    const color = document.createElement("input"); color.type = "color"; color.value = "#ffcc00";
-    const btn = (label, fn) => { const b = elx("button", "mini", label); b.onmousedown = (e) => e.preventDefault(); b.onclick = () => { ed.focus(); fn(); save(false); }; return b; };
+    const color = document.createElement("input"); color.type = "color"; color.value = "#ffcc00"; color.title = "선택한 글자 색";
+    color.addEventListener("input", () => apply(() => document.execCommand("foreColor", false, color.value)));
+    const btn = (label, fn) => { const b = elx("button", "mini", label); b.onmousedown = (e) => e.preventDefault(); b.onclick = () => apply(fn); return b; };
     bar.append(color,
       btn("선택 색", () => document.execCommand("foreColor", false, color.value)),
       btn("굵게", () => document.execCommand("bold")),

@@ -3,11 +3,12 @@
 // single images pass through. Each page/image becomes a slide with one full-bleed
 // image element on a black background. Shared by /api/import and import_pdf tool.
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { saveUpload } from "./uploads.js";
 import { findPoppler } from "./poppler.js";
+import { getCached, putCached } from "./render-cache.js";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // presentation docs LibreOffice can read
@@ -81,7 +82,8 @@ function imageSlide(url) {
   };
 }
 
-async function pdfToImageUrls(bytes) {
+// PDF 바이트 → 페이지별 PNG 버퍼 배열(순서대로). 저장/캐시 결정은 호출자 몫.
+async function pdfBytesToPngBuffers(bytes) {
   const pdftoppm = findPoppler("pdftoppm");
   if (!pdftoppm) {
     throw new Error("PDF→이미지 변환 도구(poppler)가 없습니다. macOS: brew install poppler · Windows: poppler 압축본을 tools/ 폴더에 풀거나 LYRA_POPPLER로 지정(PATH 등록도 가능) · Linux: apt install poppler-utils");
@@ -96,24 +98,30 @@ async function pdfToImageUrls(bytes) {
       throw new Error("pdftoppm 변환 실패 (poppler 확인). PPT는 LibreOffice로 자동 변환됩니다.");
     }
     const pages = readdirSync(dir).filter((f) => f.startsWith("page") && f.endsWith(".png")).sort();
-    // 페이지 이미지 저장은 서로 독립 → 병렬로(디스크 쓰기 대기 시간 겹침). await 후 반환해
-    // tmp 정리(finally)가 쓰기 완료 뒤에 일어나게 한다.
-    return await Promise.all(pages.map((f) =>
-      saveUpload(f.replace(/^page/, "slide"), readFileSync(join(dir, f))).then((r) => r.url)));
+    return pages.map((f) => readFileSync(join(dir, f)));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
-// Returns an array of slide objects ({ background, elements }) for the file.
+// 업로드(경로 없음, 캐시 불가) 경로 — 페이지 버퍼를 uploads에 저장하고 URL 배열 반환.
+async function buffersToUploadUrls(buffers) {
+  return await Promise.all(buffers.map((buf) => saveUpload("slide.png", buf).then((r) => r.url)));
+}
+
+// 파일(office/pdf) → 페이지 PNG 버퍼. office는 먼저 PDF로 변환.
+async function renderFileToBuffers(filename, bytes) {
+  const ext = "." + (filename.split(".").pop() || "").toLowerCase();
+  if (OFFICE_EXT.has(ext)) return await pdfBytesToPngBuffers(await officeToPdf(filename, bytes));
+  if (ext === ".pdf") return await pdfBytesToPngBuffers(bytes);
+  return null; // 이미지 등은 렌더 대상 아님
+}
+
+// 업로드 바이트 → 슬라이드 배열(캐시 없음). /api/import(브라우저 업로드)용.
 export async function fileToSlides(filename, bytes) {
   const ext = "." + (filename.split(".").pop() || "").toLowerCase();
-  if (OFFICE_EXT.has(ext)) { // .pptx/.ppt/… → PDF via LibreOffice → images
-    const pdf = await officeToPdf(filename, bytes);
-    return (await pdfToImageUrls(pdf)).map(imageSlide);
-  }
-  if (ext === ".pdf") {
-    return (await pdfToImageUrls(bytes)).map(imageSlide);
+  if (OFFICE_EXT.has(ext) || ext === ".pdf") {
+    return (await buffersToUploadUrls(await renderFileToBuffers(filename, bytes))).map(imageSlide);
   }
   if (IMAGE_EXT.has(ext)) {
     const { url } = await saveUpload(filename, bytes);
@@ -121,3 +129,34 @@ export async function fileToSlides(filename, bytes) {
   }
   throw new Error(`지원하지 않는 형식: ${ext} (PPT/PDF/이미지). LibreOffice 미설치 시 PPT는 PDF로 내보내세요.`);
 }
+
+// 서버 경로 파일 → 슬라이드 배열. 렌더 캐시 사용(경로+mtime): 히트면 변환 없이 즉시,
+// 미스면 렌더 후 캐시. 라이브러리·import_pdf(자주 쓰는 PPT)의 빠른 가져오기용.
+export async function fileToSlidesFromPath(path) {
+  const ext = extname(path).toLowerCase();
+  if (IMAGE_EXT.has(ext)) { // 이미지는 변환 불필요 — 그대로 업로드
+    const { url } = await saveUpload(basename(path), readFileSync(path));
+    return [imageSlide(url)];
+  }
+  if (!OFFICE_EXT.has(ext) && ext !== ".pdf") {
+    throw new Error(`지원하지 않는 형식: ${ext} (PPT/PDF/이미지). LibreOffice 미설치 시 PPT는 PDF로 내보내세요.`);
+  }
+  const hit = getCached(path, RENDER_WIDTH);
+  if (hit) return hit.urls.map(imageSlide);                 // 캐시 히트 → 즉시
+  const buffers = await renderFileToBuffers(basename(path), readFileSync(path));
+  const { urls } = putCached(path, RENDER_WIDTH, buffers);  // 렌더 후 캐시
+  return urls.map(imageSlide);
+}
+
+// 캐시만 채운다(가져오지 않음). 미리 변환(prerender)용. 이미 신선하면 렌더 생략.
+// 반환: { pages, cached(true=이번에 렌더), skipped(true=이미 캐시) }
+export async function prerenderPath(path, force = false) {
+  const ext = extname(path).toLowerCase();
+  if (!OFFICE_EXT.has(ext) && ext !== ".pdf") return { pages: 0, skipped: true }; // 이미지 등은 대상 아님
+  if (!force && getCached(path, RENDER_WIDTH)) return { pages: getCached(path, RENDER_WIDTH).urls.length, skipped: true };
+  const buffers = await renderFileToBuffers(basename(path), readFileSync(path));
+  const { urls } = putCached(path, RENDER_WIDTH, buffers);
+  return { pages: urls.length, cached: true };
+}
+
+export { RENDER_WIDTH };

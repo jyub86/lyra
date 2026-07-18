@@ -1751,23 +1751,35 @@ async function reindexLibrary() {
   finally { hideBusy(); }
 }
 
+let libResults = [];   // 마지막 검색 결과(미리 변환 대상)
+
 async function searchLibrary() {
   const q = $("lib-query").value.trim();
-  if (!q) { renderLibResults([]); return; }
+  if (!q) { libResults = []; renderLibResults([]); return; }
   try {
     const { results } = await callTool("search_library", { query: q });
+    libResults = results;
     renderLibResults(results);
   } catch (e) { $("lib-results").innerHTML = `<div class="lib-empty">${e.message}</div>`; }
 }
 
+const RENDERABLE_EXT = new Set([".pptx", ".ppt", ".odp", ".pdf"]);
+
 function renderLibResults(results) {
   const root = $("lib-results");
   root.replaceChildren();
+  // 미리 변환 버튼: 렌더 대상 중 아직 캐시 안 된 게 있으면 활성화
+  const prBtn = $("lib-prerender");
+  const pending = results.filter((r) => RENDERABLE_EXT.has(r.ext) && !r.cached).length;
+  if (prBtn) { prBtn.disabled = pending === 0; prBtn.textContent = pending ? `⚡ 미리 변환 (${pending})` : "⚡ 모두 변환됨"; }
   if (!results.length) { root.innerHTML = '<div class="lib-empty">검색어를 입력하세요. 제목과 슬라이드 내용에서 찾습니다.</div>'; return; }
   for (const r of results) {
     const row = elx("div", "lib-row");
     const info = elx("div", "info");
-    info.append(elx("div", "fname", r.name));
+    const fname = elx("div", "fname", r.name);
+    // 미리 변환돼 있으면 ⚡ 배지(가져오기 즉시)
+    if (RENDERABLE_EXT.has(r.ext) && r.cached) fname.append(elx("span", "cached-badge", "⚡ 빠름"));
+    info.append(fname);
     info.append(elx("div", "fmeta", `${r.relpath}${r.pages ? " · " + r.pages + "장" : ""}`));
     if (r.snippet) info.append(elx("div", "snip", r.snippet));
     const tag = elx("span", "mtag" + (r.matched_in === "content" ? " content" : ""), r.matched_in === "content" ? "내용" : "제목");
@@ -1776,6 +1788,19 @@ function renderLibResults(results) {
     row.append(info, tag, imp);
     root.appendChild(row);
   }
+}
+
+// 현재 검색 결과의 PPT/PDF를 미리 이미지로 변환(캐시) → 이후 가져오기가 즉시.
+async function prerenderLibResults() {
+  const paths = libResults.filter((r) => RENDERABLE_EXT.has(r.ext) && !r.cached).map((r) => r.path);
+  if (!paths.length) return;
+  const btn = $("lib-prerender");
+  btn.disabled = true; btn.textContent = `⚡ 변환 중… (0/${paths.length})`;
+  try {
+    const res = await callTool("prerender_library", { paths });
+    toast(`${res.rendered}개 미리 변환 완료 (${res.pages}장) — 이제 즉시 가져옵니다`);
+    await searchLibrary();   // cached 플래그 갱신
+  } catch (e) { toast("미리 변환 실패: " + e.message); btn.disabled = false; }
 }
 
 async function importFromLibrary(r) {
@@ -1980,6 +2005,7 @@ function init() {
   $("lib-save").onclick = saveLibraryDir;
   $("lib-reindex").onclick = () => reindexLibrary();
   $("lib-query").addEventListener("input", () => { clearTimeout(libSearchTimer); libSearchTimer = setTimeout(searchLibrary, 250); });
+  $("lib-prerender").onclick = prerenderLibResults;
   $("library-modal").addEventListener("mousedown", (e) => { if (e.target === $("library-modal")) closeLibrary(); });
   // 성구 모달
   $("bibleref-btn").onclick = openBibleRef;

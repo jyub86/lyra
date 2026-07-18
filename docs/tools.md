@@ -4,7 +4,7 @@
 > 개념 모델·연결 방법·워크플로우는 [AGENTS.md](./AGENTS.md) 참고.
 > 런타임에서 최신 스키마 확인: CLI `bun run cli schema <이름>`, MCP `tools/list`.
 
-총 **54개** 도구.
+총 **55개** 도구.
 
 ## 읽기 · 콘텐츠 검색 (LLM 그라운딩)
 
@@ -504,4 +504,13 @@ _(입력 없음)_
 | `refs` | array[object] |  |  | 구조화된 참조 배열(parse_bible_refs 결과). 있으면 text 대신 사용. |
 | `layout` | string (auto\|one-per-verse\|all-in-one) |  | `"auto"` |  |
 | `position` | integer |  |  | 삽입 시작 위치(생략 시 맨 끝) |
+
+### `prerender_library`  _(쓰기)_
+
+라이브러리 PPT/PDF를 미리 이미지로 변환해 캐시한다 → 이후 가져오기가 즉시. paths(파일 경로 배열) 지정 시 그 파일만, 없으면 색인된 전체(오래 걸릴 수 있음). 이미 캐시된 신선한 파일은 건너뛴다.
+
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `paths` | array[string] |  |  | 미리 변환할 파일 경로 배열(생략 시 전체) |
+| `force` | boolean |  | `false` | true면 이미 캐시돼 있어도 다시 변환 |
 

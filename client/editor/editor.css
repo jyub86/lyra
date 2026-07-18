@@ -162,6 +162,10 @@ a { color: var(--accent); text-decoration: none; }
 .lib-row .snip { font-size: 12px; color: var(--congregation); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lib-row .mtag { font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
 .lib-row .mtag.content { color: var(--accent); border-color: var(--accent); }
+.lib-row .cached-badge { margin-left: 8px; font-size: 10px; font-weight: 600; color: #69db7c; border: 1px solid #69db7c55; border-radius: 4px; padding: 1px 5px; }
+.lib-search { display: flex; gap: 6px; align-items: center; }
+.lib-search input { flex: 1; width: auto; }
+#lib-prerender { white-space: nowrap; }
 .lib-empty { color: var(--muted); text-align: center; padding: 20px; }
 
 /* busy overlay (imports & other long ops) */

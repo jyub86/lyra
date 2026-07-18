@@ -5,7 +5,11 @@ import { register } from "./registry.js";
 import { readdirSync, statSync, existsSync } from "node:fs";
 import { join, relative, basename, extname } from "node:path";
 import { extractText, SUPPORTED_EXT } from "../lib/ppt-extract.js";
+import { prerenderPath, RENDER_WIDTH } from "../lib/pdf-import.js";
+import { isCached } from "../lib/render-cache.js";
 import { nowIso } from "./_helpers.js";
+
+const RENDERABLE = new Set([".pptx", ".ppt", ".odp", ".pdf"]); // 미리 변환 대상(이미지 제외)
 
 function getSetting(db, key) {
   return db.query("SELECT value FROM settings WHERE key = ?").get(key)?.value ?? null;
@@ -128,8 +132,38 @@ register({
         for (const t of lterms) { const i = ltext.indexOf(t); if (i >= 0 && (best < 0 || i < best)) { best = i; blen = t.length; } }
         if (best >= 0) { const s = Math.max(0, best - 30); snippet = (s > 0 ? "…" : "") + r.text.slice(s, best + blen + 40).trim() + "…"; }
       }
-      return { path: r.path, name: r.name, relpath: r.relpath, ext: r.ext, pages: r.pages, matched_in: inName ? "name" : "content", snippet };
+      // cached=true면 미리 변환돼 있어 가져오기가 즉시(변환 없음).
+      const cached = RENDERABLE.has(r.ext) ? isCached(r.path, RENDER_WIDTH) : true;
+      return { path: r.path, name: r.name, relpath: r.relpath, ext: r.ext, pages: r.pages, matched_in: inName ? "name" : "content", snippet, cached };
     });
     return { results };
+  },
+});
+
+register({
+  name: "prerender_library",
+  description: "라이브러리 PPT/PDF를 미리 이미지로 변환해 캐시한다 → 이후 가져오기가 즉시. paths(파일 경로 배열) 지정 시 그 파일만, 없으면 색인된 전체(오래 걸릴 수 있음). 이미 캐시된 신선한 파일은 건너뛴다.",
+  input_schema: {
+    type: "object",
+    properties: {
+      paths: { type: "array", items: { type: "string" }, description: "미리 변환할 파일 경로 배열(생략 시 전체)" },
+      force: { type: "boolean", default: false, description: "true면 이미 캐시돼 있어도 다시 변환" },
+    },
+  },
+  handler: async ({ paths, force }, { db }) => {
+    let targets = paths?.length
+      ? paths
+      : db.query("SELECT path FROM library_index").all().map((r) => r.path);
+    targets = targets.filter((p) => RENDERABLE.has(extname(p).toLowerCase()) && existsSync(p));
+    let rendered = 0, skipped = 0, pages = 0;
+    const failed = [];
+    for (const p of targets) {
+      try {
+        const r = await prerenderPath(p, force);
+        pages += r.pages || 0;
+        r.skipped ? skipped++ : rendered++;
+      } catch (e) { failed.push({ path: p, error: e.message }); }
+    }
+    return { total: targets.length, rendered, skipped, pages, failed };
   },
 });

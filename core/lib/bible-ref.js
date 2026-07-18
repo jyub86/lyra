@@ -43,19 +43,15 @@ function pushRef(out, book, chapter, vs, ve) {
   out.push({ book: abbr, chapter, verse_start: s, verse_end: e, ref: `${abbr} ${chapter}:${s}${e > s ? "-" + e : ""}` });
 }
 
-// 자유 텍스트 → 구조화된 성경 참조 배열(문맥 추적). 해석 실패 조각은 무시.
-export function parseBibleRefs(raw) {
-  const out = [];
-  let ctxBook = null, ctxChap = null;
-  const text = String(raw || "")
-    .replace(/[~∼〜]/g, "-")       // 물결(범위)을 하이픈으로
-    .replace(/[：]/g, ":")          // 전각 콜론
-    .replace(/[·∙‧]/g, " ");        // 가운뎃점 → 공백
-  // 쉼표/세미콜론/줄바꿈/가운뎃점을 하드 구분자로
-  for (let seg of text.split(/[,;\n、]/)) {
-    seg = seg.replace(/\s+/g, "");                 // 조각 내부 공백 제거
+const normalize = (s) => String(s || "").replace(/[~∼〜]/g, "-").replace(/[：]/g, ":");
+
+// 조각(쉼표/세미콜론으로 나눈 하나) 리스트를 순서대로 파싱하며 문맥(ctx={book,chapter})을
+// 유지한다. 결과 참조를 out에 push. 절만 있는 조각은 ctx의 책·장으로 해석.
+export function parseParts(parts, ctx, out) {
+  for (let seg of parts) {
+    seg = normalize(seg).replace(/\s+/g, "");         // 조각 내부 공백 제거
     if (!seg) continue;
-    seg = seg.replace(/([가-힣]+):(?=\d)/, "$1");   // "출:2" → "출2" (책 뒤 콜론만)
+    seg = seg.replace(/([가-힣]+):(?=\d)/, "$1");      // "출:2" → "출2" (책 뒤 콜론만)
 
     // 1) 책+장:절(범위) — 붙어있어도 전역 매칭으로 여러 개 인식
     const reFull = /([가-힣]+)(\d+):(\d+)(?:-(\d+))?/g;
@@ -63,28 +59,50 @@ export function parseBibleRefs(raw) {
     while ((m = reFull.exec(seg))) {
       const book = matchBook(m[1]);
       if (!book) continue;
-      ctxBook = book; ctxChap = parseInt(m[2], 10);
-      pushRef(out, book, ctxChap, parseInt(m[3], 10), m[4] ? parseInt(m[4], 10) : undefined);
+      ctx.book = book; ctx.chapter = parseInt(m[2], 10);
+      pushRef(out, book, ctx.chapter, parseInt(m[3], 10), m[4] ? parseInt(m[4], 10) : undefined);
       matched = true;
     }
     if (matched) continue;
 
     // 2) 장:절(범위) — 직전 책 문맥 사용
     m = /(\d+):(\d+)(?:-(\d+))?/.exec(seg);
-    if (m && ctxBook) {
-      ctxChap = parseInt(m[1], 10);
-      pushRef(out, ctxBook, ctxChap, parseInt(m[2], 10), m[3] ? parseInt(m[3], 10) : undefined);
+    if (m && ctx.book) {
+      ctx.chapter = parseInt(m[1], 10);
+      pushRef(out, ctx.book, ctx.chapter, parseInt(m[2], 10), m[3] ? parseInt(m[3], 10) : undefined);
       continue;
     }
 
-    // 3) 절(범위)만 — 직전 책+장 문맥 사용 ("16절", "16-18")
-    m = /(\d+)(?:-(\d+))?절?/.exec(seg);
-    if (m && ctxBook && ctxChap) {
-      pushRef(out, ctxBook, ctxChap, parseInt(m[1], 10), m[2] ? parseInt(m[2], 10) : undefined);
+    // 3) 절(범위)만 — 직전 책+장 문맥 사용. "16절", "16-18", "절16"(절이 앞에 오는 형태도 허용).
+    m = /절?(\d+)(?:-(\d+))?절?/.exec(seg);
+    if (m && ctx.book && ctx.chapter) {
+      pushRef(out, ctx.book, ctx.chapter, parseInt(m[1], 10), m[2] ? parseInt(m[2], 10) : undefined);
       continue;
     }
   }
   return out;
 }
 
-export { BIBLE_VOL_DICT };
+// 자유 텍스트 → 구조화된 성경 참조 배열(문맥 추적). 직접 입력용.
+export function parseBibleRefs(raw) {
+  const out = [];
+  const ctx = { book: null, chapter: null };
+  // 쉼표/세미콜론/줄바꿈/가운뎃점을 하드 구분자로
+  parseParts(String(raw || "").replace(/[·∙‧]/g, " ").split(/[,;\n、]/), ctx, out);
+  return out;
+}
+
+// 문서 전체 텍스트에서 주 본문의 책·장을 추정(주보 제목의 "요6:1-15" 같은 첫 참조).
+// 절만 있는 참조(2절, 26절 …)의 기본 문맥으로 쓴다. 없으면 {book:null, chapter:null}.
+export function extractGlobalContext(allText) {
+  const text = normalize(allText);
+  const re = /([가-힣]{1,4})\s*(\d+)\s*:\s*\d+/g;   // 첫 "책 장:절"
+  let m;
+  while ((m = re.exec(text))) {
+    const book = matchBook(m[1].replace(/\s+/g, ""));
+    if (book) return { book, chapter: parseInt(m[2], 10) };
+  }
+  return { book: null, chapter: null };
+}
+
+export { BIBLE_VOL_DICT, matchBook };

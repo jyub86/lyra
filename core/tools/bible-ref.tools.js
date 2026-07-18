@@ -21,7 +21,7 @@ register({
 
 register({
   name: "extract_bible_refs_from_pdf",
-  description: "주보 PDF(서버 경로)에서 빨강으로 표기된 성구를 추출해 참조 배열로 반환한다(슬라이드 생성 없이 조회만). 브라우저 업로드는 POST /api/bible-refs/extract.",
+  description: "PDF(서버 경로)에서 빨강으로 표기된 성구를 추출해 참조 배열로 반환한다(슬라이드 생성 없이 조회만). 주 본문(제목의 요6:1-15 등)을 문맥으로 절만 있는 참조도 해석. 브라우저 업로드는 POST /api/bible-refs/extract.",
   read: true,
   input_schema: {
     type: "object",

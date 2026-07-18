@@ -54,18 +54,28 @@ function transitionTo(newIndex) {
 
   const outgoing = state.stage;
   const incoming = makeStage(slide);
-  deck.appendChild(incoming);   // incoming = 위(나중 DOM)
   state.stage = incoming;
 
   incoming.style.transition = "none";
   if (transition === "fade") {
-    // 교차 페이드(둘 다 반투명)를 하면 뒤 검정이 비쳐 중간이 어두워진다.
-    // 대신 기존 슬라이드는 불투명하게 두고 새 슬라이드만 그 위에서 페이드인 → 어두워지지 않음.
-    incoming.style.opacity = "0";
-    void incoming.offsetWidth; // reflow
-    incoming.style.transition = `opacity ${DUR}ms ease`;
+    // 부드러운 디졸브: 나가는 "배경"만 불투명하게 바닥에 유지(→ 어느 순간에도 검정 없음)
+    // 하고, 그 위에서 옛 글씨는 사라지고 새 배경·글씨가 페이드인 → 실제로 스르륵 바뀌는
+    // 게 보인다. 옛 글씨와 새 글씨가 대칭으로 교차(옛↓ 새↑)해 겹침도 과하지 않다.
+    const outEls = outgoing.querySelector(":scope > .layer-elements");
+    const inEls = incoming.querySelector(":scope > .layer-elements");
+    const inBg = incoming.querySelector(":scope > .layer-bg");
+    deck.appendChild(incoming);   // incoming = 위(나중 DOM), outgoing 배경이 바닥
+    const ease = `opacity ${DUR}ms ease`;
     incoming.style.opacity = "1";
+    if (inBg) inBg.style.opacity = "0";     // 새 배경/글씨는 0에서 시작해 페이드인
+    if (inEls) inEls.style.opacity = "0";
+    void incoming.offsetWidth; // reflow
+    if (outEls) { outEls.style.transition = ease; outEls.style.opacity = "0"; } // 옛 글씨 페이드아웃
+    if (inBg) { inBg.style.transition = ease; inBg.style.opacity = "1"; }        // 새 배경 페이드인(같은 배경이면 티 안 남)
+    if (inEls) { inEls.style.transition = ease; inEls.style.opacity = "1"; }     // 새 글씨 페이드인
+    // (나가는 .layer-bg 는 opacity 1 그대로 = 바닥 → 검정 방지)
   } else { // slide: 나란히 밀기(둘 다 불투명이라 검정 문제 없음)
+    deck.appendChild(incoming);   // incoming = 위(나중 DOM)
     incoming.style.transform = `translateX(${dir > 0 ? 100 : -100}%)`;
     void incoming.offsetWidth; // reflow
     const ease = `transform ${DUR}ms ease`;
@@ -78,6 +88,10 @@ function transitionTo(newIndex) {
   setTimeout(() => {
     outgoing.remove();
     incoming.style.transition = incoming.style.transform = incoming.style.opacity = "";
+    // fade에서 만졌던 내부 레이어 인라인 스타일 원복(다음 전환에 재사용되므로)
+    for (const layer of incoming.querySelectorAll(":scope > .layer-bg, :scope > .layer-elements")) {
+      layer.style.transition = layer.style.opacity = "";
+    }
   }, DUR + 40);
 }
 

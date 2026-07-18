@@ -1783,8 +1783,13 @@ async function importFromLibrary(r) {
   const isOffice = [".pptx", ".ppt", ".odp"].includes(r.ext);
   showBusy(isOffice ? "PowerPoint 변환 중…" : "가져오는 중…", `${r.name}${isOffice ? " · LibreOffice로 변환" : ""}`);
   try {
-    const { slide_ids } = await callTool("import_pdf", { service_id: state.serviceId, path: r.path });
+    // 현재 선택한 슬라이드 바로 아래로 가져오기(선택 없으면 맨 끝) — 메뉴 임포트와 동일.
+    const idx = slides().findIndex((s) => s.id === state.selected);
+    const position = idx >= 0 ? idx + 1 : undefined;
+    const { slide_ids } = await callTool("import_pdf", { service_id: state.serviceId, path: r.path, position });
     await refresh();
+    // 이어서 가져올 때 순서가 유지되도록 마지막 가져온 슬라이드를 선택
+    if (slide_ids?.length) { setSingleSelection(slide_ids[slide_ids.length - 1]); render(); }
     clearInterval(busyTimer); busyTimer = null;
     $("busy-msg").textContent = `${slide_ids.length}장 가져왔어요 ✓`;
     $("busy-sub").textContent = "";

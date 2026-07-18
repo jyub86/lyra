@@ -66,6 +66,9 @@ function serveFile(path, req) {
 const server = Bun.serve({
   port: PORT,
   idleTimeout: 120,
+  // 큰 예배 내보내기(JSON에 이미지 base64 포함, 수백 MB)도 가져올 수 있게 본문 한도 상향.
+  // (기본 128MB) — 이미지 다수/고해상도 덱은 이를 쉽게 넘긴다.
+  maxRequestBodySize: 2 * 1024 * 1024 * 1024, // 2GB
   async fetch(req, server) {
     const url = new URL(req.url);
 

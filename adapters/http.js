@@ -66,6 +66,21 @@ export async function handleApi(req, url) {
     }
   }
 
+  // 예배 순서 가져오기(멀티파트). 큰 JSON(이미지 base64 포함, 수백 MB)을 클라이언트가
+  // 파싱/재직렬화하지 않고 파일 그대로 전송 → 서버가 한 번만 파싱해 import_service 호출.
+  if (url.pathname === "/api/import-service" && req.method === "POST") {
+    const form = await req.formData().catch(() => null);
+    const file = form?.get("file");
+    const title = form?.get("title") || undefined;
+    if (!file || typeof file === "string") return json({ error: "no file" }, 400);
+    try {
+      const payload = JSON.parse(await file.text());
+      return json(await execute("import_service", { payload, title }));
+    } catch (e) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
   // 주보 PDF에서 빨강 성구 추출(멀티파트). 슬라이드는 만들지 않고 참조만 반환 →
   // UI에서 검토 후 add_bible_ref_slides로 추가.
   if (url.pathname === "/api/bible-refs/extract" && req.method === "POST") {

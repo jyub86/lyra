@@ -1642,12 +1642,19 @@ async function exportService() {
   URL.revokeObjectURL(a.href);
 }
 async function importService(file) {
+  // 파일을 멀티파트로 그대로 전송(큰 파일도 클라이언트에서 파싱/재직렬화하지 않음).
+  const mb = (file.size / 1048576).toFixed(0);
+  showBusy("예배 순서 가져오는 중…", `${file.name} · ${mb}MB`);
   try {
-    const payload = JSON.parse(await file.text());
-    const { service_id } = await callTool("import_service", { payload });
-    await loadServices(service_id);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/import-service", { method: "POST", body: fd });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "가져오기 실패");
+    await loadServices(body.service_id);
+    hideBusy();
     msg("add-msg", "가져오기 완료");
-  } catch (e) { alert("가져오기 실패: " + e.message); }
+  } catch (e) { hideBusy(); alert("가져오기 실패: " + e.message); }
 }
 
 // ---- busy overlay: spinner + message + live elapsed time ----

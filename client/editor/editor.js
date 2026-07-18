@@ -844,6 +844,11 @@ function colorSwatches(current, onPick) {
 
 function renderDesignPanel() {
   const empty = $("el-empty"), body = $("el-props");
+  // 편집할 때마다 commitEls→refresh→render로 이 패널을 다시 그리는데, 그때 스크롤이
+  // 맨 위로 튀지 않도록 스크롤 컨테이너(.col.panel)의 위치를 보존한다.
+  const panel = body.closest(".col");
+  const savedScroll = panel ? panel.scrollTop : 0;
+  const restoreScroll = () => { if (panel) panel.scrollTop = savedScroll; };
   // 다중 선택: 개별 속성 대신 요약 + 일괄 동작
   if (state.editElSet.size > 1) {
     empty.hidden = true; body.hidden = false;
@@ -852,6 +857,7 @@ function renderDesignPanel() {
     body.appendChild(elx("p", "hint muted", "드래그로 함께 이동 · 방향키 미세이동 · Del 삭제 · ⌘/Ctrl+C·V 복사/붙여넣기"));
     const del = elx("button", "mini danger", "선택 요소 삭제"); del.onclick = () => deleteSelectedEls();
     body.appendChild(del);
+    restoreScroll();
     return;
   }
   const el = state.editEl != null ? els()[state.editEl] : null;
@@ -1085,6 +1091,7 @@ function renderDesignPanel() {
   const del = elx("button", "mini danger", "삭제"); del.onclick = () => deleteSelectedEls();
   actions.append(front, back, del);
   body.appendChild(actions);
+  restoreScroll();   // 편집 후 재렌더에도 스크롤 위치 유지
 }
 
 // re-fetch a content element's snapshot from its params via read tools

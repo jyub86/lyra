@@ -63,10 +63,14 @@ export function searchBible(db, query, limit = 20) {
 export function getHymn(db, number) {
   const hymn = db.query("SELECT number, title, category FROM hymns WHERE number = ?").get(number);
   if (!hymn) return null;
-  const verses = db.query(
+  const rows = db.query(
     "SELECT verse_no, label, text FROM hymn_verses WHERE hymn_number = ? ORDER BY verse_no"
-  ).all(number).map((v) => ({ verse_no: v.verse_no, label: v.label, lines: v.text.split("\n") }));
-  return { ...hymn, verses };
+  ).all(number);
+  // verse_no=0 = 후렴(별도). 나머지가 절.
+  const refrainRow = rows.find((v) => v.verse_no === 0);
+  const verses = rows.filter((v) => v.verse_no !== 0).map((v) => ({ verse_no: v.verse_no, label: v.label, lines: v.text.split("\n") }));
+  const refrain = refrainRow ? refrainRow.text.split("\n") : null;
+  return { ...hymn, verses, refrain };
 }
 
 export function searchHymn(db, query, limit = 20) {

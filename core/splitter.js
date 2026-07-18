@@ -54,16 +54,22 @@ function chunkLines(lines, perSlide) {
   return out;
 }
 
-// hymn: verses [{verse_no, label, lines}] → hymn-slide `data` objects.
+// hymn: verses [{verse_no, label, lines}] (+ refrain[]) → hymn-slide `data` objects.
+// 후렴(refrain)이 있으면 각 절 슬라이드 뒤에 후렴 슬라이드를 넣는다(찬송 부르는 순서대로).
 export function splitHymn(hymn, verseNos, linesPerSlide = 4) {
   const wanted = verseNos && verseNos.length
     ? hymn.verses.filter((v) => verseNos.includes(v.verse_no))
     : hymn.verses;
+  const refrain = hymn.refrain && hymn.refrain.length ? hymn.refrain : null;
   const pages = [];
-  for (const v of wanted) {
-    for (const chunk of chunkLines(v.lines, linesPerSlide)) {
-      pages.push({ number: hymn.number, title: hymn.title, label: v.label ?? `${v.verse_no}절`, lines: chunk });
+  const add = (lines, label) => {
+    for (const chunk of chunkLines(lines, linesPerSlide)) {
+      pages.push({ number: hymn.number, title: hymn.title, label, lines: chunk });
     }
+  };
+  for (const v of wanted) {
+    add(v.lines, v.label ?? `${v.verse_no}절`);
+    if (refrain) add(refrain, "후렴");   // 각 절 뒤에 후렴
   }
   return pages;
 }

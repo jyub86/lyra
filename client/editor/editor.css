@@ -166,6 +166,12 @@ a { color: var(--accent); text-decoration: none; }
 .lib-search { display: flex; gap: 6px; align-items: center; }
 .lib-search input { flex: 1; width: auto; }
 #lib-prerender { white-space: nowrap; }
+/* 폴더 미리 변환 */
+.lib-pre { display: flex; gap: 6px; align-items: center; }
+.lib-pre input { flex: 1; }
+.lib-pre .muted { font-size: 12px; white-space: nowrap; }
+.lib-pre-bar { height: 6px; background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.lib-pre-fill { height: 100%; width: 0; background: #69db7c; transition: width .2s ease; }
 .lib-empty { color: var(--muted); text-align: center; padding: 20px; }
 
 /* busy overlay (imports & other long ops) */

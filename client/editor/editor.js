@@ -1725,11 +1725,70 @@ async function openLibrary() {
     $("lib-dir").value = library_dir || "";
     $("lib-status").textContent = library_dir ? `색인 ${indexed}개` : "폴더를 지정하세요";
     if (library_dir && indexed === 0) await reindexLibrary();
+    resetPrerenderUi(library_dir || "");
     renderLibResults([]);
     $("lib-query").focus();
   } catch (e) { $("lib-status").textContent = e.message; }
 }
-function closeLibrary() { $("library-modal").hidden = true; }
+function closeLibrary() { prerenderCancel = true; $("library-modal").hidden = true; }
+
+// ---- 폴더 미리 변환 (특정 폴더의 PPT를 미리 이미지로 변환해두기) ----
+let prerenderUncached = [];   // 확인(scan)으로 찾은 미변환 파일 경로
+let prerenderCancel = false;  // 진행 중 중지 플래그
+
+function resetPrerenderUi(dir) {
+  $("lib-pre-dir").value = dir || "";
+  prerenderUncached = [];
+  $("lib-pre-run").disabled = true;
+  $("lib-pre-run").textContent = "⚡ 이 폴더 미리 변환";
+  $("lib-pre-status").textContent = "";
+  $("lib-pre-bar").hidden = true;
+  $("lib-pre-cancel").hidden = true;
+}
+
+// 폴더 안의 변환 대상·미변환 수를 확인.
+async function scanPrerenderDir() {
+  const dir = $("lib-pre-dir").value.trim() || undefined;
+  $("lib-pre-status").textContent = "확인 중…";
+  try {
+    const { files, total, cached } = await callTool("list_library_files", { dir });
+    prerenderUncached = files.filter((f) => !f.cached).map((f) => f.path);
+    const un = prerenderUncached.length;
+    $("lib-pre-status").textContent = `PPT/PDF ${total}개 · 변환됨 ${cached} · 미변환 ${un}`;
+    $("lib-pre-run").disabled = un === 0;
+    $("lib-pre-run").textContent = un ? `⚡ 미변환 ${un}개 변환` : "⚡ 모두 변환됨";
+  } catch (e) { $("lib-pre-status").textContent = e.message; }
+}
+
+// 미변환 파일들을 배치로 미리 변환하며 진행률 표시(중지 가능).
+async function runPrerenderDir() {
+  if (!prerenderUncached.length) return;
+  const total = prerenderUncached.length;
+  prerenderCancel = false;
+  $("lib-pre-run").hidden = true;
+  $("lib-pre-cancel").hidden = false;
+  $("lib-pre-cancel").textContent = "중지";
+  $("lib-pre-bar").hidden = false;
+  const BATCH = 4;
+  let done = 0, failed = 0;
+  for (let i = 0; i < total && !prerenderCancel; i += BATCH) {
+    const batch = prerenderUncached.slice(i, i + BATCH);
+    try {
+      const r = await callTool("prerender_library", { paths: batch });
+      failed += (r.failed || []).length;
+    } catch { failed += batch.length; }
+    done = Math.min(i + BATCH, total);
+    $("lib-pre-fill").style.width = Math.round((done / total) * 100) + "%";
+    $("lib-pre-status").textContent = `변환 중… ${done}/${total}${failed ? ` (실패 ${failed})` : ""}`;
+  }
+  $("lib-pre-run").hidden = false;
+  $("lib-pre-cancel").hidden = true;
+  const stopped = prerenderCancel;
+  $("lib-pre-status").textContent = stopped ? `중지됨 · ${done}/${total} 변환` : `완료 · ${done - failed}/${total} 변환${failed ? ` (실패 ${failed})` : ""}`;
+  await scanPrerenderDir();       // 남은 미변환 수 갱신
+  if ($("lib-query").value.trim()) await searchLibrary();  // 검색 결과 ⚡ 배지 갱신
+}
+function cancelPrerenderDir() { prerenderCancel = true; $("lib-pre-cancel").textContent = "중지 중…"; }
 
 async function saveLibraryDir() {
   const path = $("lib-dir").value.trim();
@@ -2006,6 +2065,10 @@ function init() {
   $("lib-reindex").onclick = () => reindexLibrary();
   $("lib-query").addEventListener("input", () => { clearTimeout(libSearchTimer); libSearchTimer = setTimeout(searchLibrary, 250); });
   $("lib-prerender").onclick = prerenderLibResults;
+  $("lib-pre-scan").onclick = scanPrerenderDir;
+  $("lib-pre-run").onclick = runPrerenderDir;
+  $("lib-pre-cancel").onclick = cancelPrerenderDir;
+  $("lib-pre-dir").addEventListener("keydown", (e) => { if (e.key === "Enter") scanPrerenderDir(); });
   $("library-modal").addEventListener("mousedown", (e) => { if (e.target === $("library-modal")) closeLibrary(); });
   // 성구 모달
   $("bibleref-btn").onclick = openBibleRef;

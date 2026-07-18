@@ -180,6 +180,16 @@
         <button id="lib-reindex" class="mini">재색인</button>
         <span id="lib-status" class="muted"></span>
       </div>
+      <!-- 폴더 미리 변환: 특정 폴더의 PPT를 미리 이미지로 변환해두면 가져오기가 즉시 -->
+      <div class="lib-pre">
+        <input id="lib-pre-dir" type="text" placeholder="미리 변환할 폴더 (비우면 라이브러리 전체)" />
+        <button id="lib-pre-scan" class="mini">확인</button>
+        <button id="lib-pre-run" class="mini accent" disabled>⚡ 이 폴더 미리 변환</button>
+        <button id="lib-pre-cancel" class="mini" hidden>중지</button>
+        <span id="lib-pre-status" class="muted"></span>
+      </div>
+      <div id="lib-pre-bar" class="lib-pre-bar" hidden><div id="lib-pre-fill" class="lib-pre-fill"></div></div>
+
       <div class="lib-search">
         <input id="lib-query" type="search" placeholder="제목·내용 검색 (예: 부활, 구주, 사도신경)" />
         <button id="lib-prerender" class="mini" title="검색 결과의 PPT를 미리 이미지로 변환해두면 다음부터 즉시 가져옵니다">⚡ 검색결과 미리 변환</button>

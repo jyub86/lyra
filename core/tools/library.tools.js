@@ -140,20 +140,44 @@ register({
   },
 });
 
+// 색인된 파일 중 dir(폴더) 아래에 있는 것만. dir 없으면 전체. path 접두 매칭.
+function filesUnder(db, dir) {
+  const rows = db.query("SELECT path, relpath, name, ext, pages FROM library_index ORDER BY relpath").all();
+  const d = dir ? String(dir).replace(/[/\\]+$/, "") : null;
+  return rows.filter((r) => !d || r.path === d || r.path.startsWith(d + "/"));
+}
+
+register({
+  name: "list_library_files",
+  description: "색인된 라이브러리에서 (선택한 폴더 dir 아래의) 변환 대상 PPT/PDF 목록과 캐시 여부를 반환한다. 미리 변환할 폴더 확인용.",
+  read: true,
+  input_schema: {
+    type: "object",
+    properties: { dir: { type: "string", description: "폴더 경로(라이브러리 하위 절대경로). 생략 시 전체." } },
+  },
+  handler: ({ dir }, { db }) => {
+    const files = filesUnder(db, dir)
+      .filter((r) => RENDERABLE.has(r.ext))
+      .map((r) => ({ path: r.path, relpath: r.relpath, name: r.name, ext: r.ext, pages: r.pages, cached: isCached(r.path, RENDER_WIDTH) }));
+    return { files, total: files.length, cached: files.filter((f) => f.cached).length };
+  },
+});
+
 register({
   name: "prerender_library",
-  description: "라이브러리 PPT/PDF를 미리 이미지로 변환해 캐시한다 → 이후 가져오기가 즉시. paths(파일 경로 배열) 지정 시 그 파일만, 없으면 색인된 전체(오래 걸릴 수 있음). 이미 캐시된 신선한 파일은 건너뛴다.",
+  description: "라이브러리 PPT/PDF를 미리 이미지로 변환해 캐시한다 → 이후 가져오기가 즉시. dir(폴더) 지정 시 그 폴더 아래 전체, paths(파일 경로 배열) 지정 시 그 파일만, 둘 다 없으면 색인된 전체(오래 걸릴 수 있음). 이미 캐시된 신선한 파일은 건너뛴다.",
   input_schema: {
     type: "object",
     properties: {
-      paths: { type: "array", items: { type: "string" }, description: "미리 변환할 파일 경로 배열(생략 시 전체)" },
+      dir: { type: "string", description: "미리 변환할 폴더 경로(라이브러리 하위). 그 아래 PPT/PDF 전체 대상." },
+      paths: { type: "array", items: { type: "string" }, description: "미리 변환할 파일 경로 배열" },
       force: { type: "boolean", default: false, description: "true면 이미 캐시돼 있어도 다시 변환" },
     },
   },
-  handler: async ({ paths, force }, { db }) => {
+  handler: async ({ dir, paths, force }, { db }) => {
     let targets = paths?.length
       ? paths
-      : db.query("SELECT path FROM library_index").all().map((r) => r.path);
+      : filesUnder(db, dir).filter((r) => RENDERABLE.has(r.ext)).map((r) => r.path);
     targets = targets.filter((p) => RENDERABLE.has(extname(p).toLowerCase()) && existsSync(p));
     let rendered = 0, skipped = 0, pages = 0;
     const failed = [];

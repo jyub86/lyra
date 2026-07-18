@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { saveUpload } from "./uploads.js";
 import { findPoppler } from "./poppler.js";
-import { getCachedBuffers, putCachedBuffers, isCached } from "./render-cache.js";
+import { getCachedImages, putCachedImages, isCached } from "./render-cache.js";
+import { pngBuffersToWebp } from "./webp.js";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // presentation docs LibreOffice can read
@@ -17,6 +18,8 @@ const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // prese
 // 무관하게 항상 이 해상도로 렌더된다(선명·일관). 2560=1440p, 1080p 프로젝터엔 넉넉하고
 // 4K에서도 무난. 높이면 더 선명·용량↑.
 const RENDER_WIDTH = 2560;
+// WebP 변환 품질(cwebp 있을 때). 90=악보·글씨 안전하면서 PNG 대비 7~8배 작음.
+const WEBP_QUALITY = 90;
 
 // Persistent LibreOffice profile dir. Reusing it (instead of a fresh tmp profile
 // per import) skips the ~1.8s cold profile regeneration on every conversion.
@@ -104,24 +107,29 @@ async function pdfBytesToPngBuffers(bytes) {
   }
 }
 
-// 업로드(경로 없음, 캐시 불가) 경로 — 페이지 버퍼를 uploads에 저장하고 URL 배열 반환.
-async function buffersToUploadUrls(buffers) {
-  return await Promise.all(buffers.map((buf) => saveUpload("slide.png", buf).then((r) => r.url)));
+// 페이지 이미지 버퍼들을 uploads에 저장(ext=".png"|".webp")하고 URL 배열 반환.
+async function saveImages(buffers, ext) {
+  return await Promise.all(buffers.map((buf) => saveUpload("slide" + ext, buf).then((r) => r.url)));
 }
 
-// 파일(office/pdf) → 페이지 PNG 버퍼. office는 먼저 PDF로 변환.
-async function renderFileToBuffers(filename, bytes) {
+// 파일(office/pdf) → 페이지 이미지 { ext, buffers }. office는 먼저 PDF로 변환하고,
+// cwebp가 있으면 PNG를 WebP로 바꿔 용량을 7~8배 줄인다(없으면 PNG 그대로).
+async function renderFileToImages(filename, bytes) {
   const ext = "." + (filename.split(".").pop() || "").toLowerCase();
-  if (OFFICE_EXT.has(ext)) return await pdfBytesToPngBuffers(await officeToPdf(filename, bytes));
-  if (ext === ".pdf") return await pdfBytesToPngBuffers(bytes);
-  return null; // 이미지 등은 렌더 대상 아님
+  let png;
+  if (OFFICE_EXT.has(ext)) png = await pdfBytesToPngBuffers(await officeToPdf(filename, bytes));
+  else if (ext === ".pdf") png = await pdfBytesToPngBuffers(bytes);
+  else return null; // 이미지 등은 렌더 대상 아님
+  const webp = await pngBuffersToWebp(png, WEBP_QUALITY);   // cwebp 없으면 null
+  return webp ? { ext: ".webp", buffers: webp } : { ext: ".png", buffers: png };
 }
 
 // 업로드 바이트 → 슬라이드 배열(캐시 없음). /api/import(브라우저 업로드)용.
 export async function fileToSlides(filename, bytes) {
   const ext = "." + (filename.split(".").pop() || "").toLowerCase();
   if (OFFICE_EXT.has(ext) || ext === ".pdf") {
-    return (await buffersToUploadUrls(await renderFileToBuffers(filename, bytes))).map(imageSlide);
+    const img = await renderFileToImages(filename, bytes);
+    return (await saveImages(img.buffers, img.ext)).map(imageSlide);
   }
   if (IMAGE_EXT.has(ext)) {
     const { url } = await saveUpload(filename, bytes);
@@ -142,12 +150,12 @@ export async function fileToSlidesFromPath(path) {
   if (!OFFICE_EXT.has(ext) && ext !== ".pdf") {
     throw new Error(`지원하지 않는 형식: ${ext} (PPT/PDF/이미지). LibreOffice 미설치 시 PPT는 PDF로 내보내세요.`);
   }
-  let buffers = getCachedBuffers(path, RENDER_WIDTH);       // 캐시 히트 → 변환 생략
-  if (!buffers) {
-    buffers = await renderFileToBuffers(basename(path), readFileSync(path));
-    putCachedBuffers(path, RENDER_WIDTH, buffers);          // 다음을 위해 캐시
+  let img = getCachedImages(path, RENDER_WIDTH);           // 캐시 히트 → 변환 생략
+  if (!img) {
+    img = await renderFileToImages(basename(path), readFileSync(path));
+    putCachedImages(path, RENDER_WIDTH, img.buffers, img.ext);   // 다음을 위해 캐시
   }
-  return (await buffersToUploadUrls(buffers)).map(imageSlide);   // 항상 uploads에 영구 저장
+  return (await saveImages(img.buffers, img.ext)).map(imageSlide);   // 항상 uploads에 영구 저장
 }
 
 // 캐시만 채운다(가져오지 않음). 미리 변환(prerender)용. 이미 신선하면 렌더 생략.
@@ -155,10 +163,10 @@ export async function fileToSlidesFromPath(path) {
 export async function prerenderPath(path, force = false) {
   const ext = extname(path).toLowerCase();
   if (!OFFICE_EXT.has(ext) && ext !== ".pdf") return { pages: 0, skipped: true }; // 이미지 등은 대상 아님
-  if (!force && isCached(path, RENDER_WIDTH)) return { pages: (getCachedBuffers(path, RENDER_WIDTH) || []).length, skipped: true };
-  const buffers = await renderFileToBuffers(basename(path), readFileSync(path));
-  putCachedBuffers(path, RENDER_WIDTH, buffers);
-  return { pages: buffers.length, cached: true };
+  if (!force && isCached(path, RENDER_WIDTH)) return { pages: (getCachedImages(path, RENDER_WIDTH)?.buffers || []).length, skipped: true };
+  const img = await renderFileToImages(basename(path), readFileSync(path));
+  putCachedImages(path, RENDER_WIDTH, img.buffers, img.ext);
+  return { pages: img.buffers.length, cached: true };
 }
 
 export { RENDER_WIDTH };

@@ -4,7 +4,7 @@
 // 키 = sha1(파일경로 + mtime + 렌더너비). 파일이 바뀌면(mtime) 새 키 → 새 폴더.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CACHE_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../data/render-cache");
@@ -28,24 +28,25 @@ export function isCached(path, width) {
   return !!dir && existsSync(join(dir, DONE));
 }
 
-// 캐시 히트면 페이지 PNG 버퍼 배열(순서대로), 아니면 null.
-export function getCachedBuffers(path, width) {
+// 캐시 히트면 { ext, buffers }(페이지 이미지, 순서대로), 아니면 null.
+// 포맷(png/webp)은 저장된 파일 확장자로 판단(한 폴더는 동일 포맷).
+export function getCachedImages(path, width) {
   const dir = cacheDirFor(path, width);
   if (!dir || !existsSync(join(dir, DONE))) return null;
-  const pages = readdirSync(dir).filter((f) => f.endsWith(".png")).sort();
+  const pages = readdirSync(dir).filter((f) => f.endsWith(".png") || f.endsWith(".webp")).sort();
   if (!pages.length) return null;
-  return pages.map((p) => readFileSync(join(dir, p)));
+  return { ext: extname(pages[0]), buffers: pages.map((p) => readFileSync(join(dir, p))) };
 }
 
-// 페이지 PNG 버퍼 배열을 캐시에 저장. 반환: 페이지 수.
-export function putCachedBuffers(path, width, pngBuffers) {
+// 페이지 이미지 버퍼 배열을 캐시에 저장(ext=".png"|".webp"). 반환: 페이지 수.
+export function putCachedImages(path, width, buffers, ext = ".png") {
   const dir = cacheDirFor(path, width);
   if (!dir) throw new Error(`파일 없음: ${path}`);
   rmSync(dir, { recursive: true, force: true }); // 이전 부분 결과 제거
   mkdirSync(dir, { recursive: true });
-  pngBuffers.forEach((buf, i) => {
-    writeFileSync(join(dir, `page-${String(i + 1).padStart(4, "0")}.png`), buf);
+  buffers.forEach((buf, i) => {
+    writeFileSync(join(dir, `page-${String(i + 1).padStart(4, "0")}${ext}`), buf);
   });
   writeFileSync(join(dir, DONE), ""); // 완료 표시
-  return pngBuffers.length;
+  return buffers.length;
 }

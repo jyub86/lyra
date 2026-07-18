@@ -7,6 +7,7 @@ import { getDb } from "../core/db/index.js";
 import { bus } from "../core/lib/bus.js";
 import { saveUpload } from "../core/lib/uploads.js";
 import { fileToSlides } from "../core/lib/pdf-import.js";
+import { extractRefsFromPdf } from "../core/lib/pdf-refs.js";
 import { insertSlides } from "../core/tools/slide.tools.js";
 
 function json(body, status = 200) {
@@ -60,6 +61,19 @@ export async function handleApi(req, url) {
       const slide_ids = insertSlides(db, serviceId, slides, position);
       bus.emit("changed", { tool: "import_pdf" });
       return json({ slide_ids });
+    } catch (e) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
+  // 주보 PDF에서 빨강 성구 추출(멀티파트). 슬라이드는 만들지 않고 참조만 반환 →
+  // UI에서 검토 후 add_bible_ref_slides로 추가.
+  if (url.pathname === "/api/bible-refs/extract" && req.method === "POST") {
+    const form = await req.formData().catch(() => null);
+    const file = form?.get("file");
+    if (!file || typeof file === "string") return json({ error: "no file" }, 400);
+    try {
+      return json(await extractRefsFromPdf(new Uint8Array(await file.arrayBuffer())));
     } catch (e) {
       return json({ error: e.message }, 500);
     }

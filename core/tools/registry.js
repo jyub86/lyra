@@ -71,6 +71,7 @@ export async function loadTools() {
     import("./service.tools.js"),
     import("./slide.tools.js"),
     import("./content.tools.js"),
+    import("./bible-ref.tools.js"),
     import("./search.tools.js"),
     import("./present.tools.js"),
     import("./media.tools.js"),

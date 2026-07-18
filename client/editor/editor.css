@@ -145,6 +145,16 @@ a { color: var(--accent); text-decoration: none; }
 .lib-folder .muted { font-size: 12px; white-space: nowrap; }
 .lib-search input { width: 100%; padding: 8px 10px; }
 .lib-results { overflow: auto; display: flex; flex-direction: column; gap: 6px; min-height: 120px; }
+/* 성구 모달 */
+.bibleref-hint { font-size: 12px; margin: 0; }
+.bibleref-bar { display: flex; gap: 8px; align-items: center; }
+.bibleref-layout { font-size: 12px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
+#bibleref-input { width: 100%; padding: 8px 10px; font-size: 14px; resize: vertical; box-sizing: border-box; }
+.bibleref-preview { min-height: 40px; max-height: 220px; overflow: auto; display: flex; flex-wrap: wrap; gap: 6px; align-content: flex-start; padding: 8px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
+.bibleref-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; white-space: nowrap; }
+.bibleref-chip .vn { font-size: 11px; color: var(--muted); }
+.bibleref-chip.bad { border-color: var(--danger); color: var(--danger); }
+.bibleref-actions { display: flex; align-items: center; gap: 8px; }
 .lib-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; }
 .lib-row .info { flex: 1; min-width: 0; }
 .lib-row .fname { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

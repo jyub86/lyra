@@ -1639,6 +1639,83 @@ async function importSlidesFile(file) {
   }
 }
 
+// ---- 성구(성경 참조 → 본문 슬라이드) 모달 ----
+let bibleRefTimer = null;
+let bibleRefParsed = [];   // 마지막 미리보기에서 파싱된 참조
+
+function openBibleRef() {
+  if (!state.serviceId) { toast("예배 순서를 먼저 선택하세요"); return; }
+  $("bibleref-modal").hidden = false;
+  $("bibleref-msg").textContent = "";
+  $("bibleref-status").textContent = "";
+  previewBibleRefs();
+  $("bibleref-input").focus();
+}
+function closeBibleRef() { $("bibleref-modal").hidden = true; }
+
+// 입력 텍스트를 파싱해 참조 칩으로 미리보기(파싱만 — 빠름, DB 조회 없음).
+async function previewBibleRefs() {
+  const text = $("bibleref-input").value.trim();
+  const box = $("bibleref-preview");
+  if (!text) { bibleRefParsed = []; box.className = "bibleref-preview muted"; box.textContent = "해석된 참조가 여기에 표시됩니다."; return; }
+  try {
+    const { refs } = await callTool("parse_bible_refs", { text });
+    bibleRefParsed = refs || [];
+    box.className = "bibleref-preview";
+    box.replaceChildren();
+    if (!bibleRefParsed.length) { box.className = "bibleref-preview muted"; box.textContent = "해석된 참조가 없습니다. 예: 요 3:16-18, 롬 8:1"; return; }
+    for (const r of bibleRefParsed) {
+      const chip = elx("span", "bibleref-chip", r.ref);
+      box.appendChild(chip);
+    }
+  } catch (e) { box.className = "bibleref-preview muted"; box.textContent = e.message; }
+}
+
+// 주보 PDF 업로드 → 빨강 성구 추출 → 입력창 채우고 미리보기.
+async function extractBibleRefsFromPdf(file) {
+  $("bibleref-status").textContent = "PDF에서 성구 추출 중…";
+  try {
+    const fd = new FormData(); fd.append("file", file);
+    const res = await fetch("/api/bible-refs/extract", { method: "POST", body: fd });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "추출 실패");
+    $("bibleref-input").value = (body.refs || []).map((r) => r.ref).join(", ");
+    await previewBibleRefs();
+    const n = (body.refs || []).length;
+    $("bibleref-status").textContent = n ? `${file.name} · 성구 ${n}개 추출됨 (검토 후 추가)` : `${file.name} · 빨강 성구를 찾지 못했어요`;
+  } catch (e) { $("bibleref-status").textContent = "추출 실패: " + e.message; }
+}
+
+// 파싱된 참조 → 성경 본문 슬라이드 추가(선택한 순서 아래에).
+async function addBibleRefSlides() {
+  const text = $("bibleref-input").value.trim();
+  if (!text) { $("bibleref-msg").textContent = "성경 참조를 입력하세요."; return; }
+  const layout = $("bibleref-layout").value;
+  const idx = slides().findIndex((s) => s.id === state.selected);
+  const position = idx >= 0 ? idx + 1 : undefined;
+  $("bibleref-add").disabled = true;
+  $("bibleref-msg").className = "msg";
+  $("bibleref-msg").textContent = "본문 조회·추가 중…";
+  try {
+    const res = await callTool("add_bible_ref_slides", { service_id: state.serviceId, text, layout, position });
+    await refresh();
+    if (res.slide_ids?.length) { setSingleSelection(res.slide_ids[res.slide_ids.length - 1]); render(); }
+    const bad = res.unresolved || [];
+    if (bad.length) {
+      $("bibleref-msg").className = "msg err";
+      $("bibleref-msg").textContent = `${res.slide_ids.length}장 추가 · 실패: ${bad.map((b) => b.ref).join(", ")}`;
+    } else {
+      toast(`성경 본문 ${res.slide_ids.length}장 추가됨`);
+      closeBibleRef();
+    }
+  } catch (e) {
+    $("bibleref-msg").className = "msg err";
+    $("bibleref-msg").textContent = e.message;
+  } finally {
+    $("bibleref-add").disabled = false;
+  }
+}
+
 // ---- PPT 라이브러리 검색 모달 ----
 let libSearchTimer = null;
 async function openLibrary() {
@@ -1899,6 +1976,14 @@ function init() {
   $("lib-reindex").onclick = () => reindexLibrary();
   $("lib-query").addEventListener("input", () => { clearTimeout(libSearchTimer); libSearchTimer = setTimeout(searchLibrary, 250); });
   $("library-modal").addEventListener("mousedown", (e) => { if (e.target === $("library-modal")) closeLibrary(); });
+  // 성구 모달
+  $("bibleref-btn").onclick = openBibleRef;
+  $("bibleref-close").onclick = closeBibleRef;
+  $("bibleref-input").addEventListener("input", () => { clearTimeout(bibleRefTimer); bibleRefTimer = setTimeout(previewBibleRefs, 200); });
+  $("bibleref-pdf-btn").onclick = () => $("bibleref-pdf-file").click();
+  $("bibleref-pdf-file").onchange = (e) => { const f = e.target.files[0]; if (f) extractBibleRefsFromPdf(f); e.target.value = ""; };
+  $("bibleref-add").onclick = addBibleRefSlides;
+  $("bibleref-modal").addEventListener("mousedown", (e) => { if (e.target === $("bibleref-modal")) closeBibleRef(); });
   $("tpl-save").onclick = saveCurrentAsTemplate;
   $("tpl-edit-save").onclick = saveTemplateEdit;
   $("tpl-edit-cancel").onclick = cancelTemplateEdit;

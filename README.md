@@ -14,13 +14,17 @@
 ## 핵심 특징
 
 - **콘텐츠 자동 생성** — 성경(개역개정)·새찬송가·교독문을 번호/장·절만 넣으면 슬라이드로 자동 분할.
+  찬송가는 **제목·가사로 검색**(번호 몰라도), 주보 PDF의 **빨강 성구를 자동 추출**해 본문 슬라이드로.
 - **요소 중심 편집** — 슬라이드 = `{ 배경, 요소[] }`. 성경 본문·찬송 가사·교독문도 요소라
-  **글자 크기·색·위치를 자유롭게** 편집(구글 슬라이드식 드래그·스냅·가이드).
+  **글자 크기·색·위치를 자유롭게** 편집(구글 슬라이드식 드래그·스냅·가이드). 캔버스에서 바로 인라인 텍스트 편집·부분 색상.
 - **디자인 템플릿** — 슬라이드 종류(타이틀/성경/찬송/교독문/광고 등)가 곧 템플릿. 디자인을 저장·재사용·편집.
-- **발표 화면** — 2번째 모니터 전체화면, 편집과 실시간 동기화, 전환 효과(페이드/슬라이드), 블랙아웃.
-- **PPT/PDF/이미지 가져오기** — 기존 슬라이드를 이미지로 임포트(LibreOffice·poppler 활용).
+- **발표 화면** — 2번째 모니터 전체화면, 편집과 실시간 동기화, 전환 효과(페이드/슬라이드), 블랙아웃, 번호 입력 이동.
+- **PPT/PDF/이미지 가져오기** — 기존 슬라이드를 이미지로 임포트(LibreOffice·poppler 활용). 이미지는
+  **WebP로 저장**(cwebp 있을 때, 용량 7~12배↓)해 내보내기가 가볍습니다.
 - **PPT 라이브러리 검색** — 폴더 하나를 지정하면 하위 폴더까지 재귀 색인, **파일명+내용**으로 검색해 바로 가져오기.
+  자주 쓰는 폴더는 **미리 변환**해두면 가져오기가 즉시.
 - **테마 & 커스텀 색** — 프리셋(다크블루/라이트웜/블랙) + 서비스별 배경색·메인색.
+- **자유 폰트** — 오프라인 self-host 웹폰트(한글/영문 14종), 요소별·서비스 기본 글꼴 지정.
 - **Tool-First / Headless-First** — 모든 기능이 Tool Registry에 등록되고, **MCP·CLI·HTTP** 세 어댑터로
   자동 노출됩니다. 즉 외부 LLM(Claude 등)이나 셸 스크립트로도 예배 덱을 만들 수 있습니다.
 
@@ -28,47 +32,55 @@
 
 ## 요구 사항
 
-| 구분 | 필요 | 비고 |
+| 구분 | 필요 | 용도 |
 |---|---|---|
 | **필수** | [Bun](https://bun.sh) 1.3+ | 런타임·SQLite·서버 내장 |
-| **콘텐츠 데이터** | `bible.json` / `hymns.json` / `readings.json` | 저작권 자료, 별도 준비 (아래 참조) |
-| 선택 | **LibreOffice**(`soffice`) | `.pptx/.ppt/.odp` 슬라이드 임포트 |
-| 선택 | **poppler**(`pdftoppm`·`pdftotext`) | PDF 임포트 / 라이브러리 PDF 내용 검색 |
+| **콘텐츠** | `bible.json` / `hymns.json` / `readings.json` | 성경·찬송·교독문 (저작권 자료, 별도 준비 — [아래](#1-콘텐츠-데이터-준비)) |
+| 선택 | **LibreOffice** (`soffice`) | `.pptx/.ppt/.odp` 가져오기 |
+| 선택 | **poppler** (`pdftoppm`·`pdftotext`) | PDF 가져오기 · 라이브러리 PDF 내용 검색 |
+| 선택 | **cwebp** (libwebp) | 가져온 이미지를 WebP로 저장(용량 7~12배↓). 없으면 PNG로 저장(정상 동작) |
 
 > 편집·발표·요소편집·**PPT/ODP 내용 검색**은 외부 도구 없이 어디서든(macOS·Windows·Linux) 동작합니다.
-> 위 "선택" 도구는 PPT→이미지 임포트, PDF 관련 기능에만 필요합니다.
+> "선택" 도구는 슬라이드 가져오기·PDF·이미지 압축에만 필요하며, 없으면 해당 기능만 비활성/대체됩니다.
 
-설치 예시:
+### macOS
+
 ```bash
-# ── Bun (필수) ─────────────────────────────
-# macOS / Linux
+# 1) Bun (필수)
 curl -fsSL https://bun.sh/install | bash
-# Windows (PowerShell)
-powershell -c "irm bun.sh/install.ps1 | iex"
 
-# ── (선택) 임포트 기능용: LibreOffice(soffice) + poppler ──
-# macOS
-brew install --cask libreoffice   # .pptx 임포트
-brew install poppler              # PDF 임포트/검색
-# Linux (Debian/Ubuntu)
-sudo apt install libreoffice poppler-utils
+# 2) 선택 도구 (Homebrew) — 가져오기·PDF·WebP
+brew install --cask libreoffice     # .pptx/.ppt/.odp 가져오기
+brew install poppler webp           # PDF 가져오기·검색 + WebP 변환(cwebp)
 ```
 
-> **Windows — 패키지 매니저 없이 (권장)**
->
-> 대부분의 Windows에는 scoop/choco가 없습니다. 아래처럼 **설치 파일/압축본**으로 하세요.
-> (임포트/검색 기능을 안 쓰면 둘 다 필요 없습니다 — 편집·발표·PPT/ODP 내용검색은 순수 동작.)
->
-> 1. **LibreOffice** (`.pptx/.ppt/.odp` 가져오기)
->    - <https://www.libreoffice.org/download> 에서 **설치 파일(.msi)** 을 받아 설치.
->    - 기본 경로(`C:\Program Files\LibreOffice\program\soffice.exe`)를 **앱이 자동 탐지** → PATH 등록 불필요.
->    - (winget 사용자라면: `winget install -e --id TheDocumentFoundation.LibreOffice`)
-> 2. **poppler** (PDF 가져오기/검색) — **PATH 편집 없이**:
->    - <https://github.com/oschwartz10612/poppler-windows/releases> 에서 `Release-…zip` 다운로드.
->    - 압축을 풀어 **폴더째로 프로젝트의 `tools/` 안에** 넣습니다.
->      예: `tools/poppler-24.08.0/Library/bin/pdftoppm.exe`
->    - 끝. 앱이 `tools/*/Library/bin` 을 자동 탐지합니다. (자세히: [`tools/README.md`](./tools/README.md))
->    - 대안: 환경변수 `LYRA_POPPLER` 에 poppler의 `bin` 폴더 경로 지정, 또는 그 폴더를 시스템 PATH에 추가.
+### Windows
+
+패키지 매니저(scoop/choco)가 없어도 됩니다. **설치 파일/압축본**으로 넣으면 앱이 자동 탐지합니다(PATH 편집 불필요).
+
+```powershell
+# 1) Bun (필수) — PowerShell
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+2) 선택 도구:
+
+| 도구 | 설치 |
+|---|---|
+| **LibreOffice** | [libreoffice.org/download](https://www.libreoffice.org/download) 의 **.msi** 설치 → 기본 경로 자동 탐지. (winget: `winget install -e --id TheDocumentFoundation.LibreOffice`) |
+| **poppler** | [poppler-windows Release](https://github.com/oschwartz10612/poppler-windows/releases) 의 `Release-…zip` → 압축 풀어 폴더째 **`tools/`** 안에. 예: `tools/poppler-24.08.0/Library/bin/pdftoppm.exe`. (대안: 환경변수 `LYRA_POPPLER`=bin 폴더) |
+| **cwebp** | [libwebp 다운로드](https://developers.google.com/speed/webp/download) 의 Windows zip → 폴더째 **`tools/`** 안에. 예: `tools/libwebp-1.4.0-windows-x64/bin/cwebp.exe`. (대안: `LYRA_CWEBP`=cwebp.exe가 있는 폴더). 없으면 이미지를 PNG로 저장 |
+
+> 자세한 드롭인 방법: [`tools/README.md`](./tools/README.md).
+
+### Linux (Debian/Ubuntu)
+
+```bash
+# 1) Bun (필수)
+curl -fsSL https://bun.sh/install | bash
+# 2) 선택 도구
+sudo apt install libreoffice poppler-utils webp
+```
 
 ---
 
@@ -215,9 +227,12 @@ bun run mcp     # stdio MCP 서버 — 외부 에이전트가 tool로 예배 덱
 ### HTTP
 
 ```
-POST /api/tools/:name      # 도구 실행 (읽기 도구는 GET도 가능)
-POST /api/import           # 멀티파트 파일 임포트(PPT/PDF/이미지)
-GET  /api/tools            # 도구 목록
+POST /api/tools/:name        # 도구 실행 (읽기 도구는 GET도 가능)
+GET  /api/tools              # 도구 목록
+POST /api/import             # 멀티파트 슬라이드 가져오기(PPT/PDF/이미지)
+POST /api/import-service     # 멀티파트 예배 순서 JSON 가져오기(큰 파일 대응)
+POST /api/bible-refs/extract # 주보 PDF에서 빨강 성구 추출
+POST /api/upload             # 멀티파트 미디어 업로드
 ```
 
 ---

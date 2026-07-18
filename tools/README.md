@@ -20,7 +20,7 @@
 
 ## cwebp (WebP 변환 — 선택)
 
-가져온 PPT/PDF 페이지 이미지를 **WebP로 저장**해 용량을 7~12배 줄입니다(없으면 PNG로 저장 — 정상 동작).
+가져온 PPT/PDF 페이지 이미지를 **WebP로 저장**해 용량을 약 7~8배 줄입니다(없으면 PNG로 저장 — 정상 동작).
 
 1. prebuilt 다운로드: <https://developers.google.com/speed/webp/download> (libwebp의 Windows/macOS/Linux zip)
 2. 압축을 풀어 폴더째 이 `tools/` 안에 넣습니다. 예:

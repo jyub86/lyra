@@ -842,6 +842,37 @@ function colorSwatches(current, onPick) {
   return wrap.children.length ? wrap : null;
 }
 
+// 찬송가 제목·가사로 검색 → 결과 클릭 시 onPick(number, title). 번호를 몰라도 찾도록.
+function hymnSearchField(placeholder, onPick) {
+  const wrap = elx("div", "hymn-search");
+  const input = document.createElement("input");
+  input.type = "search"; input.placeholder = placeholder || "찬송가 제목·가사로 검색 (예: 만복, 주 예수)";
+  const results = elx("div", "hymn-search-results"); results.hidden = true;
+  let timer = null;
+  const doSearch = async () => {
+    const q = input.value.trim();
+    if (!q) { results.hidden = true; results.replaceChildren(); return; }
+    try {
+      const { results: hits } = await callTool("search_hymn", { query: q, limit: 12 });
+      results.replaceChildren();
+      if (!hits.length) { results.append(elx("div", "hymn-hit-empty", "결과 없음")); results.hidden = false; return; }
+      for (const h of hits) {
+        const row = elx("button", "hymn-hit"); row.type = "button";
+        row.append(elx("span", "hh-no", `${h.number}장`), elx("span", "hh-title", h.title));
+        row.onmousedown = (e) => e.preventDefault();   // 클릭해도 입력 포커스 유지
+        row.onclick = () => { results.hidden = true; onPick(h.number, h.title); };
+        results.appendChild(row);
+      }
+      results.hidden = false;
+    } catch (e) { results.replaceChildren(elx("div", "hymn-hit-empty", e.message)); results.hidden = false; }
+  };
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(doSearch, 200); });
+  input.addEventListener("focus", () => { if (results.children.length) results.hidden = false; });
+  input.addEventListener("blur", () => setTimeout(() => { results.hidden = true; }, 150));
+  wrap.append(input, results);
+  return wrap;
+}
+
 function renderDesignPanel() {
   const empty = $("el-empty"), body = $("el-props");
   // 편집할 때마다 commitEls→refresh→render로 이 패널을 다시 그리는데, 그때 스크롤이
@@ -1069,6 +1100,14 @@ function renderDesignPanel() {
       field("회중 색", "color", "congregation_color", { def: "#e0af68" });
     }
     body.appendChild(elx("div", "section-title", "내용 (params)"));
+    // 찬송가: 번호를 몰라도 제목·가사로 검색해 선택(→ 번호 채우고 본문 가져오기)
+    if (el.type === "hymn") {
+      const search = hymnSearchField("찬송가 제목·가사로 검색", (num) => {
+        el.params = { ...(el.params || {}), number: num };
+        fetchContentElement(state.editEl);   // 본문 가져오기 + 재렌더(번호 입력 갱신)
+      });
+      body.appendChild(search);
+    }
     for (const [label, name, ptype] of CONTENT_PARAMS[el.type]) {
       const wrap = elx("label", null, label);
       const input = document.createElement("input");
@@ -1300,7 +1339,16 @@ function renderAddFields() {
   const wrap = $("add-fields");
   wrap.innerHTML = "";
   const props = tpl?.params_schema?.properties || {};
+  // 찬송가 템플릿: 번호를 몰라도 제목·가사로 검색해 번호 자동 입력
+  const isHymn = tpl?.id === "builtin-hymn";
   for (const [key, def] of Object.entries(props)) {
+    if (isHymn && key === "number") {
+      const search = hymnSearchField("찬송가 제목·가사로 검색 (번호 몰라도 OK)", (num) => {
+        const numInput = wrap.querySelector('[data-key="number"]');
+        if (numInput) numInput.value = num;
+      });
+      wrap.appendChild(search);
+    }
     wrap.appendChild(elx("label", null, PARAM_LABELS[key] || key));
     let input;
     if (def.enum) {

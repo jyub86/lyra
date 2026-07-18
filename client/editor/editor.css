@@ -166,6 +166,24 @@ a { color: var(--accent); text-decoration: none; }
 .lib-search { display: flex; gap: 6px; align-items: center; }
 .lib-search input { flex: 1; width: auto; }
 #lib-prerender { white-space: nowrap; }
+/* 찬송가 제목 검색 */
+.hymn-search { position: relative; margin-bottom: 8px; }
+.hymn-search > input { width: 100%; box-sizing: border-box; padding: 7px 10px; }
+.hymn-search-results {
+  position: absolute; left: 0; right: 0; top: 100%; z-index: 20; margin-top: 2px;
+  max-height: 240px; overflow: auto; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+}
+.hymn-search .hymn-hit {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left;
+  padding: 7px 10px; background: none; border: none; border-bottom: 1px solid var(--line);
+  color: var(--text); cursor: pointer;
+}
+.hymn-search .hymn-hit:last-child { border-bottom: none; }
+.hymn-search .hymn-hit:hover { background: var(--panel2); }
+.hymn-search .hh-no { flex: 0 0 auto; color: var(--accent); font-weight: 700; font-size: 12px; }
+.hymn-search .hh-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hymn-search .hymn-hit-empty { padding: 8px 10px; color: var(--muted); font-size: 12px; }
 /* 폴더 미리 변환 */
 .lib-pre { display: flex; gap: 6px; align-items: center; }
 .lib-pre input { flex: 1; }

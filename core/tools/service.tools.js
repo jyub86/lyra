@@ -4,24 +4,35 @@ import { register } from "./registry.js";
 import { ulid } from "../lib/ulid.js";
 import { nowIso, parseSlide } from "./_helpers.js";
 import { readFileSync, existsSync } from "node:fs";
-import { join, dirname, basename } from "node:path";
+import { join, dirname, basename, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { saveUpload } from "../lib/uploads.js";
 
 const SHARE_FORMAT = "worship-service/v2";
-const UPLOAD_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../data/uploads");
+const DATA_DIR = normalize(join(dirname(fileURLToPath(import.meta.url)), "../../data"));
+// 서버가 서빙하는 첨부 경로들(모두 data/ 하위). 내보내기 번들 대상.
+const ASSET_PREFIXES = ["/uploads/", "/render-cache/"];
 
 function slidesOf(db, serviceId) {
   return db.query("SELECT * FROM slides WHERE service_id = ? ORDER BY position").all(serviceId).map(parseSlide);
 }
 
-// /uploads/... 를 참조하는 곳: 요소 image url + 배경(image/video) url.
+function isAssetUrl(u) {
+  return typeof u === "string" && ASSET_PREFIXES.some((p) => u.startsWith(p));
+}
+// url(/uploads/… 또는 /render-cache/…) → 실제 파일 경로. 경로 이탈(..)은 차단.
+function assetFilePath(url) {
+  const full = normalize(join(DATA_DIR, url));
+  return full.startsWith(DATA_DIR) ? full : null;
+}
+
+// 첨부 파일을 참조하는 곳: 요소 image/video url + 배경(image/video) url.
 function collectAssetUrls(slides) {
   const urls = new Set();
   for (const s of slides) {
-    if (typeof s.background?.url === "string" && s.background.url.startsWith("/uploads/")) urls.add(s.background.url);
+    if (isAssetUrl(s.background?.url)) urls.add(s.background.url);
     for (const e of s.elements || []) {
-      if (typeof e?.url === "string" && e.url.startsWith("/uploads/")) urls.add(e.url);
+      if (isAssetUrl(e?.url)) urls.add(e.url);
     }
   }
   return [...urls];
@@ -233,8 +244,8 @@ register({
     const bundled = [];
     if (assets) {
       for (const url of collectAssetUrls(slides)) {
-        const p = join(UPLOAD_DIR, basename(url));
-        if (existsSync(p)) bundled.push({ url, data_base64: readFileSync(p).toString("base64") });
+        const p = assetFilePath(url);
+        if (p && existsSync(p)) bundled.push({ url, data_base64: readFileSync(p).toString("base64") });
       }
     }
     return {

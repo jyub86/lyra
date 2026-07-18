@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { saveUpload } from "./uploads.js";
 import { findPoppler } from "./poppler.js";
-import { getCached, putCached } from "./render-cache.js";
+import { getCachedBuffers, putCachedBuffers, isCached } from "./render-cache.js";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // presentation docs LibreOffice can read
@@ -130,8 +130,9 @@ export async function fileToSlides(filename, bytes) {
   throw new Error(`지원하지 않는 형식: ${ext} (PPT/PDF/이미지). LibreOffice 미설치 시 PPT는 PDF로 내보내세요.`);
 }
 
-// 서버 경로 파일 → 슬라이드 배열. 렌더 캐시 사용(경로+mtime): 히트면 변환 없이 즉시,
-// 미스면 렌더 후 캐시. 라이브러리·import_pdf(자주 쓰는 PPT)의 빠른 가져오기용.
+// 서버 경로 파일 → 슬라이드 배열. 렌더 캐시로 "변환"만 건너뛰고, 이미지는 항상
+// uploads(영구)에 저장해 /uploads/ 를 참조한다 → 슬라이드는 캐시 삭제와 무관하게 안전하고
+// 내보내기(export) 시 그대로 번들된다. 라이브러리·import_pdf(자주 쓰는 PPT)용.
 export async function fileToSlidesFromPath(path) {
   const ext = extname(path).toLowerCase();
   if (IMAGE_EXT.has(ext)) { // 이미지는 변환 불필요 — 그대로 업로드
@@ -141,11 +142,12 @@ export async function fileToSlidesFromPath(path) {
   if (!OFFICE_EXT.has(ext) && ext !== ".pdf") {
     throw new Error(`지원하지 않는 형식: ${ext} (PPT/PDF/이미지). LibreOffice 미설치 시 PPT는 PDF로 내보내세요.`);
   }
-  const hit = getCached(path, RENDER_WIDTH);
-  if (hit) return hit.urls.map(imageSlide);                 // 캐시 히트 → 즉시
-  const buffers = await renderFileToBuffers(basename(path), readFileSync(path));
-  const { urls } = putCached(path, RENDER_WIDTH, buffers);  // 렌더 후 캐시
-  return urls.map(imageSlide);
+  let buffers = getCachedBuffers(path, RENDER_WIDTH);       // 캐시 히트 → 변환 생략
+  if (!buffers) {
+    buffers = await renderFileToBuffers(basename(path), readFileSync(path));
+    putCachedBuffers(path, RENDER_WIDTH, buffers);          // 다음을 위해 캐시
+  }
+  return (await buffersToUploadUrls(buffers)).map(imageSlide);   // 항상 uploads에 영구 저장
 }
 
 // 캐시만 채운다(가져오지 않음). 미리 변환(prerender)용. 이미 신선하면 렌더 생략.
@@ -153,10 +155,10 @@ export async function fileToSlidesFromPath(path) {
 export async function prerenderPath(path, force = false) {
   const ext = extname(path).toLowerCase();
   if (!OFFICE_EXT.has(ext) && ext !== ".pdf") return { pages: 0, skipped: true }; // 이미지 등은 대상 아님
-  if (!force && getCached(path, RENDER_WIDTH)) return { pages: getCached(path, RENDER_WIDTH).urls.length, skipped: true };
+  if (!force && isCached(path, RENDER_WIDTH)) return { pages: (getCachedBuffers(path, RENDER_WIDTH) || []).length, skipped: true };
   const buffers = await renderFileToBuffers(basename(path), readFileSync(path));
-  const { urls } = putCached(path, RENDER_WIDTH, buffers);
-  return { pages: urls.length, cached: true };
+  putCachedBuffers(path, RENDER_WIDTH, buffers);
+  return { pages: buffers.length, cached: true };
 }
 
 export { RENDER_WIDTH };

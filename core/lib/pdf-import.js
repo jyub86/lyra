@@ -12,6 +12,11 @@ import { findPoppler } from "./poppler.js";
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // presentation docs LibreOffice can read
 
+// PDF→이미지 렌더 목표 너비(px). DPI 대신 너비로 고정하면 슬라이드의 물리적 크기와
+// 무관하게 항상 이 해상도로 렌더된다(선명·일관). 2560=1440p, 1080p 프로젝터엔 넉넉하고
+// 4K에서도 무난. 높이면 더 선명·용량↑.
+const RENDER_WIDTH = 2560;
+
 // Persistent LibreOffice profile dir. Reusing it (instead of a fresh tmp profile
 // per import) skips the ~1.8s cold profile regeneration on every conversion.
 const LO_PROFILE_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../data/.lo-profile");
@@ -85,7 +90,8 @@ async function pdfToImageUrls(bytes) {
   try {
     const pdfPath = join(dir, "in.pdf");
     writeFileSync(pdfPath, Buffer.from(bytes));
-    const { code } = await run([pdftoppm, "-png", "-r", "150", pdfPath, join(dir, "page")]);
+    // -scale-to-x W -scale-to-y -1 = 너비를 W로 고정, 높이는 비율 유지(-1).
+    const { code } = await run([pdftoppm, "-png", "-scale-to-x", String(RENDER_WIDTH), "-scale-to-y", "-1", pdfPath, join(dir, "page")]);
     if (code !== 0) {
       throw new Error("pdftoppm 변환 실패 (poppler 확인). PPT는 LibreOffice로 자동 변환됩니다.");
     }

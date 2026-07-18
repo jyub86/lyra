@@ -3,8 +3,11 @@
 // GET /api/tools (list). All routes funnel through registry.execute — same path
 // as CLI/MCP, no per-tool routing.
 import { loadTools, schemas, get, execute } from "../core/tools/registry.js";
+import { getDb } from "../core/db/index.js";
+import { bus } from "../core/lib/bus.js";
 import { saveUpload } from "../core/lib/uploads.js";
 import { fileToSlides } from "../core/lib/pdf-import.js";
+import { insertSlides } from "../core/tools/slide.tools.js";
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -49,12 +52,13 @@ export async function handleApi(req, url) {
     const posRaw = url.searchParams.get("position");
     let position = posRaw != null && posRaw !== "" ? Number(posRaw) : undefined;
     try {
+      const db = getDb();
+      if (!db.query("SELECT id FROM services WHERE id = ?").get(serviceId)) return json({ error: `unknown service: ${serviceId}` }, 404);
       const slides = await fileToSlides(file.name, await file.arrayBuffer());
-      const slide_ids = [];
-      for (const s of slides) {
-        slide_ids.push((await execute("add_slide", { service_id: serviceId, ...s, position })).slide_id);
-        if (position != null) position += 1;
-      }
+      // 페이지별 add_slide 반복 대신 한 트랜잭션으로 일괄 삽입 + "changed" 이벤트 1회
+      // (발표 화면이 매 페이지마다 전체를 다시 불러오는 것 방지).
+      const slide_ids = insertSlides(db, serviceId, slides, position);
+      bus.emit("changed", { tool: "import_pdf" });
       return json({ slide_ids });
     } catch (e) {
       return json({ error: e.message }, 500);

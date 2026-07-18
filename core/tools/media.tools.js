@@ -1,8 +1,9 @@
 // Media tools (design §8-2). Video background + media upload + PDF/image import.
-import { register, execute } from "./registry.js";
+import { register } from "./registry.js";
 import { readFileSync } from "node:fs";
 import { saveUpload } from "../lib/uploads.js";
 import { fileToSlides } from "../lib/pdf-import.js";
+import { insertSlides } from "./slide.tools.js";
 import { serviceIdForSlide, touchService } from "./_helpers.js";
 
 register({
@@ -30,14 +31,15 @@ register({
     properties: {
       service_id: { type: "string" },
       path: { type: "string", description: "서버의 PDF/이미지 파일 경로" },
+      position: { type: "integer", description: "삽입 시작 위치(생략 시 맨 끝)" },
     },
     required: ["service_id", "path"],
   },
-  handler: async ({ service_id, path }, ctx) => {
+  handler: async ({ service_id, path, position }, ctx) => {
     if (!ctx.db.query("SELECT id FROM services WHERE id = ?").get(service_id)) throw new Error(`unknown service: ${service_id}`);
     const slides = await fileToSlides(path.split("/").pop(), readFileSync(path));
-    const slide_ids = [];
-    for (const s of slides) slide_ids.push((await execute("add_slide", { service_id, ...s }, ctx)).slide_id);
+    // 페이지별 add_slide를 반복하지 않고 한 트랜잭션으로 일괄 삽입(이벤트도 import_pdf 1회만).
+    const slide_ids = insertSlides(ctx.db, service_id, slides, position);
     return { slide_ids };
   },
 });

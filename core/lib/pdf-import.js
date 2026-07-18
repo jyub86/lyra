@@ -2,14 +2,28 @@
 // .docx) → PDF via LibreOffice `soffice`; PDF → per-page PNGs via `pdftoppm`;
 // single images pass through. Each page/image becomes a slide with one full-bleed
 // image element on a black background. Shared by /api/import and import_pdf tool.
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { saveUpload } from "./uploads.js";
 import { findPoppler } from "./poppler.js";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // presentation docs LibreOffice can read
+
+// Persistent LibreOffice profile dir. Reusing it (instead of a fresh tmp profile
+// per import) skips the ~1.8s cold profile regeneration on every conversion.
+const LO_PROFILE_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../data/.lo-profile");
+
+// Run a subprocess async (doesn't block the server like spawnSync did), returning
+// { code, stderr }. stderr captured for error messages.
+async function run(cmd) {
+  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "pipe" });
+  const stderr = await new Response(proc.stderr).text();
+  const code = await proc.exited;
+  return { code, stderr };
+}
 
 // Locate the LibreOffice CLI across macOS / Windows / Linux (PATH or known locations).
 function findSoffice() {
@@ -36,14 +50,18 @@ async function officeToPdf(filename, bytes) {
   try {
     const inPath = join(dir, filename.replace(/[^\w.\-가-힣]/g, "_"));
     writeFileSync(inPath, Buffer.from(bytes));
-    // -env:UserInstallation isolates the LibreOffice profile per-run (avoids lock
-    // clashes) in an OS-independent way (works on Windows, unlike HOME).
-    const profileUrl = "file://" + (process.platform === "win32" ? "/" + dir.replace(/\\/g, "/") : dir);
-    const proc = Bun.spawnSync([soffice, `-env:UserInstallation=${profileUrl}`,
+    // -env:UserInstallation points LibreOffice at a persistent profile (reused
+    // across imports → no ~1.8s cold profile rebuild). OS-independent (works on
+    // Windows, unlike HOME). A stale .lock from a prior crash is cleared first.
+    mkdirSync(LO_PROFILE_DIR, { recursive: true });
+    const lock = join(LO_PROFILE_DIR, ".lock");
+    if (existsSync(lock)) { try { rmSync(lock, { force: true }); } catch { /* ignore */ } }
+    const profileUrl = "file://" + (process.platform === "win32" ? "/" + LO_PROFILE_DIR.replace(/\\/g, "/") : LO_PROFILE_DIR);
+    const { code, stderr } = await run([soffice, `-env:UserInstallation=${profileUrl}`,
       "--headless", "--convert-to", "pdf", "--outdir", dir, inPath]);
     const pdf = readdirSync(dir).find((f) => f.toLowerCase().endsWith(".pdf"));
-    if (proc.exitCode !== 0 || !pdf) {
-      throw new Error("LibreOffice 변환 실패: " + (proc.stderr ? new TextDecoder().decode(proc.stderr).slice(0, 200) : "unknown"));
+    if (code !== 0 || !pdf) {
+      throw new Error("LibreOffice 변환 실패: " + (stderr ? stderr.slice(0, 200) : "unknown"));
     }
     return readFileSync(join(dir, pdf));
   } finally {
@@ -67,17 +85,15 @@ async function pdfToImageUrls(bytes) {
   try {
     const pdfPath = join(dir, "in.pdf");
     writeFileSync(pdfPath, Buffer.from(bytes));
-    const proc = Bun.spawnSync([pdftoppm, "-png", "-r", "150", pdfPath, join(dir, "page")]);
-    if (proc.exitCode !== 0) {
+    const { code } = await run([pdftoppm, "-png", "-r", "150", pdfPath, join(dir, "page")]);
+    if (code !== 0) {
       throw new Error("pdftoppm 변환 실패 (poppler 확인). PPT는 LibreOffice로 자동 변환됩니다.");
     }
     const pages = readdirSync(dir).filter((f) => f.startsWith("page") && f.endsWith(".png")).sort();
-    const urls = [];
-    for (const f of pages) {
-      const { url } = await saveUpload(f.replace(/^page/, "slide") , readFileSync(join(dir, f)));
-      urls.push(url);
-    }
-    return urls;
+    // 페이지 이미지 저장은 서로 독립 → 병렬로(디스크 쓰기 대기 시간 겹침). await 후 반환해
+    // tmp 정리(finally)가 쓰기 완료 뒤에 일어나게 한다.
+    return await Promise.all(pages.map((f) =>
+      saveUpload(f.replace(/^page/, "slide"), readFileSync(join(dir, f))).then((r) => r.url)));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

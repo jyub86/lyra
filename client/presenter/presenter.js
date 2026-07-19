@@ -28,20 +28,38 @@ function makeStage(slide) {
   return el;
 }
 
-// Replace the deck contents immediately (no animation).
-function renderNow() {
+// 새 스테이지를 만들되, 이미지가 디코드될 때까지 기다린다. 교체 전에 디코드해두면
+// 화면을 바꿀 때 이미지가 아직 안 그려져 생기는 검정 깜박임이 없다.
+async function makeStageDecoded(slide) {
+  const el = makeStage(slide);
+  const imgs = [...el.querySelectorAll("img")].filter((i) => i.getAttribute("src"));
+  // 최대 300ms만 기다림(느리거나 깨진 이미지에 무한정 매달리지 않게).
+  await Promise.race([
+    Promise.all(imgs.map((i) => (i.decode ? i.decode().catch(() => {}) : Promise.resolve()))),
+    new Promise((r) => setTimeout(r, 300)),
+  ]);
+  return el;
+}
+
+// Replace the deck contents (no animation). 새 슬라이드 이미지를 디코드한 뒤 한 번에
+// 교체 → 이전 슬라이드가 그때까지 남아 있어 깜박임이 없다.
+let renderSeq = 0;
+async function renderNow() {
   const slides = flatSlides();
   state.index = clamp(state.index, 0, Math.max(0, slides.length - 1));
   black.hidden = !state.blackout;
   const slide = slides[state.index];
-  deck.replaceChildren();
-  if (slide) { state.stage = makeStage(slide); deck.appendChild(state.stage); }
-  else state.stage = null;
+  const seq = ++renderSeq;
+  if (!slide) { deck.replaceChildren(); state.stage = null; return; }
+  const stage = await makeStageDecoded(slide);
+  if (seq !== renderSeq) return;                 // 그 사이 더 최신 렌더가 시작됨 → 버림
+  deck.replaceChildren(stage);                   // 디코드 완료 후 한 번에 교체
+  state.stage = stage;
 }
 
 // Crossfade / slide from the current stage to `newIndex` per service.transition.
 const DUR = 360;
-function transitionTo(newIndex) {
+async function transitionTo(newIndex) {
   const slides = flatSlides();
   const idx = clamp(newIndex, 0, Math.max(0, slides.length - 1));
   const transition = state.service?.transition || "none";
@@ -53,7 +71,8 @@ function transitionTo(newIndex) {
   if (transition === "none" || !state.stage) { renderNow(); return; }
 
   const outgoing = state.stage;
-  const incoming = makeStage(slide);
+  const incoming = await makeStageDecoded(slide);   // 이미지 디코드 후 애니메이션 시작(깜박임 방지)
+  if (state.stage !== outgoing) return;             // 그 사이 다른 렌더/전환이 시작됨 → 취소
   state.stage = incoming;
 
   incoming.style.transition = "none";

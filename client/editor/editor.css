@@ -124,6 +124,10 @@ a { color: var(--accent); text-decoration: none; }
   border: 1px solid #2a3350; background: #131722; color: #e8eaf0; cursor: pointer; font-weight: 700;
 }
 .inline-fmt .fmt-btn:hover { background: #202840; }
+.inline-fmt .fmt-font {
+  height: 22px; max-width: 92px; padding: 0 4px; border-radius: 5px;
+  border: 1px solid #2a3350; background: #131722; color: #e8eaf0; cursor: pointer; font-size: 12px;
+}
 /* snap guide lines */
 .guide-v { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed #f7768e; pointer-events: none; z-index: 6; }
 .guide-h { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed #f7768e; pointer-events: none; z-index: 6; }

@@ -430,8 +430,9 @@ function renderEditLayer() {
     layer.addEventListener("dblclick", (e) => {
       e.preventDefault();
       if (layer._dblIndex < 0) return;
-      // 텍스트는 캔버스에서 바로 인라인 편집, 콘텐츠 요소(성경/찬송/교독)는 패널 params로.
-      if (els()[layer._dblIndex]?.type === "text") startInlineEdit(layer._dblIndex);
+      // 텍스트·성경/찬송/교독 본문은 캔버스에서 바로 인라인 편집(전체/일부 글꼴·색), 그 외는 패널.
+      const t = els()[layer._dblIndex]?.type;
+      if (["text", "bible", "hymn", "reading"].includes(t)) startInlineEdit(layer._dblIndex);
       else focusElementContent(layer._dblIndex);
     });
     pv.appendChild(layer);
@@ -564,7 +565,14 @@ function getFmtBar() {
   bar.appendChild(custom);
   const keepFocus = (b) => { b.onmousedown = (e) => e.preventDefault(); return b; };  // 편집 포커스 유지
   const mk = (label, title, fn) => { const b = keepFocus(elx("button", "fmt-btn", label)); b.title = title; b.onclick = () => applyFmt(fn); return b; };
-  bar.append(mk("B", "굵게", () => document.execCommand("bold")), mk("✕", "서식 지움", () => document.execCommand("removeFormat")));
+  bar.append(mk("B", "굵게", () => document.execCommand("bold")));
+  // 글꼴 선택(선택 영역에 적용). 첫 옵션은 안내용.
+  const fontSel = document.createElement("select"); fontSel.className = "fmt-font"; fontSel.title = "선택 글자 글꼴";
+  const ph = document.createElement("option"); ph.value = ""; ph.textContent = "글꼴"; fontSel.appendChild(ph);
+  fillFontSelect(fontSel, "");
+  fontSel.querySelectorAll("option").forEach((o) => { if (o.value === "" && o.textContent !== "글꼴") o.remove(); }); // "테마 기본" 중복 제거
+  fontSel.addEventListener("change", () => { if (fontSel.value) applyFmt(() => document.execCommand("fontName", false, fontSel.value)); fontSel.value = ""; });
+  bar.append(fontSel, mk("✕", "서식 지움", () => document.execCommand("removeFormat")));
   document.body.appendChild(bar);
   fmtBar = bar; return bar;
 }
@@ -623,9 +631,10 @@ document.addEventListener("selectionchange", () => {
 // 캔버스에서 텍스트 요소를 바로 인라인 편집(더블클릭·텍스트 추가 시). 렌더된 노드를
 // contentEditable로 만들어 그 자리에서 입력 → blur/Esc에 저장. 편집 중엔 edit-layer를
 // 통과시켜(pointer-events:none) 커서·선택이 노드에 닿게 한다.
+const INLINE_TYPES = new Set(["text", "bible", "hymn", "reading"]);
 function startInlineEdit(i, opts = {}) {
   const el = els()[i];
-  if (!el || el.type !== "text") { focusElementContent(i); return; }
+  if (!el || !INLINE_TYPES.has(el.type)) { focusElementContent(i); return; }
   selectEl(i);                                       // 선택 + 디자인 탭 + 패널
   state.inlineEdit = i;
   const pv = $("preview");
@@ -637,13 +646,16 @@ function startInlineEdit(i, opts = {}) {
   box.classList.add("inline-editing");
   node.contentEditable = "true";
   node.spellcheck = false;
-  if (el.html) node.innerHTML = el.html; else node.textContent = el.text ?? "";  // 편집용 원본
+  // 텍스트: el.html/el.text로 편집 원본을 채운다. 콘텐츠(성경/찬송/교독): 이미 렌더된
+  // 본문(구조 또는 el.html)을 그대로 편집 대상으로 삼는다(내용을 지우지 않음).
+  if (el.type === "text") { if (el.html) node.innerHTML = el.html; else node.textContent = el.text ?? ""; }
   node.focus();
   const sel = window.getSelection(), range = document.createRange();
   range.selectNodeContents(node);
   if (!opts.selectAll) range.collapse(false);        // 기본: 커서 끝 / 새 요소: 전체 선택
   sel.removeAllRanges(); sel.addRange(range);
-  const onInput = () => { el.html = node.innerHTML; el.text = node.innerText; };  // 라이브(리페인트 X: 포커스 유지)
+  let dirty = false;
+  const onInput = () => { dirty = true; el.html = node.innerHTML; el.text = node.innerText; }; // 라이브(리페인트 X: 포커스 유지)
   const onKey = (e) => {
     if (e.key === "Escape") { e.preventDefault(); node.blur(); return; }
     e.stopPropagation();                             // 전역 단축키로 새지 않게(Del 등)
@@ -659,7 +671,8 @@ function startInlineEdit(i, opts = {}) {
     state.inlineEdit = null;
     hideFmtBar(); fmtNode = null;                     // 플로팅 서식 바 닫기
     if (layer) layer.style.pointerEvents = "";       // edit-layer는 refresh에도 재사용되므로 꼭 복구
-    el.html = node.innerHTML; el.text = node.innerText;
+    // 콘텐츠 요소는 실제로 편집했을 때만 el.html 저장(무편집 시 구조 렌더 유지).
+    if (el.type === "text" || dirty) { el.html = node.innerHTML; el.text = node.innerText; }
     commitEls();                                     // 저장 + refresh(정식 렌더로 복귀)
   };
   node.addEventListener("input", onInput);
@@ -1084,9 +1097,10 @@ function renderDesignPanel() {
         body.appendChild(elx("p", "hint muted", `토큰: ${FMT_TOKENS[el.type][fkey]}`));
       }
     }
+    body.appendChild(elx("p", "hint muted", "본문을 더블클릭하면 전체·일부 글자의 글꼴·색을 바꿀 수 있어요(선택 후 떠오르는 서식 바)."));
     sizeRow(1.5, 10, 3.2);
     fontField();
-    field("색", "color", "color", { def: "#ffffff" });
+    field("색(전체)", "color", "color", { def: "#ffffff" });
     field("정렬(가로)", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
     field("정렬(세로)", "select", "valign", { options: [["middle", "가운데"], ["top", "위"], ["bottom", "아래"]] });
     numRow("줄 간격 (숫자)", "line_height", { min: 1, max: 2.6, step: 0.05, def: 1.5 });
@@ -1151,6 +1165,7 @@ async function fetchContentElement(i) {
       const rd = await callTool("get_reading", { number: p.number });
       el.content = { number: rd.number, title: rd.title, segments: rd.segments };
     }
+    delete el.html; delete el.text;   // 다시 가져오면 인라인 편집 오버라이드를 버리고 구조 렌더로 복귀
     repaintEls();
     commitEls();
   } catch (e) { alert("가져오기 실패: " + e.message); }

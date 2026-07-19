@@ -119,9 +119,9 @@ function applyTextEffects(n, e) {
   }
 }
 
-// 리치 텍스트(부분 색상 등) HTML 위생 처리 — span/font/b/i/u/br/div/p + 안전한 style만 허용.
-const RT_TAGS = new Set(["SPAN", "FONT", "B", "STRONG", "I", "EM", "U", "BR", "DIV", "P"]);
-const RT_STYLE = /^(color|font-weight|font-style|text-decoration|background-color)$/i;
+// 리치 텍스트(부분 색상·글꼴 등) HTML 위생 처리 — span/font/b/i/u/br/div/p + 안전한 style만 허용.
+const RT_TAGS = new Set(["SPAN", "FONT", "B", "STRONG", "I", "EM", "U", "SUP", "SUB", "BR", "DIV", "P"]);
+const RT_STYLE = /^(color|font-weight|font-style|font-family|text-decoration|background-color|vertical-align)$/i;
 function filterStyle(style) {
   return String(style).split(";").map((s) => s.trim()).filter(Boolean)
     .filter((s) => RT_STYLE.test(s.split(":")[0].trim())).join("; ");
@@ -134,7 +134,7 @@ function sanitizeHtml(html) {
       if (c.nodeType === 1) {
         if (!RT_TAGS.has(c.tagName)) { c.replaceWith(...c.childNodes); continue; } // 허용 안 된 태그는 벗겨냄
         for (const a of [...c.attributes]) {
-          if (a.name === "color") continue;                                        // <font color>
+          if (a.name === "color" || a.name === "face") continue;                   // <font color>·<font face>(글꼴)
           if (a.name === "style") { const f = filterStyle(a.value); if (f) c.setAttribute("style", f); else c.removeAttribute("style"); continue; }
           c.removeAttribute(a.name);                                               // 나머지 속성(onclick 등) 제거
         }
@@ -144,6 +144,14 @@ function sanitizeHtml(html) {
   };
   walk(tpl.content);
   return tpl.innerHTML;
+}
+
+// 콘텐츠 요소(성경/찬송/교독)에 전체 색을 적용할 때, 하위(참조·절번호·라벨 등 CSS accent
+// 고정색)까지 함께 바꾼다. 부분 색상(<font color>)은 그대로 유지.
+const CE_COLORED = ".ce-ref, .ce-verse-no, .ce-head, .ce-head .ce-no, .ce-hno, .ce-label, .role-unison";
+function applyWholeColor(n, color) {
+  if (!color) return;
+  for (const x of n.querySelectorAll(CE_COLORED)) x.style.color = color;
 }
 
 function placeElement(n, e) {
@@ -190,11 +198,19 @@ export function renderElements(root, elements, opts = {}) {
       n.style.justifyContent = vAlign(e.valign);
       n.style.fontWeight = e.weight || 600;
       if (e.line_height) n.style.lineHeight = e.line_height;
-      if (e.type === "bible") renderBibleBody(n, e.content, e.show_numbers, e.field, e.format);
-      else if (e.type === "hymn") renderHymnBody(n, e.content, e.field, e.format);
-      else renderReadingBody(n, e.content, e.field, e.format, {
-        leader_color: e.leader_color, congregation_color: e.congregation_color, unison_color: e.unison_color, show_tags: e.show_tags,
-      });
+      if (e.html) {
+        // 인라인 편집으로 부분 글꼴·색을 입힌 경우 그 HTML을 그대로 렌더(구조 대신).
+        const inner = el("div", "el-content-inner el-text-inner");
+        inner.innerHTML = sanitizeHtml(e.html);
+        n.appendChild(inner);
+      } else {
+        if (e.type === "bible") renderBibleBody(n, e.content, e.show_numbers, e.field, e.format);
+        else if (e.type === "hymn") renderHymnBody(n, e.content, e.field, e.format);
+        else renderReadingBody(n, e.content, e.field, e.format, {
+          leader_color: e.leader_color, congregation_color: e.congregation_color, unison_color: e.unison_color, show_tags: e.show_tags,
+        });
+        applyWholeColor(n, e.color);   // 전체 색을 참조·절번호까지 적용(부분 색상은 유지)
+      }
       applyTextEffects(n, e);   // 성경/가사도 그림자·외곽선(영상 위 가독성)
     } else {
       n = el("div", "el el-text");

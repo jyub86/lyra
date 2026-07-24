@@ -54,6 +54,36 @@ function setSingleSelection(id) {
 }
 
 const slides = () => state.service?.slides || [];
+
+// ===== 발표 위치 추적 (리스트·타일에 현재 발표 중인 슬라이드 표시) =====
+// 발표 화면과 같은 WebSocket present 이벤트를 따라가며, 현재 편집 중인 예배가
+// 발표 중인 예배와 같을 때만 해당 슬라이드에 .presenting 표시를 붙인다.
+// live=false(발표 화면이 모두 닫힘)이면 어떤 슬라이드도 발표 중이 아니다.
+const present = { service_id: null, index: 0, live: false };
+function presentingSlideId() {
+  if (!present.live || !state.service || present.service_id !== state.serviceId) return null;
+  return slides()[present.index]?.id ?? null;
+}
+// 리스트/타일을 다시 그리지 않고 .presenting 클래스만 갱신(발표 넘어갈 때마다 호출).
+function updatePresentingMarker() {
+  const id = presentingSlideId();
+  for (const n of document.querySelectorAll(".slide-row.presenting, .tile.presenting")) n.classList.remove("presenting");
+  if (id == null) return;
+  for (const n of document.querySelectorAll(`.slide-row[data-id="${id}"], .tile[data-id="${id}"]`)) n.classList.add("presenting");
+}
+function connectPresentWs() {
+  const ws = new WebSocket(`ws://${location.host}/ws?role=editor`);
+  ws.onmessage = (ev) => {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.type !== "present") return;
+    if ("service_id" in m) present.service_id = m.service_id;
+    if (typeof m.index === "number") present.index = m.index;
+    if ("live" in m) present.live = !!m.live;
+    updatePresentingMarker();
+  };
+  ws.onclose = () => setTimeout(connectPresentWs, 1000);   // 자동 재연결
+}
+
 function slideLabel(s) {
   for (const e of s.elements || []) {
     if (e.type === "text" && e.text) return e.text.split("\n")[0];
@@ -329,9 +359,10 @@ function renderList() {
   root.innerHTML = "";
   if (!state.service) { root.innerHTML = '<p class="muted" style="padding:12px">예배 순서가 없습니다. “+ 새 예배”로 시작하세요.</p>'; return; }
   root.appendChild(elx("p", "list-hint muted", "드래그로 이동 · ⌘/Ctrl·Shift 클릭으로 여러 개 선택해 함께 이동"));
+  const pid = presentingSlideId();
   slides().forEach((s, i) => {
     const sel = state.selectedSet.has(s.id);
-    const row = elx("div", "slide-row" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.hidden ? " hidden" : ""));
+    const row = elx("div", "slide-row" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.id === pid ? " presenting" : "") + (s.hidden ? " hidden" : ""));
     row.draggable = true;
     row.dataset.id = s.id;
     const meta = elx("div", "row-meta");
@@ -1301,9 +1332,10 @@ function cancelTemplateEdit() {
 function renderTiles() {
   const grid = $("tile-grid");
   grid.innerHTML = "";
+  const pid = presentingSlideId();
   slides().forEach((s, i) => {
     const sel = state.selectedSet.has(s.id);
-    const tile = elx("div", "tile" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.hidden ? " hidden" : ""));
+    const tile = elx("div", "tile" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.id === pid ? " presenting" : "") + (s.hidden ? " hidden" : ""));
     tile.draggable = true;
     tile.dataset.id = s.id;
     const cap = elx("div", "cap");
@@ -2162,6 +2194,7 @@ function init() {
   loadTemplates();
   loadFonts();
   loadNetwork();
+  connectPresentWs();   // 발표 위치를 따라가 리스트·타일에 "발표중" 표시
 }
 
 init();

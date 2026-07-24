@@ -58,6 +58,19 @@ a { color: var(--accent); text-decoration: none; }
 .slide-row.sel { border-color: var(--accent); background: #1b2236; }
 .slide-row.primary { box-shadow: inset 3px 0 0 var(--accent); }
 .slide-row.drag-over { border-color: var(--accent); border-style: dashed; }
+/* 현재 발표 중인 슬라이드 — 리스트/타일에서 빨간 링 + 썸네일에 "발표중" 배지 */
+.slide-row.presenting { border-color: #e23b3b; }
+.tile.presenting { border-color: #e23b3b; box-shadow: 0 0 0 3px rgba(226, 59, 59, .4); }
+.slide-row.presenting .thumb, .tile.presenting .thumb { position: relative; }
+.slide-row.presenting .thumb::after, .tile.presenting .thumb::after {
+  content: "● 발표중"; position: absolute; top: 3px; left: 3px; z-index: 2;
+  background: #e23b3b; color: #fff; font-weight: 700; letter-spacing: .3px;
+  padding: 1px 5px; border-radius: 999px; line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .45); animation: present-pulse 1.6s ease-in-out infinite;
+}
+.slide-row.presenting .thumb::after { font-size: 8px; }
+.tile.presenting .thumb::after { font-size: 11px; top: 6px; left: 6px; padding: 2px 8px; }
+@keyframes present-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
 .slide-row .num { color: var(--muted); font-size: 11px; min-width: 16px; text-align: right; }
 .slide-row .thumb { flex: 0 0 84px; width: 84px; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; pointer-events: none; }
 .slide-row .thumb .slide-layers { border-radius: 0; }

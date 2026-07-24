@@ -73,7 +73,10 @@ const server = Bun.serve({
     const url = new URL(req.url);
 
     if (url.pathname === "/ws") {
-      return server.upgrade(req) ? undefined : new Response("expected websocket", { status: 426 });
+      // 연결 역할을 소켓에 실어 발표 화면(presenter) 접속 수를 센다. 역할 미지정(구버전
+      // 클라이언트 등)은 "viewer"로 취급 → 발표 화면으로 오인해 "발표중"이 켜지지 않게 한다.
+      const role = url.searchParams.get("role") || "viewer";
+      return server.upgrade(req, { data: { role } }) ? undefined : new Response("expected websocket", { status: 426 });
     }
 
     const api = await handleApi(req, url);

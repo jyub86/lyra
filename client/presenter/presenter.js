@@ -127,7 +127,7 @@ function onContentChanged() {
 }
 
 function connectWs() {
-  const ws = new WebSocket(`ws://${location.host}/ws`);
+  const ws = new WebSocket(`ws://${location.host}/ws?role=presenter`);
   ws.onmessage = async (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.type === "changed") { onContentChanged(); return; } // live edit reflection

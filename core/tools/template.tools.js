@@ -30,8 +30,10 @@ function contentChunks(db, type, params) {
   if (type === "hymn") {
     const hymn = getHymn(db, params.number);
     if (!hymn) throw new Error(`찬송가 없음: ${params.number}`);
+    // verse_no(0=후렴)를 params에 남겨, 편집기에서 다시 가져와도 같은 절/후렴이 유지되게 한다.
     return splitHymn(hymn, params.verse_nos, params.lines_per_slide || 4).map((pg) => ({
-      params: { number: hymn.number }, content: { number: pg.number, title: pg.title, label: pg.label, lines: pg.lines },
+      params: { number: hymn.number, verse_no: pg.verse_no },
+      content: { number: pg.number, title: pg.title, label: pg.label, lines: pg.lines },
     }));
   }
   if (type === "reading") {

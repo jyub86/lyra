@@ -62,14 +62,16 @@ export function splitHymn(hymn, verseNos, linesPerSlide = 4) {
     : hymn.verses;
   const refrain = hymn.refrain && hymn.refrain.length ? hymn.refrain : null;
   const pages = [];
-  const add = (lines, label) => {
+  // verse_no는 슬라이드가 어느 절(0=후렴)을 담고 있는지 기억해 둔다 → 편집기에서 "다시
+  // 가져오기"를 해도 그 절/후렴 그대로 다시 채워진다.
+  const add = (lines, label, verseNo) => {
     for (const chunk of chunkLines(lines, linesPerSlide)) {
-      pages.push({ number: hymn.number, title: hymn.title, label, lines: chunk });
+      pages.push({ number: hymn.number, title: hymn.title, label, verse_no: verseNo, lines: chunk });
     }
   };
   for (const v of wanted) {
-    add(v.lines, v.label ?? `${v.verse_no}절`);
-    if (refrain) add(refrain, "후렴");   // 각 절 뒤에 후렴
+    add(v.lines, v.label ?? `${v.verse_no}절`, v.verse_no);
+    if (refrain) add(refrain, "후렴", 0);   // 각 절 뒤에 후렴
   }
   return pages;
 }

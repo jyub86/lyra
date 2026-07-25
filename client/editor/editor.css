@@ -153,6 +153,20 @@ a { color: var(--accent); text-decoration: none; }
 .section-title { color: var(--muted); font-size: 12px; margin: 6px 0 4px; font-weight: 700; }
 .hint { font-size: 11px; margin: 2px 0 4px; }
 
+/* 우측 패널 접이식 그룹 (<details class="pgroup">) — 열림/닫힘은 localStorage에 기억 */
+.pgroup { border: 1px solid var(--line); border-radius: 8px; margin: 6px 0; background: rgba(255,255,255,.02); }
+.pgroup > summary {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;
+  padding: 7px 10px; color: var(--muted); font-size: 12px; font-weight: 700; list-style: none;
+}
+.pgroup > summary::-webkit-details-marker { display: none; }
+.pgroup > summary::before { content: "▶"; font-size: 9px; color: var(--muted); transition: transform .12s ease; }
+.pgroup[open] > summary::before { transform: rotate(90deg); }
+.pgroup > summary:hover { color: var(--fg); }
+.pgroup[open] > summary { border-bottom: 1px solid var(--line); }
+.pgroup-body { display: flex; flex-direction: column; gap: 2px; padding: 2px 10px 10px; }
+.pgroup-body > label:first-child { margin-top: 6px; }
+
 /* library modal */
 .modal-overlay { position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center; background: rgba(8,10,15,.6); backdrop-filter: blur(2px); }
 .modal { width: min(760px, 92vw); max-height: 84vh; display: flex; flex-direction: column; gap: 10px; padding: 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
@@ -301,10 +315,25 @@ button:disabled { opacity: .35; cursor: default; }
 button:disabled:hover { border-color: var(--line); }
 
 /* 리치 텍스트 '내용' 편집기 (부분 색상) */
+/* 캡션은 <label>이 아니라 div — label이면 안쪽 클릭이 색 입력을 눌러버린다(피커가 깜빡임) */
+.rt-field { margin: 10px 0 4px; }
+.rt-field > .rt-label { color: var(--muted); margin-bottom: 4px; }
 .rt-editor {
-  min-height: 46px; max-height: 180px; overflow: auto; padding: 6px 9px;
+  min-height: 46px; height: 92px; overflow: auto; padding: 6px 9px;
+  resize: vertical;   /* 오른쪽 아래 모서리를 끌어 높이 조절(높이는 기억됨) */
   border: 1px solid var(--line); border-radius: 6px; background: var(--panel2);
   font-size: 13px; line-height: 1.4; white-space: pre-wrap; word-break: break-word;
+}
+/* 슬라이드의 글자 서식(색·글꼴·크기)을 패널에 그대로 그리면 어두운 패널에서 검은 글씨가
+   안 보인다. 표시는 패널 기본 스타일로 통일하고, 서식 자체는 el.html에 그대로 유지된다.
+   (굵게/기울임은 남겨 어디에 서식이 걸렸는지 보이게 한다.) */
+.rt-editor, .rt-editor * {
+  color: var(--fg) !important;
+  background: none !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  text-shadow: none !important;
+  -webkit-text-stroke: 0 !important;
 }
 .rt-editor:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .rt-bar { display: flex; gap: 4px; align-items: center; margin-top: 5px; flex-wrap: wrap; }

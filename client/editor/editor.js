@@ -828,7 +828,7 @@ function moveElZ(i, toFront) {
 // ----- 디자인 패널 (선택한 요소 속성) -----
 const CONTENT_PARAMS = {
   bible: [["책(이름/약칭)", "book", "text"], ["장", "chapter", "int"], ["시작 절", "verse_start", "int"], ["끝 절", "verse_end", "int"]],
-  hymn: [["찬송가 번호", "number", "int"], ["절(선택)", "verse_no", "int"]],
+  hymn: [["찬송가 번호", "number", "int"]],   // 절/후렴은 hymnVerseField 선택으로
   reading: [["교독문 번호", "number", "int"]],
 };
 // 표시 항목 — 콘텐츠 요소가 어느 부분을 보여줄지 (분리 배치용)
@@ -917,6 +917,66 @@ function hymnSearchField(placeholder, onPick) {
   return wrap;
 }
 
+// 이 찬송 요소가 가리키는 절 (0=후렴, null=미지정). 예전에 만든 슬라이드는 params에
+// verse_no가 없으므로 이미 가져온 라벨("후렴"/"2절")에서 추정한다.
+function hymnVerseNo(el) {
+  const v = el.params?.verse_no;
+  if (v != null) return v;
+  const label = el.content?.label || "";
+  if (label.includes("후렴")) return 0;
+  const m = /^(\d+)\s*절/.exec(label);
+  return m ? Number(m[1]) : null;
+}
+
+// 찬송가 요소의 "절 / 후렴" 선택 (params.verse_no, 0=후렴). 번호를 알면 실제 절 목록으로
+// 채우고, 후렴이 있는 찬송이면 "후렴"을 옵션으로 넣는다(후렴만 있는 슬라이드를 만들 수 있게).
+function hymnVerseField(el, target) {
+  const wrap = elx("label", null, "절 / 후렴");
+  const sel = document.createElement("select");
+  const cur = hymnVerseNo(el);
+  const fill = (opts) => {
+    sel.replaceChildren();
+    for (const [v, t] of opts) { const o = document.createElement("option"); o.value = String(v); o.textContent = t; sel.appendChild(o); }
+    sel.value = cur == null ? "" : String(cur);
+    if (sel.selectedIndex < 0) sel.value = "";
+  };
+  // 목록을 가져오기 전에도 현재 값은 보이게 (깜박임 방지)
+  fill([["", "1절 (기본)"], ...(cur != null ? [[cur, cur === 0 ? "후렴" : `${cur}절`]] : [])]);
+  sel.onchange = () => {
+    const params = { ...(el.params || {}) };
+    if (sel.value === "") delete params.verse_no; else params.verse_no = Number(sel.value);
+    el.params = params;
+    fetchContentElement(state.editEl);
+  };
+  wrap.appendChild(sel); target.appendChild(wrap);
+  const number = el.params?.number;
+  if (!number) return;
+  callTool("get_hymn", { number }).then((h) => {
+    if (!sel.isConnected) return;
+    const opts = [["", "1절 (기본)"], ...(h.verses || []).map((v) => [v.verse_no, v.label || `${v.verse_no}절`])];
+    if (h.refrain?.length) opts.push([0, "후렴"]);
+    fill(opts);
+  }).catch(() => {});
+}
+
+// ---- 디자인 패널 접이식 그룹 (열림/닫힘은 localStorage에 기억) ----
+// 패널은 편집할 때마다 다시 그려지므로, 열림 상태를 저장해 두지 않으면 매번 초기화된다.
+function groupOpenMap() {
+  try { return JSON.parse(localStorage.getItem("lyra.panelGroups") || "{}"); } catch { return {}; }
+}
+function isGroupOpen(key, def) { const m = groupOpenMap(); return typeof m[key] === "boolean" ? m[key] : def; }
+function setGroupOpen(key, open) {
+  const m = groupOpenMap(); m[key] = open;
+  localStorage.setItem("lyra.panelGroups", JSON.stringify(m));
+}
+// 정적 HTML의 <details class="pgroup" data-gkey="…">도 같은 방식으로 기억.
+function wireStaticGroups() {
+  for (const d of document.querySelectorAll("details.pgroup[data-gkey]")) {
+    d.open = isGroupOpen(d.dataset.gkey, d.open);
+    d.addEventListener("toggle", () => setGroupOpen(d.dataset.gkey, d.open));
+  }
+}
+
 function renderDesignPanel() {
   const empty = $("el-empty"), body = $("el-props");
   // 편집할 때마다 commitEls→refresh→render로 이 패널을 다시 그리는데, 그때 스크롤이
@@ -939,6 +999,19 @@ function renderDesignPanel() {
   if (!el) { empty.hidden = false; body.hidden = true; return; }
   empty.hidden = true; body.hidden = false;
   body.replaceChildren();
+
+  // 아래 입력들은 모두 "현재 그룹"(target)에 담긴다. group()을 부르면 그 다음 입력부터
+  // 새 접이식 그룹으로 들어간다. group을 한 번도 안 부르면 예전처럼 평평하게 쌓인다.
+  let target = body;
+  const group = (key, label, defOpen = true) => {
+    const d = elx("details", "pgroup");
+    d.open = isGroupOpen(key, defOpen);
+    d.addEventListener("toggle", () => setGroupOpen(key, d.open));
+    const inner = elx("div", "pgroup-body");
+    d.append(elx("summary", null, label), inner);
+    body.appendChild(d);
+    target = inner;
+  };
 
   // field that edits el[field]; live on input, persist on change
   const field = (label, type, fieldName, opts = {}) => {
@@ -969,7 +1042,7 @@ function renderDesignPanel() {
       const sw = colorSwatches(el[fieldName], (hex) => { input.value = hex; apply(true); renderDesignPanel(); });
       if (sw) wrap.appendChild(sw);
     }
-    body.appendChild(wrap);
+    target.appendChild(wrap);
   };
 
   // 글자 크기: 슬라이더 + 숫자(정확값). 여러 슬라이드에 동일 값 적용 가능.
@@ -984,7 +1057,7 @@ function renderDesignPanel() {
     range.addEventListener("change", () => apply(range.value, true));
     num.addEventListener("input", () => apply(num.value, false));
     num.addEventListener("change", () => apply(num.value, true));
-    row.append(range, num); wrap.appendChild(row); body.appendChild(wrap);
+    row.append(range, num); wrap.appendChild(row); target.appendChild(wrap);
   };
 
   // 슬라이더 + 숫자 조합으로 임의 숫자 필드 편집(줄 간격 등).
@@ -999,7 +1072,7 @@ function renderDesignPanel() {
     range.addEventListener("change", () => apply(range.value, true));
     num.addEventListener("input", () => apply(num.value, false));
     num.addEventListener("change", () => apply(num.value, true));
-    row.append(range, num); wrap.appendChild(row); body.appendChild(wrap);
+    row.append(range, num); wrap.appendChild(row); target.appendChild(wrap);
   };
 
   // 글꼴: 용도 그룹(optgroup) select. 값=family("" → 테마 기본 상속).
@@ -1008,14 +1081,29 @@ function renderDesignPanel() {
     const sel = document.createElement("select");
     fillFontSelect(sel, el.font || "");
     sel.addEventListener("change", () => { el.font = sel.value; repaintEls(); commitEls(); });
-    wrap.appendChild(sel); body.appendChild(wrap);
+    wrap.appendChild(sel); target.appendChild(wrap);
   };
 
   // 리치 텍스트 '내용' 편집기: 일부만 선택해 색/굵기 적용(부분 색상). el.html에 저장, el.text=평문.
+  // 표시는 패널 기본 스타일로 통일한다(.rt-editor CSS) — 슬라이드 서식(검은 글씨 등)을
+  // 그대로 그리면 어두운 패널에서 안 보이기 때문. 서식 자체는 el.html에 그대로 유지된다.
   const richTextField = () => {
-    const wrap = elx("label", null, "내용 (일부 선택 후 색/굵기 적용 가능)");
+    // <label>로 감싸면 안쪽 아무 데나 클릭해도 첫 폼 컨트롤(색 입력)이 눌려 색 선택 창이
+    // 잠깐 떴다 사라진다 → 캡션은 그냥 div로.
+    const wrap = elx("div", "rt-field");
+    wrap.appendChild(elx("div", "rt-label", "내용"));
     const ed = document.createElement("div");
     ed.className = "rt-editor"; ed.contentEditable = "true"; ed.dataset.field = "text";
+    // 높이는 사용자가 아래 모서리를 끌어 조절(resize) → 다시 그려도 유지되게 기억한다.
+    const savedH = Number(localStorage.getItem("lyra.rtEditorHeight")) || 0;
+    if (savedH) ed.style.height = savedH + "px";
+    const saveH = () => {
+      if (!ed.isConnected) return;
+      const h = Math.round(ed.getBoundingClientRect().height);
+      if (h && h !== Number(localStorage.getItem("lyra.rtEditorHeight"))) localStorage.setItem("lyra.rtEditorHeight", String(h));
+    };
+    new ResizeObserver(saveH).observe(ed);
+    ed.addEventListener("mouseup", saveH);   // 크기 조절 드래그가 끝나는 시점(RO 백업)
     if (el.html) ed.innerHTML = el.html; else ed.textContent = el.text ?? "";
     const save = (commit) => { el.html = ed.innerHTML; el.text = ed.innerText; repaintEls(); if (commit) commitEls(); };
     // 선택영역 추적: 색 입력(네이티브 피커) 상호작용으로 선택이 풀려도 복원해 적용.
@@ -1039,16 +1127,16 @@ function renderDesignPanel() {
       btn("선택 색", () => document.execCommand("foreColor", false, color.value)),
       btn("굵게", () => document.execCommand("bold")),
       btn("서식 지움", () => document.execCommand("removeFormat")));
-    wrap.append(ed, bar); body.appendChild(wrap);
+    const hint = elx("p", "hint muted", "여기서는 읽기 쉽게 한 가지 색·글꼴로 보여줍니다. 실제 색·글꼴은 캔버스에서 확인하세요.");
+    wrap.append(ed, bar, hint); target.appendChild(wrap);
   };
 
   // 텍스트 효과(그림자·외곽선) — 텍스트·성경/가사 공통. 영상 위 가독성용.
   const effectFields = () => {
-    body.appendChild(elx("div", "section-title", "효과"));
     { const wrap = elx("label", null, "그림자");
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!el.shadow;
       cb.onchange = () => { el.shadow = cb.checked; repaintEls(); commitEls(); renderDesignPanel(); };
-      wrap.appendChild(cb); body.appendChild(wrap); }
+      wrap.appendChild(cb); target.appendChild(wrap); }
     if (el.shadow) {
       field("그림자 색", "color", "shadow_color", { def: "#000000" });
       numRow("그림자 번짐", "shadow_blur", { min: 0, max: 0.4, step: 0.02, def: 0.12 });
@@ -1058,7 +1146,9 @@ function renderDesignPanel() {
   };
 
   if (el.type === "text") {
+    group("text-content", "내용");
     richTextField();
+    group("text-type", "글자");
     sizeRow(1.5, 12);
     fontField();
     field("색(전체 기본)", "color", "color", { def: "#ffffff" });
@@ -1066,8 +1156,10 @@ function renderDesignPanel() {
     field("정렬(가로)", "select", "align", { options: [["center", "가운데"], ["left", "왼쪽"], ["right", "오른쪽"]] });
     field("정렬(세로)", "select", "valign", { options: [["middle", "가운데"], ["top", "위"], ["bottom", "아래"]] });
     numRow("줄 간격 (숫자)", "line_height", { min: 1, max: 2.6, step: 0.05, def: 1.3 });
+    group("effects", "효과 · 투명도", false);
     effectFields();
   } else if (el.type === "shape") {
+    group("shape-style", "도형");
     if (el.shape !== "line") {
       field("채움색", "color", "fill", { def: "#7aa2f7" });
       field("테두리색", "color", "stroke", { def: "#ffffff" });
@@ -1077,16 +1169,20 @@ function renderDesignPanel() {
       field("선 색", "color", "stroke", { def: "#ffffff" });
       field("선 두께", "range", "stroke_width", { min: 1, max: 14, step: 1, num: true });
     }
+    group("effects", "효과 · 투명도", false);
   } else if (el.type === "image") {
-    body.appendChild(elx("p", "muted", "이미지는 캔버스에서 드래그·크기조절하세요."));
+    group("image-style", "이미지");
+    target.appendChild(elx("p", "muted", "이미지는 캔버스에서 드래그·크기조절하세요."));
+    group("effects", "효과 · 투명도", false);
   } else if (el.type === "video") {
+    group("video-style", "영상");
     // URL 직접 입력
     { const wrap = elx("label", null, "영상 URL");
       const input = document.createElement("input"); input.type = "text"; input.value = el.url || "";
       input.placeholder = "https://…  또는 아래에서 파일 선택";
       input.oninput = () => { el.url = input.value; };
       input.onchange = () => { el.url = input.value; repaintEls(); commitEls(); };
-      wrap.appendChild(input); body.appendChild(wrap);
+      wrap.appendChild(input); target.appendChild(wrap);
       // 로컬 파일 업로드
       const file = document.createElement("input"); file.type = "file"; file.accept = "video/*";
       file.onchange = async () => {
@@ -1095,27 +1191,51 @@ function renderDesignPanel() {
         try { const { url } = await uploadFile(file.files[0]); el.url = url; input.value = url; repaintEls(); commitEls(); msg("add-msg", "업로드 완료"); }
         catch (e) { msg("add-msg", e.message, true); }
       };
-      body.appendChild(file);
+      target.appendChild(file);
     }
     field("반복 재생", "check", "loop");
     // 소리: 체크 = 소리 켜짐(= muted:false). 소리는 발표 화면에서만 재생됨.
     { const wrap = elx("label", null, "소리 (발표 화면에서)");
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !el.muted;
       cb.onchange = () => { el.muted = !cb.checked; repaintEls(); commitEls(); };
-      wrap.appendChild(cb); body.appendChild(wrap);
+      wrap.appendChild(cb); target.appendChild(wrap);
     }
     field("채움", "select", "fit", { options: [["contain", "전체 보이기"], ["cover", "꽉 채우기"]] });
-    body.appendChild(elx("p", "hint muted", "편집 미리보기는 음소거이고, 소리는 발표 화면에서 재생됩니다."));
+    target.appendChild(elx("p", "hint muted", "편집 미리보기는 음소거이고, 소리는 발표 화면에서 재생됩니다."));
+    group("effects", "효과 · 투명도", false);
   } else if (["bible", "hymn", "reading"].includes(el.type)) {
+    const fkey = el.field ?? "all";
+    // ── 내용: 어떤 본문을 가져올지(params) ──
+    group("ce-source", "내용 가져오기");
+    // 찬송가: 번호를 몰라도 제목·가사로 검색해 선택(→ 번호 채우고 본문 가져오기)
+    if (el.type === "hymn") {
+      const search = hymnSearchField("찬송가 제목·가사로 검색", (num) => {
+        el.params = { ...(el.params || {}), number: num };
+        fetchContentElement(state.editEl);   // 본문 가져오기 + 재렌더(번호 입력 갱신)
+      });
+      target.appendChild(search);
+    }
+    for (const [label, name, ptype] of CONTENT_PARAMS[el.type]) {
+      const wrap = elx("label", null, label);
+      const input = document.createElement("input");
+      input.type = ptype === "int" ? "number" : "text";
+      input.value = el.params?.[name] ?? "";
+      input.onchange = () => { el.params = { ...(el.params || {}), [name]: ptype === "int" ? Number(input.value) : input.value }; };
+      wrap.appendChild(input); target.appendChild(wrap);
+    }
+    if (el.type === "hymn") hymnVerseField(el, target);   // 절 / 후렴 선택
+    { const refetch = elx("button", "mini accent", "다시 가져오기"); refetch.onclick = () => fetchContentElement(state.editEl);
+      target.appendChild(refetch); }
+    // ── 표시: 이 요소가 본문의 어느 부분을 어떤 형식으로 보여줄지 ──
+    group("ce-display", "표시 항목");
     { // 표시 항목(field): 바꾸면 즉시 반영 + 패널 갱신(절 번호 표시 노출 여부)
       const wrap = elx("label", null, "표시 항목");
       const sel = document.createElement("select");
       for (const [v, t] of FIELD_OPTIONS[el.type]) { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); }
       sel.value = el.field ?? "all";
       sel.onchange = () => { el.field = sel.value; repaintEls(); commitEls(); renderDesignPanel(); };
-      wrap.appendChild(sel); body.appendChild(wrap);
+      wrap.appendChild(sel); target.appendChild(wrap);
     }
-    const fkey = el.field ?? "all";
     { // 형식(format): 단일 줄 필드(제목/구절)의 표시 문자열
       const fmtDef = FMT_DEFAULT[el.type]?.[fkey];
       if (fmtDef != null) {
@@ -1124,11 +1244,14 @@ function renderDesignPanel() {
         input.type = "text"; input.value = el.format ?? fmtDef; input.placeholder = fmtDef;
         input.oninput = () => { el.format = input.value; repaintEls(); };
         input.onchange = () => { el.format = input.value; commitEls(); };
-        wrap.appendChild(input); body.appendChild(wrap);
-        body.appendChild(elx("p", "hint muted", `토큰: ${FMT_TOKENS[el.type][fkey]}`));
+        wrap.appendChild(input); target.appendChild(wrap);
+        target.appendChild(elx("p", "hint muted", `토큰: ${FMT_TOKENS[el.type][fkey]}`));
       }
     }
-    body.appendChild(elx("p", "hint muted", "본문을 더블클릭하면 전체·일부 글자의 글꼴·색을 바꿀 수 있어요(선택 후 떠오르는 서식 바)."));
+    if (el.type === "bible" && fkey !== "ref") field("절 번호 표시", "check", "show_numbers");
+    // ── 글자 ──
+    group("ce-type", "글자");
+    target.appendChild(elx("p", "hint muted", "본문을 더블클릭하면 전체·일부 글자의 글꼴·색을 바꿀 수 있어요(선택 후 떠오르는 서식 바)."));
     sizeRow(1.5, 10, 3.2);
     fontField();
     field("색(전체)", "color", "color", { def: "#ffffff" });
@@ -1136,33 +1259,14 @@ function renderDesignPanel() {
     field("정렬(세로)", "select", "valign", { options: [["middle", "가운데"], ["top", "위"], ["bottom", "아래"]] });
     numRow("줄 간격 (숫자)", "line_height", { min: 1, max: 2.6, step: 0.05, def: 1.5 });
     field("굵기", "select", "weight", { options: [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "더 굵게"]] });
-    if (el.type === "bible" && fkey !== "ref") field("절 번호 표시", "check", "show_numbers");
     // 교독문 인도자/회중 스타일 (전체·본문 = 인도자·회중이 함께 있을 때)
     if (el.type === "reading" && (fkey === "all" || fkey === "body")) {
-      body.appendChild(elx("div", "section-title", "역할 스타일"));
+      group("ce-role", "역할 스타일", false);
       field("역할 표시(인도자/회중)", "check", "show_tags");
       field("인도자 색", "color", "leader_color", { def: "#7aa2f7" });
       field("회중 색", "color", "congregation_color", { def: "#e0af68" });
     }
-    body.appendChild(elx("div", "section-title", "내용 (params)"));
-    // 찬송가: 번호를 몰라도 제목·가사로 검색해 선택(→ 번호 채우고 본문 가져오기)
-    if (el.type === "hymn") {
-      const search = hymnSearchField("찬송가 제목·가사로 검색", (num) => {
-        el.params = { ...(el.params || {}), number: num };
-        fetchContentElement(state.editEl);   // 본문 가져오기 + 재렌더(번호 입력 갱신)
-      });
-      body.appendChild(search);
-    }
-    for (const [label, name, ptype] of CONTENT_PARAMS[el.type]) {
-      const wrap = elx("label", null, label);
-      const input = document.createElement("input");
-      input.type = ptype === "int" ? "number" : "text";
-      input.value = el.params?.[name] ?? "";
-      input.onchange = () => { el.params = { ...(el.params || {}), [name]: ptype === "int" ? Number(input.value) : input.value }; };
-      wrap.appendChild(input); body.appendChild(wrap);
-    }
-    const refetch = elx("button", "mini accent", "다시 가져오기"); refetch.onclick = () => fetchContentElement(state.editEl);
-    body.appendChild(refetch);
+    group("effects", "효과 · 투명도", false);
     effectFields();   // 성경/찬송/교독문도 그림자·외곽선(영상 위 가독성)
   }
 
@@ -1190,15 +1294,38 @@ async function fetchContentElement(i) {
       el.content = { ref, verses: r.verses };
     } else if (el.type === "hymn") {
       const h = await callTool("get_hymn", { number: p.number });
-      const v = (h.verses || []).find((x) => x.verse_no === (p.verse_no || 1)) || h.verses?.[0];
-      el.content = { number: h.number, title: h.title, label: v?.label, lines: v?.lines || [] };
+      // 예전 슬라이드(verse_no 없음)는 현재 라벨에서 절/후렴을 추정해 그대로 유지한다.
+      if (p.verse_no == null) {
+        const guess = hymnVerseNo(el);
+        if (guess != null) { p.verse_no = guess; el.params = { ...p }; }
+      }
+      // verse_no=0 → 후렴(별도 저장). 없으면 지정 절, 그것도 없으면 첫 절.
+      if (p.verse_no === 0 && !h.refrain?.length) {
+        // 후렴 없는 찬송으로 바꾼 경우: 막히지 않게 1절로 되돌린다.
+        delete p.verse_no; el.params = { ...p };
+        toast(`${h.number}장 “${h.title}”에는 후렴이 없어 1절을 가져왔습니다`);
+      }
+      if (p.verse_no === 0) {
+        el.content = { number: h.number, title: h.title, label: "후렴", lines: h.refrain };
+      } else {
+        const v = (h.verses || []).find((x) => x.verse_no === (p.verse_no || 1)) || h.verses?.[0];
+        el.content = { number: h.number, title: h.title, label: v?.label, lines: v?.lines || [] };
+      }
+      // 한 슬라이드의 찬송 요소들(제목/절/가사)은 같은 찬송·같은 절을 가리키므로 함께 갱신.
+      for (const other of els()) {
+        if (other === el || other.type !== "hymn") continue;
+        other.params = { ...el.params };
+        other.content = structuredClone(el.content);
+        delete other.html; delete other.text;
+      }
     } else if (el.type === "reading") {
       const rd = await callTool("get_reading", { number: p.number });
       el.content = { number: rd.number, title: rd.title, segments: rd.segments };
     }
     delete el.html; delete el.text;   // 다시 가져오면 인라인 편집 오버라이드를 버리고 구조 렌더로 복귀
     repaintEls();
-    commitEls();
+    await commitEls();
+    renderDesignPanel();              // 절 목록·번호 입력 갱신(템플릿 초안 편집 중에도)
   } catch (e) { alert("가져오기 실패: " + e.message); }
 }
 
@@ -2046,6 +2173,7 @@ async function loadNetwork() {
 function init() {
   initThemeSelect();
   initTabs();
+  wireStaticGroups();   // 정적 접이식 그룹(슬라이드 배경)의 열림 상태 기억
   wireMenu("menu-import-btn", "menu-import", { closeOnItem: true });
   wireMenu("menu-settings-btn", "menu-settings");
   renderAddFields();

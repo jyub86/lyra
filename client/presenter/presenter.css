@@ -17,6 +17,14 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor
 .deck .slide-layers { position: absolute; inset: 0; width: 100%; }
 .blackout { position: fixed; inset: 0; background: #000; z-index: 10; }
 
+/* 자동재생이 막혔을 때만 뜨는 "소리 켜기" 버튼 (사운드 트랙) */
+.sound-unlock {
+  position: fixed; right: 18px; bottom: 18px; z-index: 20;
+  padding: 10px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.25);
+  background: rgba(20,22,30,.9); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.sound-unlock:hover { background: rgba(40,44,60,.95); }
+
 .hint {
   position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
   color: rgba(255,255,255,.35); font: 13px/1 system-ui, sans-serif;

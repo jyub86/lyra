@@ -4,7 +4,7 @@
 > 개념 모델·연결 방법·워크플로우는 [AGENTS.md](./AGENTS.md) 참고.
 > 런타임에서 최신 스키마 확인: CLI `bun run cli schema <이름>`, MCP `tools/list`.
 
-총 **56개** 도구.
+총 **60개** 도구.
 
 ## 읽기 · 콘텐츠 검색 (LLM 그라운딩)
 
@@ -477,6 +477,48 @@ _(입력 없음)_
 |---|---|---|---|---|
 | `service_id` | string | ✔ |  |  |
 
+### `list_tracks`  _(읽기 전용)_
+
+예배의 사운드 트랙 목록을 반환한다. 각 트랙은 시작~끝 슬라이드 구간 동안 발표 화면에서 재생된다.
+
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `service_id` | string | ✔ |  |  |
+
+### `add_track`  _(쓰기)_
+
+예배에 사운드 트랙을 추가한다. url은 업로드된 오디오(/uploads/…)나 외부 주소. start_slide_id부터 end_slide_id까지(생략 시 예배 끝까지) 발표 중 계속 재생된다.
+
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `service_id` | string | ✔ |  |  |
+| `url` | string | ✔ |  | 오디오 URL (예: /uploads/xxx.mp3) |
+| `name` | string |  |  | 표시 이름(생략 시 파일명) |
+| `start_slide_id` | string |  |  | 재생 시작 슬라이드(생략 시 첫 슬라이드) |
+| `end_slide_id` | string |  |  | 재생 끝 슬라이드(생략 시 예배 끝까지) |
+| `loop` | boolean |  | `true` |  |
+| `volume` | number |  | `0.8` | 0~1 |
+| `fade_in` | number |  | `0.15` | 시작 페이드 시간(초). 0.15=바로 들림, 크게 주면 서서히 커진다 |
+
+### `update_track`  _(쓰기)_
+
+사운드 트랙을 수정한다(name/url/start_slide_id/end_slide_id/loop/volume). end_slide_id를 null로 주면 예배 끝까지.
+
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `service_id` | string | ✔ |  |  |
+| `track_id` | string | ✔ |  |  |
+| `fields` | object | ✔ |  | { name?, url?, start_slide_id?, end_slide_id?, loop?, volume?, fade_in? } |
+
+### `remove_track`  _(쓰기)_
+
+사운드 트랙을 목록에서 제거한다(업로드된 파일 자체는 남는다).
+
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `service_id` | string | ✔ |  |  |
+| `track_id` | string | ✔ |  |  |
+
 ### `parse_bible_refs`  _(읽기 전용)_
 
 자유 텍스트(예: '요 3:16-18, 롬 8:1')를 구조화된 성경 참조 배열로 파싱한다. 문맥(직전 책/장)을 추적해 '18', '16절' 같은 부분 참조도 해석. 슬라이드 생성 전 미리보기용.
@@ -487,7 +529,7 @@ _(입력 없음)_
 
 ### `extract_bible_refs_from_pdf`  _(읽기 전용)_
 
-주보 PDF(서버 경로)에서 빨강으로 표기된 성구를 추출해 참조 배열로 반환한다(슬라이드 생성 없이 조회만). 브라우저 업로드는 POST /api/bible-refs/extract.
+PDF(서버 경로)에서 빨강으로 표기된 성구를 추출해 참조 배열로 반환한다(슬라이드 생성 없이 조회만). 주 본문(제목의 요6:1-15 등)을 문맥으로 절만 있는 참조도 해석. 브라우저 업로드는 POST /api/bible-refs/extract.
 
 | 파라미터 | 타입 | 필수 | 기본값 | 설명 |
 |---|---|---|---|---|

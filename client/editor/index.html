@@ -10,46 +10,39 @@
   <link rel="stylesheet" href="/editor/editor.css" />
 </head>
 <body>
+  <!-- 상단바 = 4그룹: [예배 선택] · [보기] · [＋추가 / ⚙예배] · [발표] -->
   <header class="topbar">
     <strong class="brand">Lyra</strong>
     <select id="service-select" title="예배 순서 선택"></select>
-    <button id="new-service" class="icon-btn" title="새 예배 순서">＋</button>
-    <button id="edit-service" class="icon-btn" title="현재 예배 이름·날짜 수정">✎</button>
-    <button id="dup-service" class="icon-btn" title="다른 이름으로 저장(복제)">⧉</button>
-    <button id="del-service" class="icon-btn danger" title="이 예배 순서 삭제">🗑</button>
+    <span class="tb-sep"></span>
     <span class="seg" role="group" aria-label="보기 전환">
       <button id="view-list" class="seg-btn active">리스트</button>
       <button id="view-tiles" class="seg-btn">타일</button>
     </span>
     <span class="spacer"></span>
 
-    <!-- 성구(성경 참조·PDF → 본문 슬라이드) — 별도 기능 -->
-    <button id="bibleref-btn" class="menu-btn" title="성경 참조를 입력하거나 PDF에서 빨강 성구를 추출해 본문 슬라이드를 추가">📖 성구</button>
-
-    <!-- 가져오기/내보내기 메뉴 -->
+    <!-- ＋ 추가: 슬라이드·콘텐츠를 넣는 모든 경로를 한곳에 -->
     <div class="menu">
-      <button id="menu-import-btn" class="menu-btn">가져오기 ▾</button>
-      <div id="menu-import" class="menu-panel" hidden>
-        <button id="import-ppt" class="menu-item">🖼 슬라이드 가져오기 <span class="mi-sub">PPT · PDF · 이미지</span></button>
-        <button id="library-btn" class="menu-item">🔎 PPT 라이브러리에서 찾기</button>
+      <button id="menu-add-btn" class="menu-btn accent-btn">＋ 추가 ▾</button>
+      <div id="menu-add" class="menu-panel" hidden>
+        <div class="menu-label">슬라이드 추가</div>
+        <div id="menu-add-templates"></div>
         <div class="menu-sep"></div>
-        <button id="export-btn" class="menu-item">⬇ 예배 순서 내보내기 <span class="mi-sub">JSON</span></button>
-        <button id="import-btn" class="menu-item">⬆ 예배 순서 가져오기 <span class="mi-sub">JSON</span></button>
+        <button id="bibleref-btn" class="menu-item">📖 성구로 추가 <span class="mi-sub">참조 · 주보 PDF</span></button>
+        <button id="import-ppt" class="menu-item">🖼 파일에서 가져오기 <span class="mi-sub">PPT · PDF · 이미지</span></button>
+        <button id="library-btn" class="menu-item">🔎 PPT 라이브러리에서 찾기</button>
       </div>
     </div>
-    <input id="import-file" type="file" accept="application/json,.json" hidden />
-    <input id="import-ppt-file" type="file" accept=".pptx,.ppt,.odp,application/pdf,image/*" hidden />
 
-    <!-- 설정 팝오버 (테마·색·전환) -->
+    <!-- ⚙ 예배: 이 예배의 속성·관리 -->
     <div class="menu">
-      <button id="menu-settings-btn" class="menu-btn">⚙ 설정 ▾</button>
-      <div id="menu-settings" class="menu-panel wide" hidden>
+      <button id="menu-service-btn" class="menu-btn">⚙ 예배 ▾</button>
+      <div id="menu-service" class="menu-panel wide" hidden>
+        <div class="menu-label">모양</div>
         <label class="set-row">테마 <select id="theme-select"></select></label>
         <label class="set-row" title="테마 기본 배경색">배경색 <input id="bg-color" type="color" /></label>
         <label class="set-row" title="메인 강조색">메인색 <input id="accent-color" type="color" /></label>
         <label class="set-row" title="예배 전체 기본 글꼴 (요소별로 따로 지정 가능)">기본 글꼴 <select id="font-select"></select></label>
-        <button id="theme-reset" class="mini">커스텀 색 초기화</button>
-        <div class="menu-sep"></div>
         <label class="set-row" title="발표 슬라이드 전환 효과">전환 효과
           <select id="transition-select">
             <option value="none">없음</option>
@@ -57,6 +50,18 @@
             <option value="slide">슬라이드</option>
           </select>
         </label>
+        <button id="theme-reset" class="mini">커스텀 색 초기화</button>
+        <div class="menu-sep"></div>
+        <button id="sound-btn" class="menu-item">🎵 사운드 트랙… <span class="mi-sub">발표 중 배경 음악</span></button>
+        <button id="tpl-btn" class="menu-item">🎨 디자인 템플릿…</button>
+        <div class="menu-sep"></div>
+        <button id="export-btn" class="menu-item">⬇ 예배 순서 내보내기 <span class="mi-sub">JSON</span></button>
+        <button id="import-btn" class="menu-item">⬆ 예배 순서 가져오기 <span class="mi-sub">JSON</span></button>
+        <div class="menu-sep"></div>
+        <button id="new-service" class="menu-item">＋ 새 예배 순서</button>
+        <button id="edit-service" class="menu-item">✎ 이름·날짜 수정</button>
+        <button id="dup-service" class="menu-item">⧉ 복제(다른 이름으로)</button>
+        <button id="del-service" class="menu-item danger">🗑 이 예배 삭제</button>
         <div class="menu-sep"></div>
         <div class="set-row" style="align-items:flex-start">다른 기기 접속
           <div id="net-addrs" class="net-addrs muted">확인 중…</div>
@@ -64,7 +69,10 @@
       </div>
     </div>
 
-    <a id="open-presenter" class="present-btn" href="/presenter" target="_blank" rel="noopener">▶ 발표 화면</a>
+    <input id="import-file" type="file" accept="application/json,.json" hidden />
+    <input id="import-ppt-file" type="file" accept=".pptx,.ppt,.odp,application/pdf,image/*" hidden />
+
+    <a id="open-presenter" class="present-btn" href="/presenter" target="_blank" rel="noopener">▶ 발표</a>
   </header>
 
   <!-- ===== 편집(단일) 뷰 ===== -->
@@ -81,18 +89,18 @@
         <button id="tpl-edit-save" class="primary-sm">템플릿에 저장</button>
         <button id="tpl-edit-cancel">취소</button>
       </div>
+      <!-- 요소 추가: 아이콘만(툴팁으로 설명) — 슬라이드 추가는 상단 ＋추가 -->
       <div class="canvas-tools">
-        <span class="ct-label">요소 추가</span>
-        <button data-add="text">＋ 텍스트</button>
-        <button data-add="rect">▭ 사각형</button>
-        <button data-add="ellipse">◯ 원</button>
-        <button data-add="line">／ 선</button>
-        <button data-add="image">🖼 이미지</button>
-        <button data-add="video">🎬 영상</button>
+        <button data-add="text" title="텍스트 상자" aria-label="텍스트 상자">✏️</button>
+        <button data-add="rect" title="사각형" aria-label="사각형">▭</button>
+        <button data-add="ellipse" title="원" aria-label="원">◯</button>
+        <button data-add="line" title="선" aria-label="선">／</button>
+        <button data-add="image" title="이미지" aria-label="이미지">🖼</button>
+        <button data-add="video" title="영상" aria-label="영상">🎬</button>
         <span class="ct-sep">|</span>
-        <button data-add="bible">📖 성경</button>
-        <button data-add="hymn">🎵 찬송</button>
-        <button data-add="reading">📜 교독</button>
+        <button data-add="bible" title="성경 본문 요소" aria-label="성경 본문 요소">📖</button>
+        <button data-add="hymn" title="찬송가 요소" aria-label="찬송가 요소">🎵</button>
+        <button data-add="reading" title="교독문 요소" aria-label="교독문 요소">📜</button>
         <input id="el-image-file" type="file" accept="image/*" hidden />
       </div>
       <div class="canvas-wrap"><div id="preview" class="slide-layers"></div></div>
@@ -109,25 +117,11 @@
       </div>
     </section>
 
+    <!-- 우측 = 속성(인스펙터) 전용. 선택 상태에 따라 슬라이드/요소 속성이 바뀐다. -->
     <aside class="col panel">
-      <div class="tabs">
-        <button class="tab active" data-tab="add">추가</button>
-        <button class="tab" data-tab="design">디자인</button>
-        <button class="tab" data-tab="template">템플릿</button>
-      </div>
-      <div id="tab-add" class="tab-body">
-        <label>추가할 종류 / 템플릿
-          <select id="add-type"></select>
-        </label>
-        <div id="add-fields" class="fields"></div>
-        <button id="add-after-btn" class="primary" title="현재 선택한 슬라이드 바로 다음에 추가">선택 아래에 추가</button>
-        <button id="add-slide-btn" class="mini" title="예배 순서 맨 끝에 추가">순서 끝에 추가</button>
-        <p id="add-msg" class="msg"></p>
-      </div>
-
-      <div id="tab-design" class="tab-body" hidden>
-        <details class="pgroup" data-gkey="slide-bg">
-          <summary>슬라이드 배경</summary>
+      <div class="pane">
+        <details class="pgroup" data-gkey="slide-props" open>
+          <summary>슬라이드</summary>
           <div class="pgroup-body">
             <div id="inspect-empty" class="muted">슬라이드를 선택하세요.</div>
             <div id="inspect-body" hidden>
@@ -142,24 +136,17 @@
               </label>
               <div id="insp-bg-fields" class="fields"></div>
               <button id="insp-save" class="mini">배경 저장</button>
+              <label class="set-row insp-hide-row" title="발표에서 이 슬라이드를 건너뜁니다">발표에서 숨기기
+                <input id="insp-hidden" type="checkbox" />
+              </label>
               <p id="insp-msg" class="msg"></p>
             </div>
           </div>
         </details>
         <div class="section-title">선택한 요소</div>
-        <div id="el-empty" class="muted">위 “요소 추가”로 만들거나 캔버스에서 요소를 클릭하세요. 성경/찬송/교독 요소도 글자 크기·색·위치를 자유롭게 편집할 수 있습니다.</div>
+        <div id="el-empty" class="muted">캔버스 위 도구(✏️ ▭ ◯ ／ 🖼 🎬 · 📖 🎵 📜)로 요소를 만들거나, 캔버스에서 요소를 클릭하세요.</div>
         <div id="el-props" class="fields" hidden></div>
       </div>
-
-      <div id="tab-template" class="tab-body" hidden>
-        <div class="section-title">이 슬라이드</div>
-        <button id="tpl-save" class="primary">디자인을 템플릿으로 저장</button>
-        <p id="tpl-msg" class="msg"></p>
-        <hr />
-        <div class="section-title">템플릿 목록 <span class="muted">([✎ 편집]=디자인 수정 · 추가는 ‘추가’ 탭)</span></div>
-        <div id="tpl-list" class="tpl-list"></div>
-      </div>
-
     </aside>
   </main>
 
@@ -229,6 +216,65 @@
         <button id="bibleref-add" class="primary">본문 슬라이드 추가</button>
       </div>
       <input id="bibleref-pdf-file" type="file" accept="application/pdf" hidden />
+    </div>
+  </div>
+
+  <!-- ===== 슬라이드 추가 모달 (＋추가 → 종류 선택 시) ===== -->
+  <div id="add-modal" class="modal-overlay" hidden>
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <strong id="add-modal-title">슬라이드 추가</strong>
+        <span class="spacer"></span>
+        <button id="add-close" class="mini">닫기 ✕</button>
+      </div>
+      <div class="pane">
+        <label>종류 / 템플릿
+          <select id="add-type"></select>
+        </label>
+        <div id="add-fields" class="fields"></div>
+      </div>
+      <div class="add-actions">
+        <button id="add-after-btn" class="primary" title="현재 선택한 슬라이드 바로 다음에 추가">선택 아래에 추가</button>
+        <button id="add-slide-btn" class="mini" title="예배 순서 맨 끝에 추가">순서 끝에</button>
+      </div>
+      <p id="add-msg" class="msg"></p>
+    </div>
+  </div>
+
+  <!-- ===== 디자인 템플릿 모달 ===== -->
+  <div id="tpl-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <strong>🎨 디자인 템플릿</strong>
+        <span class="spacer"></span>
+        <button id="tpl-close" class="mini">닫기 ✕</button>
+      </div>
+      <p class="muted tpl-hint">슬라이드 종류(성경·찬송·교독 등)의 <b>디자인</b>을 고치거나, 내가 만든 디자인을 템플릿으로 저장합니다.
+        새 슬라이드를 넣는 건 상단 <b>＋ 추가</b>에서 하세요.</p>
+      <button id="tpl-save" class="primary">현재 슬라이드 디자인을 템플릿으로 저장</button>
+      <p id="tpl-msg" class="msg"></p>
+      <div id="tpl-list" class="tpl-list"></div>
+    </div>
+  </div>
+
+  <!-- ===== 사운드 트랙 모달 ===== -->
+  <div id="sound-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <strong>🎵 사운드 트랙</strong>
+        <span class="spacer"></span>
+        <button id="sound-close" class="mini">닫기 ✕</button>
+      </div>
+      <p class="muted sound-hint">
+        지정한 <b>시작 ~ 끝 슬라이드 구간</b> 동안 <b>발표 화면</b>에서 재생됩니다. 슬라이드를 넘겨도 소리가 이어지고,
+        구간이 겹치면 여러 트랙이 함께 납니다. 편집 화면에서는 소리가 나지 않아요 — ▶ 미리듣기로 확인하세요.
+      </p>
+      <div class="sound-bar">
+        <button id="sound-add" class="mini accent">＋ 음악 파일 추가</button>
+        <span id="sound-status" class="muted"></span>
+      </div>
+      <div id="sound-list" class="sound-list"></div>
+      <input id="sound-file" type="file" accept="audio/*" hidden />
     </div>
   </div>
 

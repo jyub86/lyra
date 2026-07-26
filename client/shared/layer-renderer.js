@@ -58,8 +58,10 @@ function renderBibleBody(root, c, showNumbers, field, format) {
   const body = el("div", "ce-body");
   for (const v of c?.verses || []) {
     const row = el("span", "ce-verse");
-    if (showNumbers !== false) row.appendChild(el("sup", "ce-verse-no", String(v.verse)));
-    row.appendChild(el("span", null, (showNumbers !== false ? " " : "") + v.text));
+    // v.cont = 긴 절이 다음 장으로 이어지는 조각 → 절 번호를 다시 붙이지 않는다.
+    const withNo = showNumbers !== false && !v.cont && v.verse != null;
+    if (withNo) row.appendChild(el("sup", "ce-verse-no", String(v.verse)));
+    row.appendChild(el("span", null, (withNo ? " " : "") + v.text));
     body.appendChild(row);
     body.appendChild(document.createTextNode(" "));
   }

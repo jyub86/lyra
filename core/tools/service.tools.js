@@ -26,8 +26,8 @@ function assetFilePath(url) {
   return full.startsWith(DATA_DIR) ? full : null;
 }
 
-// 첨부 파일을 참조하는 곳: 요소 image/video url + 배경(image/video) url.
-function collectAssetUrls(slides) {
+// 첨부 파일을 참조하는 곳: 요소 image/video url + 배경(image/video) url + 사운드 트랙 url.
+function collectAssetUrls(slides, tracks = []) {
   const urls = new Set();
   for (const s of slides) {
     if (isAssetUrl(s.background?.url)) urls.add(s.background.url);
@@ -35,7 +35,38 @@ function collectAssetUrls(slides) {
       if (isAssetUrl(e?.url)) urls.add(e.url);
     }
   }
+  for (const t of tracks) if (isAssetUrl(t?.url)) urls.add(t.url);
   return [...urls];
+}
+
+function parseTracks(raw) {
+  if (!raw) return [];
+  try { const t = JSON.parse(raw); return Array.isArray(t) ? t : []; } catch { return []; }
+}
+
+// 트랙의 구간은 슬라이드 id로 저장되지만, 내보내기/복사에선 id가 새로 생기므로
+// 순번(index)으로 옮겨 담는다. index=null → 처음/끝.
+function tracksToPortable(tracks, slides) {
+  const pos = new Map(slides.map((s, i) => [s.id, i]));
+  return tracks.map(({ id, start_slide_id, end_slide_id, ...rest }) => ({
+    ...rest,
+    start: pos.has(start_slide_id) ? pos.get(start_slide_id) : null,
+    end: pos.has(end_slide_id) ? pos.get(end_slide_id) : null,
+  }));
+}
+// 반대 방향: 순번 → 새로 만들어진 슬라이드 id.
+function tracksFromPortable(tracks, newSlideIds) {
+  const at = (i) => (Number.isInteger(i) && i >= 0 && i < newSlideIds.length ? newSlideIds[i] : null);
+  return (tracks || []).map((t) => ({
+    id: ulid(),
+    name: t.name || "사운드",
+    url: t.url,
+    start_slide_id: at(t.start) ?? newSlideIds[0] ?? null,
+    end_slide_id: at(t.end),
+    loop: t.loop !== false,
+    volume: t.volume == null ? 0.8 : t.volume,
+    fade_in: t.fade_in == null ? 0.15 : t.fade_in,
+  })).filter((t) => t.url);
 }
 
 // slide의 url을 map(old→new)으로 치환한 새 slide 반환(배경 + 이미지 요소).
@@ -45,6 +76,7 @@ function remapAssets(slide, map) {
   s.elements = (s.elements || []).map((e) => (e.url && map[e.url] ? { ...e, url: map[e.url] } : e));
   return s;
 }
+const remapTracks = (tracks, map) => (tracks || []).map((t) => (t.url && map[t.url] ? { ...t, url: map[t.url] } : t));
 
 register({
   name: "list_services",
@@ -70,6 +102,7 @@ register({
     return {
       ...service,
       theme_overrides: service.theme_overrides ? JSON.parse(service.theme_overrides) : null,
+      tracks: parseTracks(service.tracks),
       slides: slidesOf(db, service_id),
     };
   },
@@ -155,9 +188,11 @@ register({
 });
 
 // Shared insert path for duplicate/import: write a service row + its slides.
+// meta.tracks 는 portable 형태(구간이 슬라이드 순번) — 새 슬라이드 id로 옮겨 저장한다.
 function writeService(db, meta, slides) {
   const id = ulid();
   const ts = nowIso();
+  const newSlideIds = [];
   const tx = db.transaction(() => {
     db.query(
       `INSERT INTO services (id, title, date, worship_part, theme_id, created_at, updated_at)
@@ -174,14 +209,18 @@ function writeService(db, meta, slides) {
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
     slides.forEach((s, i) => {
+      const sid = ulid();
+      newSlideIds.push(sid);
       insert.run(
-        ulid(), id, i,
+        sid, id, i,
         s.background ? JSON.stringify(s.background) : null,
         JSON.stringify(s.elements ?? []),
         s.transition ?? "fade",
         s.hidden ? 1 : 0
       );
     });
+    const tracks = tracksFromPortable(meta.tracks, newSlideIds);
+    if (tracks.length) db.query("UPDATE services SET tracks = ? WHERE id = ?").run(JSON.stringify(tracks), id);
   });
   tx();
   return id;
@@ -201,7 +240,9 @@ register({
   handler: ({ service_id, title }, { db }) => {
     const src = db.query("SELECT * FROM services WHERE id = ?").get(service_id);
     if (!src) throw new Error(`unknown service: ${service_id}`);
-    const newId = writeService(db, { ...src, title: title || `${src.title} (사본)` }, slidesOf(db, service_id));
+    const slides = slidesOf(db, service_id);
+    const meta = { ...src, title: title || `${src.title} (사본)`, tracks: tracksToPortable(parseTracks(src.tracks), slides) };
+    const newId = writeService(db, meta, slides);
     return { service_id: newId };
   },
 });
@@ -238,12 +279,15 @@ register({
   handler: ({ service_id, assets = true }, { db }) => {
     const s = db.query("SELECT * FROM services WHERE id = ?").get(service_id);
     if (!s) throw new Error(`unknown service: ${service_id}`);
-    const slides = slidesOf(db, service_id).map(({ background, elements, transition, hidden }) =>
+    const full = slidesOf(db, service_id);
+    const slides = full.map(({ background, elements, transition, hidden }) =>
       ({ background, elements, transition, hidden }));
-    // 참조된 업로드 파일을 base64로 번들 (다른 머신에서도 이미지 유지)
+    // 사운드 트랙은 구간을 슬라이드 순번으로 바꿔 내보낸다(가져온 쪽에서 새 id에 다시 연결).
+    const tracks = tracksToPortable(parseTracks(s.tracks), full);
+    // 참조된 업로드 파일을 base64로 번들 (다른 머신에서도 이미지·음악 유지)
     const bundled = [];
     if (assets) {
-      for (const url of collectAssetUrls(slides)) {
+      for (const url of collectAssetUrls(slides, tracks)) {
         const p = assetFilePath(url);
         if (p && existsSync(p)) bundled.push({ url, data_base64: readFileSync(p).toString("base64") });
       }
@@ -253,7 +297,7 @@ register({
       title: s.title, date: s.date, worship_part: s.worship_part, theme_id: s.theme_id,
       theme_overrides: s.theme_overrides ? JSON.parse(s.theme_overrides) : null,
       transition: s.transition || "none",
-      slides, assets: bundled,
+      slides, tracks, assets: bundled,
     };
   },
 });
@@ -289,6 +333,7 @@ register({
       theme_id: payload.theme_id || "dark-blue",
       theme_overrides: payload.theme_overrides || null,
       transition: payload.transition || null,
+      tracks: remapTracks(payload.tracks, map),
     };
     const id = writeService(db, meta, slides);
     return { service_id: id };

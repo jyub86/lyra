@@ -23,7 +23,6 @@ a { color: var(--accent); text-decoration: none; }
 
 .topbar { display: flex; align-items: center; gap: 8px; padding: 9px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
 .brand { color: var(--accent); letter-spacing: .3px; font-size: 16px; margin-right: 2px; }
-.icon-btn { padding: 6px 9px; font-weight: 700; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
 .seg-btn { border: 0; border-radius: 0; background: var(--panel2); }
 .seg-btn.active { background: var(--accent); color: #0b0e14; font-weight: 700; }
@@ -31,14 +30,22 @@ a { color: var(--accent); text-decoration: none; }
 /* topbar dropdown menus / popovers */
 .menu { position: relative; }
 .menu-btn { background: var(--panel2); }
-.menu-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; min-width: 220px;
+.menu-panel { position: absolute; top: calc(100% + 6px); right: 0; z-index: 50; min-width: 236px;
+  max-height: calc(100vh - 78px); overflow: auto;   /* 템플릿이 많아도 스크롤로 다 닿게 */
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px;
   box-shadow: 0 10px 30px rgba(0,0,0,.5); display: flex; flex-direction: column; gap: 2px; }
-.menu-panel.wide { min-width: 240px; padding: 10px; gap: 8px; }
-.menu-item { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; background: transparent; border: 0; border-radius: 6px; padding: 8px 10px; }
+.menu-panel.wide { min-width: 260px; padding: 8px; gap: 4px; }
+.menu-item { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; white-space: nowrap;
+  background: transparent; border: 0; border-radius: 6px; padding: 8px 10px; }
 .menu-item:hover { background: var(--panel2); }
-.menu-item .mi-sub { color: var(--muted); font-size: 11px; margin-left: auto; }
+.menu-item .mi-sub { color: var(--muted); font-size: 11px; margin-left: auto; flex: 0 0 auto; padding-left: 10px; }
 .menu-sep { height: 1px; background: var(--line); margin: 4px 2px; }
+/* 메뉴 안의 소제목 (슬라이드 추가 / 모양 …) */
+.menu-label { color: var(--muted); font-size: 11px; font-weight: 700; padding: 6px 10px 2px; letter-spacing: .2px; }
+/* 상단바 그룹 구분선 + 주 동작(＋추가) 강조 */
+.tb-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--line); }
+.menu-btn.accent-btn { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.menu-btn.accent-btn:hover { background: var(--accent); color: #0b0e14; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
 .set-row select { flex: 0 0 auto; }
 .set-row input[type="color"] { width: 30px; height: 24px; padding: 1px; border-radius: 5px; }
@@ -49,7 +56,8 @@ a { color: var(--accent); text-decoration: none; }
 .col { min-height: 0; overflow: auto; }
 .order { background: var(--panel); border-right: 1px solid var(--line); }
 .panel { background: var(--panel); border-left: 1px solid var(--line); padding: 12px; }
-.col-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; color: var(--muted); position: sticky; top: 0; background: var(--panel); z-index: 1; }
+/* z-index는 썸네일 내부 레이어(최대 2)보다 위여야 목록이 헤더를 뚫고 올라오지 않는다 */
+.col-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; color: var(--muted); position: sticky; top: 0; background: var(--panel); z-index: 3; }
 
 .slide-list { padding: 0 8px 24px; }
 .list-hint { padding: 8px 8px 6px; margin: 0; font-size: 11px; line-height: 1.4; }
@@ -93,8 +101,8 @@ a { color: var(--accent); text-decoration: none; }
 
 /* element add toolbar */
 .canvas-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.canvas-tools .ct-label { color: var(--muted); font-size: 12px; margin-right: 2px; }
-.canvas-tools button { padding: 5px 9px; font-size: 12px; }
+/* 요소 추가 = 아이콘 버튼(툴팁으로 설명) */
+.canvas-tools button { padding: 4px 9px; font-size: 15px; line-height: 1.2; }
 .canvas-tools .ct-sep { color: var(--line); margin: 0 2px; }
 
 /* interactive edit layer over the preview */
@@ -176,6 +184,29 @@ a { color: var(--accent); text-decoration: none; }
 .lib-folder .muted { font-size: 12px; white-space: nowrap; }
 .lib-search input { width: 100%; padding: 8px 10px; }
 .lib-results { overflow: auto; display: flex; flex-direction: column; gap: 6px; min-height: 120px; }
+/* 사운드 트랙 모달 */
+.sound-hint { font-size: 12px; margin: 0; line-height: 1.5; }
+.sound-bar { display: flex; gap: 8px; align-items: center; }
+.sound-bar .accent { background: var(--accent); color: #0b0e14; border-color: var(--accent); font-weight: 700; }
+#sound-status { font-size: 12px; }
+.sound-list { overflow: auto; display: flex; flex-direction: column; gap: 8px; min-height: 80px; }
+.sound-row { display: flex; flex-direction: column; gap: 7px; padding: 9px 11px; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; }
+.sound-row .sd-head { display: flex; gap: 6px; align-items: center; }
+.sound-row .sd-name { flex: 1; font-weight: 600; }
+.sound-row .sd-range { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sound-row .sd-range select { flex: 1; min-width: 130px; }
+.sound-row .sd-lab { color: var(--muted); font-size: 12px; }
+.sound-row .sd-opts { display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--muted); }
+.sound-row .sd-check { display: flex; gap: 4px; align-items: center; margin: 0; }
+.sound-row .sd-vol { display: flex; gap: 6px; align-items: center; flex: 1; margin: 0; }
+.sound-row .sd-vol input { flex: 1; max-width: 160px; }
+.sound-row .sd-fade { display: flex; gap: 4px; align-items: center; margin: 0; white-space: nowrap; }
+.sound-row .sd-fade input { width: 62px; }
+.sound-row .sd-unit { color: var(--muted); }
+.sound-row .sd-span { margin-left: auto; }
+/* 순서/타일에서 사운드가 재생되는 슬라이드 표시 */
+.sound-mark { color: var(--accent); font-size: 11px; }
+
 /* 성구 모달 */
 .bibleref-hint { font-size: 12px; margin: 0; }
 .bibleref-bar { display: flex; gap: 8px; align-items: center; }
@@ -230,23 +261,32 @@ a { color: var(--accent); text-decoration: none; }
 .busy-sub { font-size: 12px; }
 .spinner { width: 34px; height: 34px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-.tab-body hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
+.pane hr { border: 0; border-top: 1px solid var(--line); margin: 12px 0; }
 .el-actions { display: flex; gap: 6px; margin-top: 10px; }
 .el-actions button { flex: 1; }
-.tpl-list { display: flex; flex-direction: column; gap: 5px; }
-.tpl-group { color: var(--muted); font-size: 11px; font-weight: 700; margin: 10px 0 1px; }
-.tpl-row { display: flex; flex-direction: column; align-items: stretch; gap: 5px; padding: 7px 9px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
+/* 템플릿이 늘어나도 모달 안에서 스크롤 (flex 자식이라 min-height:0 이 있어야 줄어듦) */
+/* gap 대신 행 margin — gap은 배경이 없어 sticky 제목 위로 아랫줄이 비쳐 보인다 */
+.tpl-list { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; overflow: auto; }
+/* 그룹 제목은 스크롤해도 위에 붙어 있게(sticky). 여백까지 background로 덮어야 아래 행이 비치지 않는다. */
+.tpl-group { color: var(--muted); font-size: 11px; font-weight: 700; margin: 0;
+  position: sticky; top: 0; z-index: 1; background: var(--panel); padding: 9px 2px 5px; }
+.tpl-row { display: flex; flex-direction: column; align-items: stretch; gap: 5px; margin-bottom: 5px; padding: 7px 9px; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; }
 .tpl-row .tpl-name { cursor: pointer; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tpl-row .tpl-name:hover { color: var(--accent); }
 .tpl-acts { display: flex; gap: 4px; }
 .tpl-acts button { flex: 1; padding: 3px 4px; font-size: 11px; }
 .tpl-acts .accent { background: var(--accent); color: #0b0e14; border-color: var(--accent); font-weight: 700; }
 
-.tabs { display: flex; gap: 4px; margin-bottom: 12px; }
-.tab { flex: 1; background: var(--panel2); }
-.tab.active { background: var(--accent); color: #0b0e14; font-weight: 700; border-color: var(--accent); }
-.tab-body label { display: block; margin: 10px 0 4px; color: var(--muted); }
-.tab-body input, .tab-body select, .tab-body textarea { width: 100%; }
+/* 우측 속성 패널 · 모달 폼 공통 (구 .tab-body) */
+.pane label { display: block; margin: 10px 0 4px; color: var(--muted); }
+.pane input, .pane select, .pane textarea { width: 100%; }
+.pane .set-row input[type="checkbox"] { width: auto; }
+.insp-hide-row { margin-top: 10px; }
+/* 슬라이드 추가 모달 */
+.modal.modal-sm { width: min(420px, 92vw); }
+.add-actions { display: flex; gap: 6px; align-items: center; }
+.add-actions .primary { flex: 1; width: auto; }
+.tpl-hint { font-size: 12px; margin: 0; line-height: 1.5; }
 .fields { display: flex; flex-direction: column; gap: 2px; }
 textarea { resize: vertical; }
 .msg { min-height: 18px; color: var(--accent); font-size: 12px; }
@@ -269,6 +309,9 @@ textarea { resize: vertical; }
 .tile .cap .label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .cap .del { padding: 1px 6px; font-size: 11px; opacity: 0; }
 .tile:hover .cap .del { opacity: 1; }
+/* 타일 → 편집 화면으로 바로 가기 (항상 보이는 주 동작) */
+.tile .cap .edit-tile { padding: 1px 7px; font-size: 11px; white-space: nowrap; color: var(--accent); border-color: var(--line); }
+.tile .cap .edit-tile:hover { background: var(--accent); color: #0b0e14; border-color: var(--accent); }
 
 /* 설정 팝오버: 다른 기기 접속 주소 */
 .net-addrs { display:flex; flex-direction:column; gap:2px; font-size:12px; text-align:right; max-width:60%; }

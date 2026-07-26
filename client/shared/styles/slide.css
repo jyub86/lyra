@@ -6,6 +6,9 @@
   aspect-ratio: 16 / 9;
   overflow: hidden;
   container-type: size;
+  /* 슬라이드 내부의 z-index(layer-bg 0 / layer-elements 1 …)가 바깥 UI와 경쟁하지 않도록
+     자체 스택 문맥으로 가둔다. (없으면 목록 썸네일이 스티키 헤더를 뚫고 올라온다) */
+  isolation: isolate;
   font-family: var(--font-family, sans-serif);
   color: var(--text, #fff);
   background: #000;

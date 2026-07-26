@@ -12,16 +12,19 @@ import { insertSlide } from "./slide.tools.js";
 import { touchService } from "./_helpers.js";
 import { BUILTIN_IDS, seedBuiltins } from "../templates/builtins.js";
 import { getBiblePassage, getHymn, getReading } from "../db/content.js";
-import { splitBible, splitHymn, splitReading } from "../splitter.js";
+import { splitBible, splitHymn, splitReading, bibleAutoCapacity } from "../splitter.js";
 
 const CONTENT_TYPES = new Set(["bible", "hymn", "reading"]);
 
 // Fetch + split a content element's data into per-slide chunks { params, content }.
-function contentChunks(db, type, params) {
+// bodyEl = 본문을 그리는 요소(있으면 그 박스·글자 크기로 auto 분할량을 정한다).
+function contentChunks(db, type, params, bodyEl) {
   if (type === "bible") {
     const p = getBiblePassage(db, params.book, params.chapter, params.verse_start, params.verse_end);
     if (!p.verses.length) throw new Error(`본문 없음: ${params.book} ${params.chapter}:${params.verse_start}-${params.verse_end}`);
-    const pages = splitBible(p.verses, params.layout || "auto", { book_name: p.book_name, short_name: p.short_name, chapter: params.chapter });
+    const pages = splitBible(p.verses, params.layout || "auto",
+      { book_name: p.book_name, short_name: p.short_name, chapter: params.chapter },
+      bibleAutoCapacity(bodyEl));
     return pages.map((pg) => ({
       params: { book: params.book, chapter: params.chapter, verse_start: pg.verses[0].verse, verse_end: pg.verses[pg.verses.length - 1].verse, layout: params.layout || "auto" },
       content: { ref: pg.ref, verses: pg.verses },
@@ -64,7 +67,9 @@ function buildSlidesFromTemplate(db, spec, params) {
   const contentEls = els.filter((e) => CONTENT_TYPES.has(e.type));
   if (contentEls.length) {
     const type = contentEls[0].type; // split by the first content element's type
-    const chunks = contentChunks(db, type, params);
+    // 본문을 그리는 요소(참조/제목만 그리는 요소 제외)를 기준으로 분할량을 정한다.
+    const bodyEl = contentEls.find((e) => !e.field || e.field === "all" || e.field === "text" || e.field === "body") || contentEls[0];
+    const chunks = contentChunks(db, type, params, bodyEl);
     if (!chunks.length) throw new Error("콘텐츠를 가져오지 못했습니다");
     // every content element of that type (e.g. hymn title/label/lyrics) shares the chunk
     return chunks.map((chunk) => ({

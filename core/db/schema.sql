@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS services (
   theme_id        TEXT NOT NULL DEFAULT 'dark-blue',
   theme_overrides TEXT,                -- JSON { background?, accent? } — 테마 위 커스텀 색
   transition      TEXT DEFAULT 'none', -- 'none' | 'fade' | 'slide' (발표 전환 효과)
+  tracks          TEXT,                -- JSON [{id,name,url,start_slide_id,end_slide_id,loop,volume}] — 사운드 트랙
   created_at      TEXT NOT NULL,
   updated_at      TEXT NOT NULL
 );

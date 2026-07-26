@@ -28,12 +28,16 @@
 >   프로필은 `-env:UserInstallation`(OS 무관). 미설치 시 명확 안내로 graceful. Windows: LibreOffice/poppler 설치+PATH.
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
-> ⚠️ **편집기 UI 구성 (v4.3)** — 상단바 정리
-> - 상단바: `Lyra · 예배선택 [+] · 리스트/타일 · … · 가져오기▾ · ⚙설정▾ · ▶발표`.
->   **가져오기▾** 드롭다운=슬라이드(PPT/PDF)·라이브러리·JSON export/import, **⚙설정▾** 팝오버=테마·배경/메인색·전환.
->   메뉴 토글 `wireMenu`(바깥클릭/Esc 닫힘, editor.js). 발표는 accent 버튼.
-> - 우측 **3탭**(추가/디자인/템플릿). "검사기"는 제거되고 **슬라이드 배경**은 디자인 탭 섹션으로 통합
->   (id 유지: insp-bg-type/insp-bg-fields/insp-save). 모든 기존 핸들러 id 불변(순수 재배치).
+> ⚠️ **편집기 UI 구성 (v4.7)** — 문맥 인스펙터 + 통합 추가 (v4.3의 3탭 구성을 대체)
+> - 상단바 = **4그룹**: `Lyra · 예배선택 │ 리스트/타일 │ ＋추가▾ · ⚙예배▾ │ ▶발표`.
+>   **＋추가▾** = 슬라이드(템플릿 목록·`renderAddMenu`) + 📖성구 + 🖼파일(PPT/PDF/이미지) + 🔎라이브러리.
+>   **⚙예배▾** = 테마·색·글꼴·전환 + 🎵사운드 트랙 + 🎨디자인 템플릿 + JSON 내보내기/가져오기 + 예배 생성·수정·복제·삭제 + 접속 주소.
+>   메뉴 토글 `wireMenu`(바깥클릭/Esc 닫힘, 항목 클릭은 위임으로 닫힘).
+> - 우측 패널 = **속성 전용(탭 없음)**: `슬라이드`(배경·숨기기, `<details data-gkey="slide-props">`) + `선택한 요소`
+>   (내용/글자/효과 접이식 그룹). 요소를 고르면 탭 전환 없이 바로 속성이 뜬다.
+> - **슬라이드 추가는 모달**(`#add-modal`): ＋추가에서 종류를 고르면 params 입력창이 뜨고(입력이 없는 종류는 즉시 추가),
+>   `add-type`/`add-fields`/`add-after-btn`/`add-slide-btn`/`add-msg` id는 그대로 재사용. 템플릿 관리도 모달(`#tpl-modal`, `tpl-save`/`tpl-list`).
+> - 캔버스 위 요소 툴바는 **아이콘 전용**(툴팁으로 설명). 기존 핸들러 id는 모두 불변.
 
 > ⚠️ **v4.4 추가 (self-host 무료 웹폰트)** — 구현 기준(현행)
 > - **오프라인 우선**: 구글폰트 CDN 링크가 아니라 폰트 파일을 로컬에 받아 `data/fonts/`에서 서빙(`/fonts/`).

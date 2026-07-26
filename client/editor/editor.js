@@ -360,6 +360,7 @@ function renderList() {
   if (!state.service) { root.innerHTML = '<p class="muted" style="padding:12px">예배 순서가 없습니다. “+ 새 예배”로 시작하세요.</p>'; return; }
   root.appendChild(elx("p", "list-hint muted", "드래그로 이동 · ⌘/Ctrl·Shift 클릭으로 여러 개 선택해 함께 이동"));
   const pid = presentingSlideId();
+  const sound = slidesWithSound();
   slides().forEach((s, i) => {
     const sel = state.selectedSet.has(s.id);
     const row = elx("div", "slide-row" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.id === pid ? " presenting" : "") + (s.hidden ? " hidden" : ""));
@@ -367,6 +368,7 @@ function renderList() {
     row.dataset.id = s.id;
     const meta = elx("div", "row-meta");
     meta.append(elx("span", "badge", slideKind(s)), elx("span", "label", slideLabel(s)));
+    if (sound.has(s.id)) { const n = elx("span", "sound-mark", "♪"); n.title = "이 구간에서 사운드 트랙이 재생됩니다"; meta.appendChild(n); }
     const hide = elx("button", "hide" + (s.hidden ? " on" : ""), s.hidden ? "⊘" : "◉");
     hide.title = s.hidden ? "발표에 다시 보이기" : "발표에서 숨기기";
     hide.onclick = (e) => { e.stopPropagation(); toggleHidden(s.id); };
@@ -540,7 +542,6 @@ function repaintEls() {
 function selectEl(i) {
   state.editEl = i;
   state.editElSet = i == null ? new Set() : new Set([i]);
-  if (i != null) showTab("design");
   renderEditLayer();
   renderDesignPanel();
 }
@@ -549,7 +550,6 @@ function selectEl(i) {
 function selectEls(indices) {
   state.editElSet = new Set(indices);
   state.editEl = indices.length ? indices[0] : null;
-  if (indices.length) showTab("design");
   renderEditLayer();
   renderDesignPanel();
 }
@@ -1343,7 +1343,31 @@ async function loadTemplates() {
   }
   renderTemplatePanel();
   renderAddTypeSelect();
+  renderAddMenu();
 }
+
+// ＋추가 메뉴의 "슬라이드 추가" 항목 = 템플릿 목록(기본 종류 먼저, 내 템플릿은 구분선 뒤).
+function renderAddMenu() {
+  const box = $("menu-add-templates");
+  if (!box) return;
+  box.replaceChildren();
+  let lastKind = null;
+  for (const t of state.templates || []) {
+    if (lastKind && t.kind !== lastKind) box.appendChild(elx("div", "menu-sep"));
+    lastKind = t.kind;
+    const b = elx("button", "menu-item", t.name);
+    b.onclick = () => openAddSlide(t.id);
+    box.appendChild(b);
+  }
+}
+
+function openTemplates() {
+  if (!state.serviceId) { toast("예배 순서를 먼저 선택하세요"); return; }
+  msg("tpl-msg", "");
+  renderTemplatePanel();
+  $("tpl-modal").hidden = false;
+}
+function closeTemplates() { $("tpl-modal").hidden = true; }
 
 // management list: save current slide's design into a template, rename, reset/delete
 function renderTemplatePanel() {
@@ -1437,7 +1461,7 @@ async function editTemplate(id) {
   state.editEl = null;
   state.editElSet = new Set();
   state.mode = "list";
-  showTab("design");
+  closeTemplates();          // 템플릿 모달을 닫고 캔버스에서 디자인 편집
   render();
 }
 async function saveTemplateEdit() {
@@ -1456,17 +1480,28 @@ function cancelTemplateEdit() {
 
 
 // ---------- tiles ----------
+// 타일 → 이 슬라이드의 편집 화면(리스트 뷰 + 캔버스)으로 바로 이동.
+function editSlideFromTile(id) {
+  setSingleSelection(id);
+  state.mode = "list";
+  render();
+  // 순서 목록에서 해당 슬라이드가 보이도록 스크롤
+  document.querySelector(`.slide-row[data-id="${id}"]`)?.scrollIntoView({ block: "center" });
+}
+
 function renderTiles() {
   const grid = $("tile-grid");
   grid.innerHTML = "";
   const pid = presentingSlideId();
+  const sound = slidesWithSound();
   slides().forEach((s, i) => {
     const sel = state.selectedSet.has(s.id);
     const tile = elx("div", "tile" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.id === pid ? " presenting" : "") + (s.hidden ? " hidden" : ""));
     tile.draggable = true;
     tile.dataset.id = s.id;
     const cap = elx("div", "cap");
-    cap.innerHTML = `<span class="num">${i + 1}</span><span class="badge">${slideKind(s)}</span><span class="label">${slideLabel(s)}</span><button class="hide${s.hidden ? " on" : ""}" title="${s.hidden ? "발표에 다시 보이기" : "발표에서 숨기기"}">${s.hidden ? "⊘" : "◉"}</button><button class="del danger">✕</button>`;
+    cap.innerHTML = `<span class="num">${i + 1}</span><span class="badge">${slideKind(s)}</span>${sound.has(s.id) ? '<span class="sound-mark" title="사운드 트랙 재생 구간">♪</span>' : ""}<span class="label">${slideLabel(s)}</span><button class="edit-tile" title="이 슬라이드 편집 화면으로 이동">✎ 편집</button><button class="hide${s.hidden ? " on" : ""}" title="${s.hidden ? "발표에 다시 보이기" : "발표에서 숨기기"}">${s.hidden ? "⊘" : "◉"}</button><button class="del danger">✕</button>`;
+    cap.querySelector(".edit-tile").onclick = (e) => { e.stopPropagation(); editSlideFromTile(s.id); };
     cap.querySelector(".hide").onclick = (e) => { e.stopPropagation(); toggleHidden(s.id); };
     cap.querySelector(".del").onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
     tile.append(buildThumb(s), cap);
@@ -1489,6 +1524,22 @@ const PARAM_HINTS = {
   segments_per_slide: "한 슬라이드에 담을 인도자/회중 문장 수. 숫자를 키우면 슬라이드가 줄고, 줄이면 많아져요.",
   lines_per_slide: "한 슬라이드에 담을 가사 줄 수. 숫자를 키우면 슬라이드가 줄어요.",
 };
+
+// ＋추가 메뉴에서 종류를 고르면 → 입력이 필요한 종류만 작은 대화상자를 띄우고,
+// 입력이 없는 종류(빈 화면·내 템플릿)는 곧바로 선택 아래에 추가한다.
+function openAddSlide(templateId) {
+  if (!state.serviceId) { toast("예배 순서를 먼저 선택하거나 만들어 주세요"); return; }
+  const tpl = (state.templates || []).find((t) => t.id === templateId);
+  if (!tpl) return;
+  $("add-type").value = templateId;
+  renderAddFields();
+  msg("add-msg", "");
+  if (!Object.keys(tpl.params_schema?.properties || {}).length) { addSlide("after"); return; }
+  $("add-modal-title").textContent = `${tpl.name} 추가`;
+  $("add-modal").hidden = false;
+  $("add-fields").querySelector("input, textarea, select")?.focus();
+}
+function closeAddSlide() { $("add-modal").hidden = true; }
 
 // populate the type/template dropdown (기본 종류 + 내 템플릿) from state.templates
 function renderAddTypeSelect() {
@@ -1582,9 +1633,10 @@ async function addSlide(where = "end") {
   }
   try {
     const res = await callTool("apply_template", { template_id: templateId, service_id: state.serviceId, params: collectParams(tpl), position });
-    msg("add-msg", `“${tpl.name}” 추가됨`);
     await refresh();
     if (res?.slide_ids?.[0]) { setSingleSelection(res.slide_ids[0]); render(); }
+    closeAddSlide();
+    toast(`“${tpl.name}” ${res?.slide_ids?.length || 1}장 추가됨`);
   } catch (e) { msg("add-msg", e.message, true); }
 }
 
@@ -1648,7 +1700,7 @@ async function pasteElement() {
   toast(`요소 ${copies.length}개 붙여넣음`);
 }
 
-// ---------- inspector ----------
+// ---------- inspector (우측 패널 = 슬라이드 속성) ----------
 function renderInspector() {
   const slide = selectedSlide();
   const empty = $("inspect-empty"), body = $("inspect-body");
@@ -1656,6 +1708,11 @@ function renderInspector() {
   empty.hidden = true; body.hidden = false;
   $("insp-bg-type").value = slide.background?.type || "theme";
   renderBgFields(slide.background);
+  // 발표에서 숨기기 — 순서 목록의 ◉/⊘ 버튼과 같은 동작(템플릿 초안엔 해당 없음)
+  const hide = $("insp-hidden");
+  const row = hide?.closest(".insp-hide-row");
+  if (row) row.hidden = !!state.editingTemplate;
+  if (hide) { hide.checked = !!slide.hidden; hide.onchange = () => toggleHidden(slide.id); }
 }
 
 const BG_FIELDS = {
@@ -1873,6 +1930,162 @@ async function importSlidesFile(file) {
     hideBusy();
     alert("슬라이드 가져오기 실패: " + e.message);
   }
+}
+
+// ---- 사운드 트랙 모달 (여러 슬라이드 구간에 걸쳐 재생되는 배경 음악) ----
+// 트랙은 예배에 속하고 구간(시작~끝 슬라이드)을 가진다. 실제 재생은 발표 화면에서만.
+const tracks = () => state.service?.tracks || [];
+let previewAudio = null;
+
+function stopTrackPreview() {
+  if (!previewAudio) return;
+  previewAudio.pause();
+  previewAudio = null;
+  for (const b of document.querySelectorAll("#sound-list .sd-play")) b.textContent = "▶ 미리듣기";
+}
+
+function openSound() {
+  if (!state.serviceId) { toast("예배 순서를 먼저 선택하세요"); return; }
+  $("sound-modal").hidden = false;
+  msg("sound-status", "");
+  renderSoundList();
+}
+function closeSound() { stopTrackPreview(); $("sound-modal").hidden = true; }
+
+// 슬라이드 선택 <select> — 값=슬라이드 id. blankLabel이 있으면 "" 옵션을 맨 앞에.
+function slideSelect(value, blankLabel, onPick) {
+  const sel = document.createElement("select");
+  if (blankLabel) { const o = document.createElement("option"); o.value = ""; o.textContent = blankLabel; sel.appendChild(o); }
+  slides().forEach((s, i) => {
+    const o = document.createElement("option");
+    o.value = s.id;
+    const label = slideLabel(s) || "";
+    o.textContent = `${i + 1}. ${label.length > 22 ? label.slice(0, 22) + "…" : label}`;
+    sel.appendChild(o);
+  });
+  sel.value = value || "";
+  if (sel.selectedIndex < 0) sel.selectedIndex = 0;   // 지워진 슬라이드를 가리키던 경우
+  sel.onchange = () => onPick(sel.value || null);
+  return sel;
+}
+
+function renderSoundList() {
+  const list = $("sound-list");
+  if (!list) return;
+  list.replaceChildren();
+  const items = tracks();
+  if (!items.length) {
+    list.appendChild(elx("p", "muted", "아직 사운드 트랙이 없습니다. “＋ 음악 파일 추가”로 mp3·m4a·wav 파일을 올리세요."));
+    return;
+  }
+  for (const t of items) {
+    const row = elx("div", "sound-row");
+
+    const head = elx("div", "sd-head");
+    const name = document.createElement("input");
+    name.type = "text"; name.className = "sd-name"; name.value = t.name || "";
+    name.onchange = () => saveTrack(t.id, { name: name.value });
+    const play = elx("button", "mini sd-play", "▶ 미리듣기");
+    play.onclick = () => toggleTrackPreview(t, play);
+    const del = elx("button", "mini danger", "삭제");
+    del.onclick = () => removeTrack(t.id, t.name);
+    head.append(name, play, del);
+
+    const range = elx("div", "sd-range");
+    range.append(elx("span", "sd-lab", "시작"), slideSelect(t.start_slide_id, null, (v) => saveTrack(t.id, { start_slide_id: v })));
+    range.append(elx("span", "sd-lab", "끝"), slideSelect(t.end_slide_id, "예배 끝까지", (v) => saveTrack(t.id, { end_slide_id: v })));
+    const opts = elx("div", "sd-opts");
+    { const lab = elx("label", "sd-check", "반복");
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = t.loop !== false;
+      cb.onchange = () => saveTrack(t.id, { loop: cb.checked });
+      lab.prepend(cb); opts.appendChild(lab); }
+    { const lab = elx("label", "sd-vol", "볼륨");
+      const r = document.createElement("input");
+      r.type = "range"; r.min = 0; r.max = 1; r.step = 0.05; r.value = t.volume == null ? 0.8 : t.volume;
+      r.onchange = () => saveTrack(t.id, { volume: Number(r.value) });
+      r.oninput = () => { if (previewAudio?.dataset.trackId === t.id) previewAudio.volume = Number(r.value); };
+      lab.appendChild(r); opts.appendChild(lab); }
+    // 시작 페이드: 0.15초면 귀에는 바로 들린다(임팩트 유지). 크게 주면 서서히 스며든다.
+    { const lab = elx("label", "sd-fade", "시작 페이드");
+      const n = document.createElement("input");
+      n.type = "number"; n.min = 0; n.max = 10; n.step = 0.05;
+      n.value = t.fade_in == null ? 0.15 : t.fade_in;
+      n.title = "0 = 바로 최대 음량 · 0.15 = 즉시 느낌(기본) · 1~3 = 서서히 커짐";
+      n.onchange = () => saveTrack(t.id, { fade_in: Number(n.value) });
+      lab.append(n, elx("span", "sd-unit", "초")); opts.appendChild(lab); }
+    const span = trackSpan(t);
+    opts.appendChild(elx("span", "sd-span muted", span ? `${span}장 구간` : "구간 없음"));
+
+    row.append(head, range, opts);
+    list.appendChild(row);
+  }
+}
+
+// 트랙이 걸쳐 있는 슬라이드 수(0=구간을 못 찾음).
+function trackSpan(t) {
+  const arr = slides();
+  const s = arr.findIndex((x) => x.id === t.start_slide_id);
+  const e = t.end_slide_id ? arr.findIndex((x) => x.id === t.end_slide_id) : arr.length - 1;
+  if (s < 0 || e < 0 || e < s) return 0;
+  return e - s + 1;
+}
+// 이 슬라이드에서 소리가 나는지(리스트·타일에 ♪ 표시).
+function slidesWithSound() {
+  const arr = slides();
+  const ids = new Set();
+  for (const t of tracks()) {
+    const s = arr.findIndex((x) => x.id === t.start_slide_id);
+    const e = t.end_slide_id ? arr.findIndex((x) => x.id === t.end_slide_id) : arr.length - 1;
+    if (s < 0 || e < 0) continue;
+    for (let i = s; i <= e; i++) ids.add(arr[i].id);
+  }
+  return ids;
+}
+
+function toggleTrackPreview(t, btn) {
+  const playing = previewAudio?.dataset.trackId === t.id && !previewAudio.paused;
+  stopTrackPreview();
+  if (playing) return;
+  previewAudio = new Audio(t.url);
+  previewAudio.dataset.trackId = t.id;
+  previewAudio.volume = t.volume == null ? 0.8 : t.volume;
+  previewAudio.loop = false;
+  previewAudio.onended = () => stopTrackPreview();
+  previewAudio.play().then(() => { btn.textContent = "■ 정지"; }).catch((e) => msg("sound-status", "재생 실패: " + e.message, true));
+}
+
+async function saveTrack(track_id, fields) {
+  try {
+    await callTool("update_track", { service_id: state.serviceId, track_id, fields });
+    await refresh();
+    renderSoundList();
+    msg("sound-status", "저장됨");
+  } catch (e) { msg("sound-status", e.message, true); }
+}
+
+async function removeTrack(track_id, name) {
+  if (!confirm(`“${name || "이 트랙"}”을 목록에서 뺄까요?`)) return;
+  stopTrackPreview();
+  await callTool("remove_track", { service_id: state.serviceId, track_id });
+  await refresh();
+  renderSoundList();
+}
+
+// 음악 파일 업로드 → 트랙 추가(기본 구간: 선택한 슬라이드 ~ 예배 끝).
+async function addTrackFile(file) {
+  msg("sound-status", `${file.name} 업로드 중…`);
+  try {
+    const { url } = await uploadFile(file);
+    const start = state.selected || slides()[0]?.id;
+    await callTool("add_track", {
+      service_id: state.serviceId, url,
+      name: file.name.replace(/\.[^.]+$/, ""),
+      start_slide_id: start,
+    });
+    await refresh();
+    renderSoundList();
+    msg("sound-status", "추가됨 — 시작·끝 슬라이드를 지정하세요");
+  } catch (e) { msg("sound-status", e.message, true); }
 }
 
 // ---- 성구(성경 참조 → 본문 슬라이드) 모달 ----
@@ -2121,14 +2334,6 @@ async function importFromLibrary(r) {
 function msg(id, text, err) { const el = $(id); if (!el) return; el.textContent = text; el.className = "msg" + (err ? " err" : ""); }
 
 // ---------- wire ----------
-function showTab(name) {
-  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x.dataset.tab === name));
-  document.querySelectorAll(".tab-body").forEach((b) => { b.hidden = b.id !== "tab-" + name; });
-}
-function initTabs() {
-  document.querySelectorAll(".tab").forEach((t) => { t.onclick = () => showTab(t.dataset.tab); });
-}
-
 // ---- topbar dropdown menus / popovers ----
 let openMenu = null;
 function closeMenus() { if (openMenu) { openMenu.hidden = true; openMenu = null; } }
@@ -2140,10 +2345,19 @@ function wireMenu(btnId, panelId, { closeOnItem = false } = {}) {
     closeMenus();
     if (willOpen) { panel.hidden = false; openMenu = panel; }
   };
-  if (closeOnItem) panel.querySelectorAll(".menu-item").forEach((it) => it.addEventListener("click", closeMenus));
+  // 항목은 나중에 그려지기도 하므로(＋추가의 템플릿 목록) 위임으로 닫는다.
+  if (closeOnItem) panel.addEventListener("click", (e) => { if (e.target.closest(".menu-item")) closeMenus(); });
 }
 document.addEventListener("click", (e) => { if (openMenu && !openMenu.parentElement.contains(e.target)) closeMenus(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMenus(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  closeMenus();
+  // 열려 있는 모달도 Esc로 닫는다(추가·템플릿·사운드·성구·라이브러리).
+  for (const [id, close] of [["add-modal", closeAddSlide], ["tpl-modal", closeTemplates],
+    ["sound-modal", closeSound], ["bibleref-modal", closeBibleRef], ["library-modal", closeLibrary]]) {
+    if (!$(id)?.hidden) { close(); break; }
+  }
+});
 
 // self-host 웹폰트 목록을 불러와 설정의 기본 글꼴 select를 채운다.
 async function loadFonts() {
@@ -2172,10 +2386,9 @@ async function loadNetwork() {
 
 function init() {
   initThemeSelect();
-  initTabs();
   wireStaticGroups();   // 정적 접이식 그룹(슬라이드 배경)의 열림 상태 기억
-  wireMenu("menu-import-btn", "menu-import", { closeOnItem: true });
-  wireMenu("menu-settings-btn", "menu-settings");
+  wireMenu("menu-add-btn", "menu-add", { closeOnItem: true });
+  wireMenu("menu-service-btn", "menu-service", { closeOnItem: true });
   renderAddFields();
   $("service-select").onchange = (e) => selectService(e.target.value);
   $("new-service").onclick = newService;
@@ -2184,9 +2397,20 @@ function init() {
   $("del-service").onclick = deleteService;
   $("view-list").onclick = () => { state.mode = "list"; render(); };
   $("view-tiles").onclick = () => { state.mode = "tiles"; render(); };
+  // 슬라이드 추가 모달(＋추가 → 종류)
   $("add-type").onchange = renderAddFields;
   $("add-slide-btn").onclick = () => addSlide("end");
   $("add-after-btn").onclick = () => addSlide("after");
+  $("add-close").onclick = closeAddSlide;
+  $("add-modal").addEventListener("mousedown", (e) => { if (e.target === $("add-modal")) closeAddSlide(); });
+  $("add-modal").addEventListener("keydown", (e) => {   // Enter = 선택 아래에 추가 (찬송가 검색창은 제외)
+    if (e.key !== "Enter" || e.target.tagName === "TEXTAREA" || e.target.closest(".hymn-search")) return;
+    e.preventDefault(); addSlide("after");
+  });
+  // 디자인 템플릿 모달
+  $("tpl-btn").onclick = openTemplates;
+  $("tpl-close").onclick = closeTemplates;
+  $("tpl-modal").addEventListener("mousedown", (e) => { if (e.target === $("tpl-modal")) closeTemplates(); });
 
   // 드래그드롭: 이미지/PDF/PPT 파일을 현재 예배에 슬라이드로 가져오기
   let dragDepth = 0;
@@ -2307,6 +2531,12 @@ function init() {
   $("lib-pre-cancel").onclick = cancelPrerenderDir;
   $("lib-pre-dir").addEventListener("keydown", (e) => { if (e.key === "Enter") scanPrerenderDir(); });
   $("library-modal").addEventListener("mousedown", (e) => { if (e.target === $("library-modal")) closeLibrary(); });
+  // 사운드 트랙 모달
+  $("sound-btn").onclick = openSound;
+  $("sound-close").onclick = closeSound;
+  $("sound-add").onclick = () => $("sound-file").click();
+  $("sound-file").onchange = (e) => { const f = e.target.files[0]; if (f) addTrackFile(f); e.target.value = ""; };
+  $("sound-modal").addEventListener("mousedown", (e) => { if (e.target === $("sound-modal")) closeSound(); });
   // 성구 모달
   $("bibleref-btn").onclick = openBibleRef;
   $("bibleref-close").onclick = closeBibleRef;

@@ -27,6 +27,8 @@ export function migrate(db) {
   ensureColumn(db, "services", "transition", "TEXT DEFAULT 'none'");
   // v4.5: 슬라이드 숨기기(발표에서 건너뜀)
   ensureColumn(db, "slides", "hidden", "INTEGER NOT NULL DEFAULT 0");
+  // v4.6: 사운드 트랙(여러 슬라이드 구간에 걸쳐 재생되는 배경 음악 목록)
+  ensureColumn(db, "services", "tracks", "TEXT");
   return db;
 }
 

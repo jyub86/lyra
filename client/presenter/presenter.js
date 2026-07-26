@@ -17,7 +17,14 @@ async function loadService(serviceId) {
   let id = serviceId;
   if (!id) { const services = await callTool("list_services"); id = services[0]?.id; }
   if (!id) return;
-  state.service = await callTool("get_service", { service_id: id });
+  // 마지막으로 발표하던 예배가 지워졌을 수도 있다 → 최신 예배로 대체(빈 화면 방지).
+  let svc = await callTool("get_service", { service_id: id }).catch(() => null);
+  if (!svc) {
+    const services = await callTool("list_services").catch(() => []);
+    if (!services[0]?.id) return;
+    svc = await callTool("get_service", { service_id: services[0].id });
+  }
+  state.service = svc;
   state.theme = await loadServiceTheme(state.service);
 }
 
@@ -48,6 +55,7 @@ async function renderNow() {
   const slides = flatSlides();
   state.index = clamp(state.index, 0, Math.max(0, slides.length - 1));
   black.hidden = !state.blackout;
+  syncTracks();                                  // 현재 위치에 맞는 사운드 트랙 재생/정지
   const slide = slides[state.index];
   const seq = ++renderSeq;
   if (!slide) { deck.replaceChildren(); state.stage = null; return; }
@@ -67,6 +75,7 @@ async function transitionTo(newIndex) {
   const slide = slides[idx];
   state.index = idx;
   black.hidden = !state.blackout;
+  syncTracks();                                     // 구간이 바뀌면 트랙 시작/정지
   if (!slide) { renderNow(); return; }
   if (transition === "none" || !state.stage) { renderNow(); return; }
 
@@ -112,6 +121,92 @@ async function transitionTo(newIndex) {
       layer.style.transition = layer.style.opacity = "";
     }
   }, DUR + 40);
+}
+
+// ---- 사운드 트랙 (여러 슬라이드 구간에 걸쳐 재생) ----
+// 트랙은 예배(Service)에 속하고 시작~끝 슬라이드 구간을 가진다. <audio> 요소를 슬라이드
+// 렌더와 별개로 살려두기 때문에 슬라이드를 넘겨도 소리가 끊기지 않는다. 구간이 겹치면
+// 여러 트랙이 동시에 난다. 편집 화면은 소리를 내지 않는다(발표 전용).
+const players = new Map();   // track id → { audio, url }
+
+// 시작 슬라이드가 지워졌거나 지정되지 않았으면 구간 없음(null) → 재생하지 않는다.
+// 끝이 없으면(또는 지워졌으면) 예배 끝까지.
+function trackWindow(t, slides) {
+  const start = slides.findIndex((x) => x.id === t.start_slide_id);
+  if (start < 0) return null;
+  const e = t.end_slide_id ? slides.findIndex((x) => x.id === t.end_slide_id) : slides.length - 1;
+  return { start, end: e < 0 ? slides.length - 1 : e };
+}
+
+// 볼륨을 부드럽게 올리고 내린다(딱 끊기면 예배 중에 티가 크다).
+// 화면이 가려진 탭에서는 타이머가 크게 늦춰지므로(브라우저 절전) 페이드 없이 즉시 적용해
+// "구간을 벗어났는데 계속 재생" 같은 상태가 남지 않게 한다.
+function fadeTo(audio, target, ms, done) {
+  clearInterval(audio._fade);
+  if (ms <= 0 || document.visibilityState === "hidden") { audio.volume = target; done?.(); return; }
+  const from = audio.volume;
+  const steps = Math.max(1, Math.round(ms / 40));
+  let i = 0;
+  audio._fade = setInterval(() => {
+    i += 1;
+    audio.volume = Math.max(0, Math.min(1, from + (target - from) * (i / steps)));
+    if (i >= steps) { clearInterval(audio._fade); audio._fade = null; done?.(); }
+  }, 40);
+}
+
+// 브라우저 자동재생 차단 시 안내 버튼(클릭=사용자 제스처 → 재생 시작)
+let soundBtn = null;
+function askForSound() {
+  if (soundBtn) { soundBtn.hidden = false; return; }
+  soundBtn = document.createElement("button");
+  soundBtn.id = "sound-unlock";
+  soundBtn.className = "sound-unlock";
+  soundBtn.textContent = "🔊 소리 켜기";
+  soundBtn.onclick = () => { soundBtn.hidden = true; syncTracks(); };
+  document.body.appendChild(soundBtn);
+}
+
+function syncTracks() {
+  const slides = flatSlides();
+  const tracks = state.service?.tracks || [];
+  const alive = new Set();
+  for (const t of tracks) {
+    if (!t?.url) continue;
+    alive.add(t.id);
+    let p = players.get(t.id);
+    if (!p || p.url !== t.url) {
+      p?.audio.remove();
+      p?.audio.pause();
+      const audio = new Audio(t.url);
+      audio.preload = "auto";
+      audio.dataset.trackId = t.id;
+      audio.hidden = true;
+      document.body.appendChild(audio);   // DOM에 두면 상태 확인·디버깅이 쉽다(화면엔 안 보임)
+      p = { audio, url: t.url };
+      players.set(t.id, p);
+    }
+    p.audio.loop = t.loop !== false;
+    const vol = t.volume == null ? 0.8 : Number(t.volume);
+    const win = trackWindow(t, slides);
+    const active = !!win && state.index >= win.start && state.index <= win.end;
+    if (active && p.audio.paused) {
+      // 시작은 기본적으로 "바로 들리게"(0.15초 = 귀에는 즉시, 팝 노이즈만 방지).
+      // 잔잔하게 스며들게 하고 싶은 트랙은 fade_in을 크게 주면 된다.
+      const fadeIn = Math.max(0, (t.fade_in == null ? 0.15 : Number(t.fade_in))) * 1000;
+      p.audio.volume = fadeIn > 0 ? 0 : vol;
+      p.audio.play().then(() => fadeTo(p.audio, vol, fadeIn)).catch(askForSound);   // 자동재생 차단 대비
+    } else if (active) {
+      if (Math.abs(p.audio.volume - vol) > 0.01) fadeTo(p.audio, vol, 200);      // 볼륨 변경 반영
+    } else if (!p.audio.paused) {
+      fadeTo(p.audio, 0, 400, () => { p.audio.pause(); p.audio.currentTime = 0; });
+    }
+  }
+  for (const [id, p] of players) {   // 목록에서 빠진(삭제된) 트랙 정리
+    if (alive.has(id)) continue;
+    p.audio.pause();
+    p.audio.remove();
+    players.delete(id);
+  }
 }
 
 // ---- WebSocket follow ----

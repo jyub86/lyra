@@ -20,3 +20,8 @@ data/source/
 # OS / editor
 .DS_Store
 *.log
+
+# 로컬 자격증명 / 주보 작업 폴더
+.env
+data/bulletins/
+data/base-backups/

@@ -1,0 +1,58 @@
+{
+  "date": "2026-08-02",
+  "hymn1": {
+    "number": 30,
+    "title": "전능하고 놀라우신"
+  },
+  "hymn2": {
+    "number": 228,
+    "title": "오 나의 주님 친히 뵈오니"
+  },
+  "reading": {
+    "number": 64,
+    "title": "시편 148편"
+  },
+  "prayer": {
+    "part1": "임대룡 집사",
+    "part2": "강병환 장로"
+  },
+  "offering": {
+    "part1": "김경태 집사",
+    "part2": "고영성 집사"
+  },
+  "scripture": {
+    "book": "요",
+    "chapter": 6,
+    "verse_start": 41,
+    "verse_end": 59,
+    "ref_text": "요한복음 6:41-59",
+    "page_text": "(신약 154쪽)",
+    "layout": "one-per-verse"
+  },
+  "choir": {
+    "part1": {
+      "team": "시온 찬양대",
+      "song": "나의 영원하신 기업"
+    },
+    "part2": {
+      "team": "할렐루야 찬양대",
+      "song": "찬양! 주 영광"
+    }
+  },
+  "sermon": {
+    "title": "불편한 진실",
+    "preacher": "강길수 목사"
+  },
+  "announcements": [
+    {
+      "text": "이번주 수요 성경 아카데미는 휴강입니다."
+    },
+    {
+      "text": "2026 교육부서 여름행사 안내",
+      "image": "/Users/jisubpark/code/lyra/data/bulletins/2026-08-02/table-2.png"
+    },
+    {
+      "text": "교직원 휴가 - 김현겸 목사 : 8/3-5\n한성숙 전도사 : 8/3-8"
+    }
+  ]
+}

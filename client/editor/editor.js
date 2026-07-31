@@ -358,7 +358,7 @@ function renderList() {
   const root = $("slide-list");
   root.innerHTML = "";
   if (!state.service) { root.innerHTML = '<p class="muted" style="padding:12px">예배 순서가 없습니다. “+ 새 예배”로 시작하세요.</p>'; return; }
-  root.appendChild(elx("p", "list-hint muted", "드래그로 이동 · ⌘/Ctrl·Shift 클릭으로 여러 개 선택해 함께 이동"));
+  root.appendChild(elx("p", "list-hint muted", "드래그로 이동 · ⌘/Ctrl·Shift 클릭으로 여러 개 선택해 함께 이동 · Page↑/↓로 슬라이드 이동"));
   const pid = presentingSlideId();
   const sound = slidesWithSound();
   slides().forEach((s, i) => {
@@ -395,7 +395,15 @@ function renderPreview() {
 function navSlide(delta) {
   const idx = slides().findIndex((s) => s.id === state.selected);
   const next = slides()[idx + delta];
-  if (next) { state.selected = next.id; render(); }
+  if (!next) return;
+  setSingleSelection(next.id);   // 이동하면 멀티셀렉은 풀고 그 슬라이드만 선택
+  render();
+  revealSlide(next.id);
+}
+
+// 순서 목록에서 해당 슬라이드 행이 보이도록 스크롤
+function revealSlide(id) {
+  document.querySelector(`.slide-row[data-id="${id}"]`)?.scrollIntoView({ block: "nearest" });
 }
 
 // ===== free-element canvas editing (Google-Slides-like) =====
@@ -572,6 +580,11 @@ function isTypingTarget() {
   const a = document.activeElement;
   if (!a) return false;
   return a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.tagName === "SELECT" || a.isContentEditable;
+}
+
+// 모달(추가·템플릿·사운드·성구·라이브러리)이 열려 있는지 — 전역 단축키 가드용.
+function anyModalOpen() {
+  return !!document.querySelector(".modal-overlay:not([hidden])");
 }
 
 // ----- 인라인 편집용 플로팅 서식 바 (드래그로 글자 선택 → 색/굵기 적용) -----
@@ -1485,7 +1498,6 @@ function editSlideFromTile(id) {
   setSingleSelection(id);
   state.mode = "list";
   render();
-  // 순서 목록에서 해당 슬라이드가 보이도록 스크롤
   document.querySelector(`.slide-row[data-id="${id}"]`)?.scrollIntoView({ block: "center" });
 }
 
@@ -2448,6 +2460,13 @@ function init() {
   //  - 요소가 선택돼 있으면 요소를, 아니면 슬라이드(리스트·타일 멀티셀렉)를 대상으로.
   document.addEventListener("keydown", (e) => {
     if (isTypingTarget()) return;   // 입력·인라인 편집 중엔 전역 단축키 무시
+    // PageUp/PageDown = 이전/다음 슬라이드 (리스트 모드, 발표 화면과 같은 키)
+    if ((e.key === "PageUp" || e.key === "PageDown") && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (state.mode !== "list" || state.editingTemplate || anyModalOpen()) return;
+      e.preventDefault();
+      navSlide(e.key === "PageDown" ? 1 : -1);
+      return;
+    }
     // 요소 선택이 없을 때 Del/Backspace → 선택한 순서 삭제(멀티셀렉 한 번에).
     // (요소가 선택된 경우는 요소 삭제 핸들러가 처리)
     if (state.editEl == null && (e.key === "Delete" || e.key === "Backspace")) {

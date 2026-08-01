@@ -13,7 +13,9 @@ const DONE = ".done"; // 렌더 완료 표시(부분 렌더를 히트로 오인�
 function fileMtime(path) {
   return existsSync(path) ? Math.floor(statSync(path).mtimeMs) : null;
 }
-function keyFor(path, mtime, width) {
+// 캐시 폴더 이름. 경로 문자열이 그대로 들어가므로 PC를 옮기면 키가 전부 바뀐다
+// (이관 스크립트 scripts/export-bundle.js·import-bundle.js가 이 함수로 재계산해 rename한다).
+export function keyFor(path, mtime, width) {
   return createHash("sha1").update(`${path}\n${mtime}\n${width}`).digest("hex").slice(0, 16);
 }
 function cacheDirFor(path, width) {

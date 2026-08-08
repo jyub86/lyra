@@ -30,6 +30,10 @@ export async function handleApi(req, url) {
   if (!url.pathname.startsWith("/api/")) return null;
   await loadTools();
 
+  // 변경을 일으킨 탭(클라이언트) id. "내용 바뀜" 알림에 실어보내 그 탭만 다시 안 불러오게 한다.
+  const origin = req.headers.get("x-lyra-client") || null;
+  const ctx = () => ({ db: getDb(), bus, origin });
+
   if (url.pathname === "/api/tools" && req.method === "GET") {
     return json(schemas());
   }
@@ -59,7 +63,7 @@ export async function handleApi(req, url) {
       // 페이지별 add_slide 반복 대신 한 트랜잭션으로 일괄 삽입 + "changed" 이벤트 1회
       // (발표 화면이 매 페이지마다 전체를 다시 불러오는 것 방지).
       const slide_ids = insertSlides(db, serviceId, slides, position);
-      bus.emit("changed", { tool: "import_pdf" });
+      bus.emit("changed", { tool: "import_pdf", origin });
       return json({ slide_ids });
     } catch (e) {
       return json({ error: e.message }, 500);
@@ -75,7 +79,7 @@ export async function handleApi(req, url) {
     if (!file || typeof file === "string") return json({ error: "no file" }, 400);
     try {
       const payload = JSON.parse(await file.text());
-      return json(await execute("import_service", { payload, title }));
+      return json(await execute("import_service", { payload, title }, ctx()));
     } catch (e) {
       return json({ error: e.message }, 500);
     }
@@ -112,7 +116,7 @@ export async function handleApi(req, url) {
   }
 
   try {
-    return json(await execute(name, args));
+    return json(await execute(name, args, ctx()));
   } catch (e) {
     const status = e.code === "INVALID_INPUT" ? 400 : 500;
     return json({ error: e.message, code: e.code, errors: e.errors }, status);

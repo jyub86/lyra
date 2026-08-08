@@ -1,5 +1,5 @@
 // 편집 UI 컨트롤러. 예배(순서) > 슬라이드 평면 구조. 모든 동작은 Tool 호출.
-import { callTool, loadServiceTheme, uploadFile, BUILTIN_THEMES } from "/shared/api.js";
+import { callTool, loadServiceTheme, uploadFile, BUILTIN_THEMES, CLIENT_ID } from "/shared/api.js";
 import { renderSlideWithLayers, renderElements } from "/shared/layer-renderer.js";
 
 const $ = (id) => document.getElementById(id);
@@ -75,6 +75,9 @@ function connectPresentWs() {
   const ws = new WebSocket(`ws://${location.host}/ws?role=editor`);
   ws.onmessage = (ev) => {
     let m; try { m = JSON.parse(ev.data); } catch { return; }
+    // 다른 사람/다른 기기(또는 CLI·MCP)가 내용을 바꿈 → 새로고침 없이 반영.
+    // 내가 만든 변경(origin === 내 탭)은 이미 화면에 반영돼 있으니 무시.
+    if (m.type === "changed") { if (m.origin !== CLIENT_ID) onRemoteChange(); return; }
     if (m.type !== "present") return;
     if ("service_id" in m) present.service_id = m.service_id;
     if (typeof m.index === "number") present.index = m.index;
@@ -82,6 +85,57 @@ function connectPresentWs() {
     updatePresentingMarker();
   };
   ws.onclose = () => setTimeout(connectPresentWs, 1000);   // 자동 재연결
+}
+
+// ===== 다른 곳의 변경을 반영 (둘이서 동시 편집) =====
+// 지금 내가 뭔가 붙잡고 있는 중인지 — 이 동안 화면을 다시 그리면 작업이 날아간다.
+let draggingEls = 0;   // 요소 드래그·리사이즈 진행 중(마우스 누르고 있는 동안)
+function localEditBusy() {
+  return !!state.editingTemplate         // 저장 안 한 템플릿 초안
+    || state.inlineEdit != null          // 캔버스에서 글자 입력 중
+    || draggingEls > 0                   // 요소를 끌고 있음
+    || dragId != null                    // 리스트에서 슬라이드 순서 옮기는 중
+    || isTypingTarget();                 // 패널 입력칸에 타이핑 중(포커스를 뺏지 않도록)
+}
+
+let remoteTimer = null, remotePending = false;
+function onRemoteChange() {
+  remotePending = true;
+  clearTimeout(remoteTimer);
+  // 요소 드래그는 mouseup마다 저장돼 알림이 몰아친다 → 잠깐 모았다가 한 번만 반영.
+  remoteTimer = setTimeout(applyRemoteChange, 250);
+}
+async function applyRemoteChange() {
+  if (!remotePending || !state.serviceId) return;
+  if (localEditBusy()) { remoteTimer = setTimeout(applyRemoteChange, 600); return; }  // 손 뗄 때까지 미룸
+  remotePending = false;
+  const scroller = document.querySelector("aside.col.order");
+  const scrollTop = scroller?.scrollTop ?? 0;
+  const beforeCount = els().length;
+  let svc;
+  try {
+    svc = await callTool("get_service", { service_id: state.serviceId });
+  } catch {
+    await loadServices();   // 이 예배가 지워졌을 수 있다 → 목록부터 다시
+    toast("예배 목록이 바뀌어 다시 불러왔습니다");
+    return;
+  }
+  state.service = svc;
+  state.theme = await loadServiceTheme(svc);
+  syncThemeControls();
+  // 사라진 슬라이드는 선택에서 제거
+  const exist = new Set(slides().map((s) => s.id));
+  state.selectedSet = new Set([...state.selectedSet].filter((id) => exist.has(id)));
+  if (!exist.has(state.selected)) state.selected = slides()[0]?.id || null;
+  if (state.selected && !state.selectedSet.size) state.selectedSet.add(state.selected);
+  // 요소 개수가 달라졌으면 인덱스로 잡아둔 요소 선택은 엉뚱한 걸 가리키게 된다 → 해제.
+  if (els().length !== beforeCount) { state.editEl = null; state.editElSet = new Set(); }
+  // 남의 변경을 내 실행취소 스택에 얹으면 ⌘Z가 그 사람 작업까지 되돌린다(예배 전체 교체).
+  // 그래서 여기서 기준점을 다시 잡는다 — 이 시점 이후의 내 변경만 되돌릴 수 있다.
+  resetHistory();
+  render();
+  if (scroller) scroller.scrollTop = scrollTop;
+  toast("다른 곳의 변경을 반영했습니다");
 }
 
 function slideLabel(s) {
@@ -750,7 +804,8 @@ function startMove(e, i) {
   };
   // 움직였을 때만 저장. 단순 클릭/더블클릭에서 commit→비동기 refresh가
   // 디자인 패널을 다시 그려 '내용' 입력 포커스를 뺏는 것을 막는다.
-  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); if (moved) commitEls(); };
+  const up = () => { draggingEls--; document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); if (moved) commitEls(); };
+  draggingEls++;   // 끄는 동안엔 남의 변경 반영을 미룬다(작업이 날아가지 않게)
   document.addEventListener("mousemove", mv);
   document.addEventListener("mouseup", up);
 }
@@ -770,7 +825,8 @@ function startResize(e, i, pos) {
     if (pos.includes("n")) { const t = snapEdge(o.y + dy); el.y = t; el.h = Math.max(0.03, o.y + o.h - t); if (t !== o.y + dy) activeGuides.h = t; }
     repaintEls(); renderGuides();
   };
-  const up = () => { document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); commitEls(); };
+  const up = () => { draggingEls--; document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); commitEls(); };
+  draggingEls++;
   document.addEventListener("mousemove", mv);
   document.addEventListener("mouseup", up);
 }

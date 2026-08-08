@@ -58,4 +58,5 @@ bus.on(TOPIC, (state) => {
 });
 
 // Any content mutation (edit from any client/CLI/MCP) → tell clients to refresh.
-bus.on("changed", (info) => broadcast({ type: "changed", tool: info?.tool }));
+// origin = 변경을 만든 탭의 id. 편집기는 자기 origin이면 무시하고 남의 변경만 반영한다.
+bus.on("changed", (info) => broadcast({ type: "changed", tool: info?.tool, origin: info?.origin ?? null }));

@@ -57,7 +57,9 @@ export async function execute(name, args = {}, ctx = defaultCtx()) {
   const result = await tool.handler(value, ctx);
   // Broadcast a content-change signal so presenter/other clients live-refresh.
   // Skip read tools and present_* (which emit their own "present" state events).
-  if (!tool.read && !name.startsWith("present_")) bus.emit("changed", { tool: name });
+  // ctx.origin = 변경을 일으킨 클라이언트 id(HTTP 헤더 x-lyra-client). 그 탭은 이미
+  // 자기 화면을 갱신했으므로 다시 불러오지 않도록 구분자로 실어보낸다.
+  if (!tool.read && !name.startsWith("present_")) bus.emit("changed", { tool: name, origin: ctx?.origin ?? null });
   return result;
 }
 

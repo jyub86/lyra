@@ -56,10 +56,17 @@ function renderBibleBody(root, c, showNumbers, field, format) {
   if (field === "ref") { root.textContent = fmtStr(format || "{ref}", { ref: c?.ref }); return; }
   if (field !== "text" && c?.ref) root.appendChild(el("div", "ce-ref", c.ref));
   const body = el("div", "ce-body");
-  for (const v of c?.verses || []) {
+  const verses = c?.verses || [];
+  // show_numbers: "auto"(기본) = 한 장에 여러 절이 있을 때만 / "always" / "never".
+  // 한 절뿐이면 어느 절인지 참조(ce-ref)에 이미 나와 있어 번호가 군더더기다.
+  // 예전 값(true=always / false=never)도 그대로 받는다.
+  const mode = showNumbers === true ? "always" : showNumbers === false ? "never" : (showNumbers || "auto");
+  const multi = new Set(verses.filter((v) => v.verse != null).map((v) => v.verse)).size > 1;
+  const useNo = mode === "always" || (mode === "auto" && multi);
+  for (const v of verses) {
     const row = el("span", "ce-verse");
     // v.cont = 긴 절이 다음 장으로 이어지는 조각 → 절 번호를 다시 붙이지 않는다.
-    const withNo = showNumbers !== false && !v.cont && v.verse != null;
+    const withNo = useNo && !v.cont && v.verse != null;
     if (withNo) row.appendChild(el("sup", "ce-verse-no", String(v.verse)));
     row.appendChild(el("span", null, (withNo ? " " : "") + v.text));
     body.appendChild(row);

@@ -55,7 +55,9 @@ export function splitBible(verses, layout, meta = {}, capacity = {}) {
   if (layout === "all-in-one") {
     groups = [verses];
   } else if (layout === "one-per-verse") {
-    groups = verses.map((v) => [v]);
+    // 한 절에 한 장. 단 한 장에 안 들어가는 긴 절(예: 렘 32:3 = 287자)은 이어지는
+    // 장으로 나눈다 — 안 그러면 박스를 넘겨 뒷부분이 잘린 채 발표된다.
+    groups = verses.flatMap((v) => splitLongVerse(v, maxChars).map((part) => [part]));
   } else {
     // auto: pack by char budget / verse count.
     // 한 절이 한 장보다 길면(글꼴이 클 때) 절 안에서도 어절 단위로 나눈다 → 잘리지 않는다.

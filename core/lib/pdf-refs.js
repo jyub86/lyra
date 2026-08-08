@@ -32,6 +32,25 @@ async function pdftotextLayout(bytes) {
   }
 }
 
+// poppler가 없을 때(윈도우 기본) 쓰는 대체 읽기순서 텍스트.
+// pdf.js의 "그리기 순서" 텍스트는 CJK 주보 레이아웃에서 뒤섞여 주 본문(요6 등) 감지를
+// 망친다 → 글자 위치(transform)로 줄을 묶어 위→아래, 왼→오른쪽으로 다시 세운다.
+async function layoutTextFromPage(page) {
+  const content = await page.getTextContent();
+  const items = content.items.filter((it) => it.str && it.transform);
+  if (!items.length) return "";
+  const lines = [];   // { y, parts:[{x, s}] }
+  for (const it of items) {
+    const x = it.transform[4], y = it.transform[5];
+    const tol = Math.max(2, (it.height || 10) * 0.5);   // 같은 줄로 볼 y 오차
+    let line = lines.find((l) => Math.abs(l.y - y) <= tol);
+    if (!line) { line = { y, parts: [] }; lines.push(line); }
+    line.parts.push({ x, s: it.str });
+  }
+  lines.sort((a, b) => b.y - a.y);                       // PDF 좌표는 아래가 0 → 큰 y가 위
+  return lines.map((l) => l.parts.sort((a, b) => a.x - b.x).map((p) => p.s).join(" ")).join("\n");
+}
+
 let _pdfjs = null;
 async function pdfjs() {
   if (_pdfjs) return _pdfjs;
@@ -57,9 +76,11 @@ async function extractRuns(bytes) {
   const OPS = lib.OPS;
   const runs = [];   // { red, text }
   let allText = "";
+  let layoutText = "";
   try {
     for (let p = 1; p <= doc.numPages; p++) {
       const page = await doc.getPage(p);
+      layoutText += (await layoutTextFromPage(page)) + "\n";
       const ops = await page.getOperatorList();
       let fill = "#000000", curRed = null, buf = "";
       const flush = () => { if (buf) { runs.push({ red: curRed, text: buf }); buf = ""; } };
@@ -82,16 +103,21 @@ async function extractRuns(bytes) {
   } finally {
     await task.destroy();
   }
-  return { runs, allText };
+  return { runs, allText, layoutText };
 }
 
 // PDF 바이트 → { text(빨강 원문), refs(구조화 참조), global(주 본문 책·장) }.
 export async function extractRefsFromPdf(bytes) {
   // 주 본문(예: 요6) — 절만 있는 참조의 기본 문맥. pdftotext(읽기순서) 우선, 없으면 pdf.js 텍스트.
   // pdf.js가 버퍼를 detach하므로 pdftotext를 먼저 실행한다.
+  // poppler가 없으면(윈도우 기본) 글자 위치로 세운 읽기순서 텍스트를 쓴다. 그리기 순서
+  // 텍스트(allText)는 최후의 수단 — 이걸로 문맥을 잡으면 엉뚱한 책이 잡힌다.
+  // 괄호 제거: 제목 "불편한 진실(요6:41-59, 228장)"이 pdf.js에선 글자가 뒤섞여
+  // "불편한 진실 요 ( 6:41-59"로 나온다. 괄호를 지워야 "요"와 "6:41"이 붙어 주 본문이 잡힌다.
+  const forContext = (t) => (t || "").replace(/[()（）\[\]]/g, " ");
   const layout = await pdftotextLayout(bytes);
-  const { runs, allText } = await extractRuns(bytes);
-  const global = extractGlobalContext(layout || allText);
+  const { runs, allText, layoutText } = await extractRuns(bytes);
+  const global = extractGlobalContext(layout || forContext(layoutText) || forContext(allText));
   const refs = [];
   const ctx = { book: global.book, chapter: global.chapter };
   for (const run of runs) {

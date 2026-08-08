@@ -10,7 +10,7 @@ const GENERATORS = [
   { id: "builtin-bible", name: "성경 본문", tool: "add_bible_slides",
     elements: [
       { type: "bible", field: "ref", x: 0.1, y: 0.12, w: 0.8, h: 0.08, size: 2.2, align: "center", weight: 700, color: "#7aa2f7" },
-      { type: "bible", field: "text", x: 0.08, y: 0.26, w: 0.84, h: 0.56, size: 3.2, align: "center", weight: 600, line_height: 1.5, show_numbers: true },
+      { type: "bible", field: "text", x: 0.08, y: 0.26, w: 0.84, h: 0.56, size: 3.2, align: "center", weight: 600, line_height: 1.5, show_numbers: "auto" },
     ] },
   { id: "builtin-hymn", name: "찬송가", tool: "add_hymn_slides",
     elements: [

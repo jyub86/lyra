@@ -789,7 +789,7 @@ const ADD_DEFAULTS = {
   ellipse: () => ({ type: "shape", shape: "ellipse", x: 0.4, y: 0.4, w: 0.18, h: 0.18, fill: "#7aa2f7", stroke: "#ffffff", stroke_width: 0 }),
   line: () => ({ type: "shape", shape: "line", x: 0.3, y: 0.5, w: 0.4, h: 0.02, stroke: "#ffffff", stroke_width: 3 }),
   // content elements: added empty → user fills params in the design panel + 다시 가져오기
-  bible: () => ({ type: "bible", x: 0.1, y: 0.25, w: 0.8, h: 0.5, size: 3.2, align: "center", weight: 600, line_height: 1.5, show_numbers: true, params: {}, content: null }),
+  bible: () => ({ type: "bible", x: 0.1, y: 0.25, w: 0.8, h: 0.5, size: 3.2, align: "center", weight: 600, line_height: 1.5, show_numbers: "auto", params: {}, content: null }),
   hymn: () => ({ type: "hymn", x: 0.1, y: 0.25, w: 0.8, h: 0.5, size: 3.2, align: "center", weight: 600, params: {}, content: null }),
   reading: () => ({ type: "reading", x: 0.08, y: 0.2, w: 0.84, h: 0.6, size: 2.9, align: "center", weight: 600, params: {}, content: null }),
   image: () => ({ type: "image", x: 0.35, y: 0.32, w: 0.3, h: 0.3, fit: "contain" }),
@@ -1261,7 +1261,14 @@ function renderDesignPanel() {
         target.appendChild(elx("p", "hint muted", `토큰: ${FMT_TOKENS[el.type][fkey]}`));
       }
     }
-    if (el.type === "bible" && fkey !== "ref") field("절 번호 표시", "check", "show_numbers");
+    if (el.type === "bible" && fkey !== "ref") {
+      // 예전 슬라이드는 true/false로 저장돼 있다 → select 값으로 맞춰 보여준다.
+      if (el.show_numbers === true) el.show_numbers = "always";
+      else if (el.show_numbers === false) el.show_numbers = "never";
+      field("절 번호", "select", "show_numbers", {
+        options: [["auto", "여러 절일 때만"], ["always", "항상"], ["never", "표시 안 함"]],
+      });
+    }
     // ── 글자 ──
     group("ce-type", "글자");
     target.appendChild(elx("p", "hint muted", "본문을 더블클릭하면 전체·일부 글자의 글꼴·색을 바꿀 수 있어요(선택 후 떠오르는 서식 바)."));

@@ -54,7 +54,19 @@ async function layoutTextFromPage(page) {
 let _pdfjs = null;
 async function pdfjs() {
   if (_pdfjs) return _pdfjs;
-  _pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  try {
+    _pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  } catch (e) {
+    // 설치가 덜 된 PC(특히 새로 옮긴 윈도우)에서 "Cannot find module …" 원문이 그대로
+    // 떠서 원인을 알기 어려웠다 → 무엇을 하면 되는지로 바꿔 준다.
+    if (/Cannot find (module|package)|ERR_MODULE_NOT_FOUND/i.test(e.message)) {
+      throw new Error(
+        "PDF 처리 모듈(pdfjs-dist)이 설치돼 있지 않습니다. Lyra 폴더에서 `bun install`을 실행하세요. " +
+        "그래도 안 되면 프로젝트를 OneDrive 안이 아닌 짧은 경로(예: C:\\lyra)로 옮긴 뒤 다시 `bun install` 하세요.",
+      );
+    }
+    throw e;
+  }
   // 워커 미지정 시 pdf.js가 자동으로 메인 스레드(fake worker)로 동작한다.
   _pdfjs.setVerbosityLevel?.(_pdfjs.VerbosityLevel?.ERRORS ?? 0);
   return _pdfjs;

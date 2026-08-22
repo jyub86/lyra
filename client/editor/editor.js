@@ -1947,6 +1947,34 @@ async function exportService() {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+// 슬라이드를 이미지(WebP)로 내보내기 → zip 다운로드.
+// 렌더는 서버가 헤드리스 크롬으로 /export 화면을 굽는다 → 발표 화면과 같은 그림이 나온다.
+// 여러 장을 골라둔 상태면 그 장들만, 아니면 전장(발표에서 숨긴 장은 제외).
+async function exportImages() {
+  if (!state.serviceId) { toast("예배를 먼저 선택하세요"); return; }
+  const picked = [...state.selectedSet];
+  const onlyPicked = picked.length > 1;   // 한 장만 선택된 건 "그냥 커서" — 전장으로 본다
+  const total = onlyPicked ? picked.length : slides().filter((s) => !s.hidden).length;
+  showBusy("이미지로 내보내는 중…", `${total}장 · 크롬으로 렌더 중`);
+  try {
+    const res = await fetch("/api/export/images", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ service_id: state.serviceId, slide_ids: onlyPicked ? picked : undefined }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "내보내기 실패");
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${state.service?.date || "예배"}-이미지.zip`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast(`이미지 ${res.headers.get("x-lyra-count") || total}장 내보냄`);
+  } catch (e) {
+    toast("내보내기 실패: " + e.message);
+  } finally { hideBusy(); }
+}
+
 async function importService(file) {
   // 파일을 멀티파트로 그대로 전송(큰 파일도 클라이언트에서 파싱/재직렬화하지 않음).
   const mb = (file.size / 1048576).toFixed(0);
@@ -2597,6 +2625,7 @@ function init() {
   });
 
   $("export-btn").onclick = exportService;
+  $("export-img-btn").onclick = exportImages;
   $("import-btn").onclick = () => $("import-file").click();
   $("import-file").onchange = (e) => e.target.files[0] && importService(e.target.files[0]);
   $("import-ppt").onclick = () => $("import-ppt-file").click();

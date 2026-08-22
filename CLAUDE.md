@@ -28,6 +28,20 @@
 >   프로필은 `-env:UserInstallation`(OS 무관). 미설치 시 명확 안내로 graceful. Windows: LibreOffice/poppler 설치+PATH.
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
+> ⚠️ **v4.9 추가 (이미지 내보내기)** — 구현 기준(현행)
+> - JSON(`export_service`) 외에 **슬라이드를 이미지로** 내보낸다. `export_slide_images(service_id, slide_ids?, include_hidden?, format?)`
+>   → `data/exports/<날짜_부_제목>/001.webp …` + 파일 목록. 편집기는 ⚙예배▾ "🖼 이미지로 내보내기"
+>   (여러 장 선택 시 그 장만) → `POST /api/export/images`가 zip으로 내려준다.
+> - **렌더는 헤드리스 크롬**이 전용 화면 `/export/?service_id=…[&ids=…][&index=N]`을 굽는다
+>   (`client/export/*`). 편집·발표와 같은 `layer-renderer`를 쓰므로 보이는 그대로 나온다.
+>   브라우저 JS로 굽는 방법(SVG foreignObject→canvas)은 **크롬이 캔버스를 오염시켜 불가**.
+> - 경로 2개: ① 크롬 `--print-to-pdf` 1회 → `pdftoppm` **페이지 범위 병렬** 분할(145장 ≈ 63초),
+>   ② poppler 없으면 장당 `--screenshot`(크롬만 필요, 장당 ~2.5초). cwebp 있으면 WebP, 없으면 PNG.
+> - 크롬은 파일을 다 쓴 뒤에도 프로세스가 남는다 → stderr의 `"bytes written to file"`을 완료 신호로
+>   쓰고 바로 kill(`runUntilFile`). 종료를 기다리면 145장에서 3분+ 멈춘다. 새 프로필은
+>   백그라운드 네트워크를 끊어야(`--disable-background-networking` 등) `--virtual-time-budget`이 만료된다.
+> - 도구 `check_environment`로 크롬·poppler·cwebp·필수 모듈 설치 상태를 한 번에 확인.
+
 > ⚠️ **편집기 UI 구성 (v4.7)** — 문맥 인스펙터 + 통합 추가 (v4.3의 3탭 구성을 대체)
 > - 상단바 = **4그룹**: `Lyra · 예배선택 │ 리스트/타일 │ ＋추가▾ · ⚙예배▾ │ ▶발표`.
 >   **＋추가▾** = 슬라이드(템플릿 목록·`renderAddMenu`) + 📖성구 + 🖼파일(PPT/PDF/이미지) + 🔎라이브러리.

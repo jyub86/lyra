@@ -80,6 +80,7 @@ export async function loadTools() {
     import("./track.tools.js"),
     import("./template.tools.js"),
     import("./library.tools.js"),
+    import("./export.tools.js"),
     import("./font.tools.js"),
     import("./system.tools.js"),
   ]);

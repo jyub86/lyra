@@ -1,0 +1,24 @@
+/* 내보내기 전용 레이아웃 — 화면엔 여백/장식이 하나도 없어야 한다(그대로 이미지가 된다). */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { background: #000; }
+
+/* 한 장(16:9). 폭을 고정하고 높이를 비율로 잡아, 스크린샷·인쇄 모두 같은 화면이 나온다. */
+.page {
+  width: 1920px;
+  height: 1080px;
+  position: relative;
+  overflow: hidden;
+  container-type: size;   /* 요소 크기 단위 cqw의 기준 */
+}
+.page .slide-layers { position: absolute; inset: 0; }
+
+/* 스크린샷 모드: 딱 한 장만, 창 크기에 맞춰 */
+body.single { overflow: hidden; }
+
+/* 인쇄(PDF) 모드: 한 페이지에 한 장, 여백 0 */
+@page { size: 1920px 1080px; margin: 0; }
+@media print {
+  html, body { width: 1920px; }
+  .page { break-after: page; page-break-after: always; }
+  .page:last-child { break-after: auto; page-break-after: auto; }
+}

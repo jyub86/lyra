@@ -2,6 +2,8 @@
 // POST /api/tools/:name (write), GET /api/tools/:name (read tools only),
 // GET /api/tools (list). All routes funnel through registry.execute — same path
 // as CLI/MCP, no per-tool routing.
+import { readFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { loadTools, schemas, get, execute } from "../core/tools/registry.js";
 import { getDb } from "../core/db/index.js";
 import { bus } from "../core/lib/bus.js";
@@ -93,6 +95,31 @@ export async function handleApi(req, url) {
     if (!file || typeof file === "string") return json({ error: "no file" }, 400);
     try {
       return json(await extractRefsFromPdf(new Uint8Array(await file.arrayBuffer())));
+    } catch (e) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
+  // 슬라이드 → 이미지 내보내기 후 zip 하나로 내려준다. 파일 수백 개를 브라우저가
+  // 한 장씩 받는 것보다 낫고, 폴더 경로를 클라이언트에 노출하지 않아도 된다.
+  if (url.pathname === "/api/export/images" && req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    try {
+      const res = await execute("export_slide_images", body, ctx());
+      const { zipSync } = await import("fflate");
+      const files = {};
+      for (const f of res.files) files[f] = new Uint8Array(readFileSync(join(res.dir, f)));
+      const zip = zipSync(files, { level: 0 });   // 이미 압축된 WebP/PNG → 재압축 안 함(빠름)
+      const name = basename(res.dir) + ".zip";
+      return new Response(zip, {
+        headers: {
+          "content-type": "application/zip",
+          // 한글 파일명은 RFC 5987 형식으로 넘긴다(브라우저가 그대로 저장하게).
+          "content-disposition": `attachment; filename="export.zip"; filename*=UTF-8''${encodeURIComponent(name)}`,
+          "x-lyra-count": String(res.count),
+          "x-lyra-method": res.method,
+        },
+      });
     } catch (e) {
       return json({ error: e.message }, 500);
     }

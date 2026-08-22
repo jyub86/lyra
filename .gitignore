@@ -25,3 +25,6 @@ data/source/
 .env
 data/bulletins/
 data/base-backups/
+
+# 이미지 내보내기 산출물 (생성물)
+data/exports/

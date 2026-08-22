@@ -4,6 +4,7 @@ import { networkInterfaces, platform, release } from "node:os";
 import { findPoppler } from "../lib/poppler.js";
 import { officeImportAvailable } from "../lib/pdf-import.js";
 import { findCwebp } from "../lib/webp.js";
+import { findChrome } from "../lib/chrome.js";
 
 register({
   name: "list_network_addresses",
@@ -35,16 +36,18 @@ register({
       fflate: await mod("fflate"),                                   // 라이브러리 PPT 내용 검색
     };
     const externals = {
+      chrome: !!findChrome(),                      // 슬라이드 → 이미지 내보내기 렌더
       libreoffice: officeImportAvailable(),        // .pptx/.ppt/.odp 가져오기
-      pdftoppm: !!findPoppler("pdftoppm"),         // PDF → 이미지 슬라이드
+      pdftoppm: !!findPoppler("pdftoppm"),         // PDF → 이미지 슬라이드 · 이미지 내보내기 가속
       pdftotext: !!findPoppler("pdftotext"),       // PDF 내용 검색(성구는 없어도 동작)
-      cwebp: !!findCwebp(),                        // 가져온 이미지 WebP 변환(용량↓)
+      cwebp: !!findCwebp(),                        // 이미지 WebP 변환(용량↓, 없으면 PNG)
     };
     const missing = [];
     if (!deps["pdfjs-dist"]) missing.push("pdfjs-dist 없음 → 성구 추출 불가. Lyra 폴더에서 `bun install`");
     if (!deps.fflate) missing.push("fflate 없음 → 라이브러리 내용 검색 불가. `bun install`");
     if (!externals.libreoffice) missing.push("LibreOffice 없음 → PPT 가져오기 불가 (설치 파일로 설치)");
-    if (!externals.pdftoppm) missing.push("poppler 없음 → PDF 가져오기 불가 (tools/ 폴더에 압축 해제)");
+    if (!externals.pdftoppm) missing.push("poppler 없음 → PDF 가져오기 불가 · 이미지 내보내기가 장당 스크린샷으로 느려짐 (tools/ 폴더에 압축 해제)");
+    if (!externals.chrome) missing.push("크롬 없음 → 이미지 내보내기 불가 (크롬·엣지 설치 또는 LYRA_CHROME 지정)");
     return {
       platform: `${platform()} ${release()}`,
       bun: Bun.version,

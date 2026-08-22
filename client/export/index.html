@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <title>Lyra — 이미지 내보내기</title>
+  <link rel="stylesheet" href="/fonts/fonts.css" />
+  <link rel="stylesheet" href="/shared/styles/slide.css" />
+  <link rel="stylesheet" href="/export/export.css" />
+</head>
+<body>
+  <!-- 헤드리스 크롬이 스크린샷/PDF로 굽는 전용 화면. UI·WebSocket·소리 없음.
+       ?service_id=…            → 전장을 한 장씩 인쇄 페이지로 (--print-to-pdf)
+       ?service_id=…&index=N    → 그 한 장만 화면 가득 (--screenshot)
+       &ids=a,b,c               → 그 슬라이드들만 (선택 내보내기)
+       준비가 끝나면 <html data-ready="1"> 이 붙는다. -->
+  <div id="pages"></div>
+  <script type="module" src="/export/export.js"></script>
+</body>
+</html>

@@ -20,8 +20,12 @@ function resolveStatic(pathname) {
   if (pathname === "/presenter" || pathname === "/presenter/") {
     return join(ROOT, "client/presenter/index.html");
   }
+  // 헤드리스 크롬이 이미지/PDF로 굽는 전용 화면
+  if (pathname === "/export" || pathname === "/export/") {
+    return join(ROOT, "client/export/index.html");
+  }
   let rel = null;
-  if (pathname.startsWith("/shared/") || pathname.startsWith("/editor/") || pathname.startsWith("/presenter/")) {
+  if (pathname.startsWith("/shared/") || pathname.startsWith("/editor/") || pathname.startsWith("/presenter/") || pathname.startsWith("/export/")) {
     rel = "client" + pathname;
   } else if (pathname.startsWith("/themes/")) {
     rel = pathname.slice(1);

@@ -30,16 +30,32 @@ function refString(shortName, chapter, vStart, vEnd) {
 }
 
 // 한 장에 담기지 않는 긴 절을 어절 단위로 나눈다. 이어지는 조각은 cont=true(절 번호 반복 X).
+// 절 번호 자리(+3)는 빼지 않는다 — 혼자 있는 절은 번호가 아예 안 그려지므로(show_numbers
+// auto), 그 자리를 미리 빼면 85자짜리가 87자 예산을 2자 차이로 넘겨 쓸데없이 쪼개진다.
 function splitLongVerse(v, maxChars) {
-  if (v.text.length + 3 <= maxChars) return [v];
-  const budget = Math.max(10, maxChars - 3);
-  const parts = [];
-  let cur = "";
-  for (const w of v.text.split(/\s+/).filter(Boolean)) {
-    if (cur && cur.length + 1 + w.length > budget) { parts.push(cur); cur = w; }
-    else cur = cur ? `${cur} ${w}` : w;
+  if (v.text.length <= maxChars) return [v];
+  const budget = Math.max(10, maxChars);
+  const words = v.text.split(/\s+/).filter(Boolean);
+  const wrap = (width) => {
+    const parts = [];
+    let cur = "";
+    for (const w of words) {
+      if (cur && cur.length + 1 + w.length > width) { parts.push(cur); cur = w; }
+      else cur = cur ? `${cur} ${w}` : w;
+    }
+    if (cur) parts.push(cur);
+    return parts;
+  };
+  // 앞장을 가득 채우면 마지막 장에 "행하느니라"처럼 몇 글자만 남아 보기 나쁘다.
+  // 그래서 필요한 최소 장 수(n)를 먼저 구하고, n장을 유지하는 선에서 가장 고르게
+  // 나뉘는 폭을 찾는다(어절 경계 때문에 이상적인 폭으로는 n장에 안 담길 수 있다).
+  const n = Math.ceil(v.text.length / budget);
+  let parts = null;
+  for (let width = Math.ceil(v.text.length / n); width <= budget; width++) {
+    const p = wrap(width);
+    if (p.length <= n) { parts = p; break; }
   }
-  if (cur) parts.push(cur);
+  if (!parts) parts = wrap(budget);
   return parts.map((text, i) => (i === 0 ? { ...v, text } : { ...v, text, cont: true }));
 }
 

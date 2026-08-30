@@ -753,7 +753,9 @@ function startInlineEdit(i, opts = {}) {
   if (!opts.selectAll) range.collapse(false);        // 기본: 커서 끝 / 새 요소: 전체 선택
   sel.removeAllRanges(); sel.addRange(range);
   let dirty = false;
-  const onInput = () => { dirty = true; el.html = node.innerHTML; el.text = node.innerText; }; // 라이브(리페인트 X: 포커스 유지)
+  // 라이브(리페인트 X: 포커스 유지). innerText는 레이아웃을 강제하므로 타이핑 중엔 읽지 않고
+  // 마무리(finish)에서 한 번만 읽는다 — 빠르게 칠 때 글자가 밀리지 않게.
+  const onInput = () => { dirty = true; el.html = node.innerHTML; };
   const onKey = (e) => {
     if (e.key === "Escape") { e.preventDefault(); node.blur(); return; }
     e.stopPropagation();                             // 전역 단축키로 새지 않게(Del 등)
@@ -1180,8 +1182,20 @@ function renderDesignPanel() {
     const track = () => { const s = window.getSelection(); if (s.rangeCount && ed.contains(s.anchorNode)) range = s.getRangeAt(0).cloneRange(); };
     ed.addEventListener("keyup", track);
     ed.addEventListener("mouseup", track);
-    ed.addEventListener("input", () => { track(); save(false); });  // 타이핑: 라이브(커밋은 blur)
-    ed.addEventListener("blur", () => save(true));
+    // 타이핑 중엔 미리보기 갱신을 살짝 미룬다. 글자마다 repaintEls()를 돌리면 슬라이드의
+    // 모든 요소 노드를 새로 만들고(이미지 <img>까지) innerText가 레이아웃을 강제해,
+    // 빠르게 치거나 느린 PC에서 입력이 밀린다. 모델(el.html)은 즉시 반영하므로 저장은 안전.
+    let liveT = null, composing = false;
+    const liveSave = () => {
+      el.html = ed.innerHTML;                 // innerText는 레이아웃을 강제하므로 여기선 안 읽는다
+      clearTimeout(liveT);
+      liveT = setTimeout(() => { if (ed.isConnected) save(false); }, 150);   // 패널이 다시 그려졌으면 무시
+    };
+    // 한글 조합 중(IME)에는 아무것도 건드리지 않는다 — 조합이 깨져 글자가 씹힌다.
+    ed.addEventListener("compositionstart", () => { composing = true; });
+    ed.addEventListener("compositionend", () => { composing = false; liveSave(); });
+    ed.addEventListener("input", () => { track(); if (!composing) liveSave(); });
+    ed.addEventListener("blur", () => { clearTimeout(liveT); save(true); });
     const apply = (fn) => {
       ed.focus();
       if (range) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(range); }

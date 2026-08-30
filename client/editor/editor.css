@@ -90,7 +90,9 @@ a { color: var(--accent); text-decoration: none; }
 
 .canvas { display: flex; flex-direction: column; padding: 16px; gap: 12px; background: #0b0d12; }
 .canvas-wrap { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
-#preview { width: min(100%, 70vh * 16 / 9); max-height: 100%; box-shadow: 0 8px 40px rgba(0,0,0,.6); border-radius: 6px; }
+/* touch-action: 아이패드에서 캔버스를 더블탭하면 브라우저가 "확대"로 가로채 인라인 편집이
+   안 열린다. manipulation이면 더블탭 확대를 끄고 dblclick이 지연 없이 온다(데스크톱 영향 없음). */
+#preview { width: min(100%, 70vh * 16 / 9); max-height: 100%; box-shadow: 0 8px 40px rgba(0,0,0,.6); border-radius: 6px; touch-action: manipulation; }
 .canvas-bar { display: flex; align-items: center; gap: 8px; }
 .slide-pos { color: var(--muted); min-width: 120px; text-align: center; }
 

@@ -522,13 +522,27 @@ function renderEditLayer() {
       const eh = e.target.closest(".eh");
       layer._dblIndex = eh ? Number(eh.dataset.elIndex) : -1;
     }, true);
-    layer.addEventListener("dblclick", (e) => {
-      e.preventDefault();
-      if (layer._dblIndex < 0) return;
-      // 텍스트·성경/찬송/교독 본문은 캔버스에서 바로 인라인 편집(전체/일부 글꼴·색), 그 외는 패널.
-      const t = els()[layer._dblIndex]?.type;
-      if (["text", "bible", "hymn", "reading"].includes(t)) startInlineEdit(layer._dblIndex);
-      else focusElementContent(layer._dblIndex);
+    // 텍스트·성경/찬송/교독 본문은 캔버스에서 바로 인라인 편집(전체/일부 글꼴·색), 그 외는 패널.
+    let openedAt = 0;
+    const openInline = (idx) => {
+      if (idx < 0 || performance.now() - openedAt < 500) return;   // dblclick·터치 감지 중복 방지
+      openedAt = performance.now();
+      const t = els()[idx]?.type;
+      if (["text", "bible", "hymn", "reading"].includes(t)) startInlineEdit(idx);
+      else focusElementContent(idx);
+    };
+    layer.addEventListener("dblclick", (e) => { e.preventDefault(); openInline(layer._dblIndex); });
+    // 아이패드: 네이티브 dblclick이 오지 않거나 늦는 경우가 있어 두 번 탭을 직접 감지한다.
+    // 터치 포인터에서만 동작하므로 마우스(데스크톱) 경로는 그대로다.
+    let lastTapAt = 0, lastTapIdx = -1;
+    layer.addEventListener("pointerup", (e) => {
+      if (e.pointerType !== "touch") return;
+      const eh = e.target.closest(".eh");
+      const idx = eh ? Number(eh.dataset.elIndex) : -1;
+      if (idx >= 0 && idx === lastTapIdx && e.timeStamp - lastTapAt < 400) {
+        lastTapAt = 0; lastTapIdx = -1;
+        openInline(idx);
+      } else { lastTapAt = e.timeStamp; lastTapIdx = idx; }
     });
     pv.appendChild(layer);
   }
@@ -709,8 +723,15 @@ function inlineNode(i) {
   return box ? (box.querySelector(".el-text-inner") || box) : null;
 }
 // 인라인 편집 중, 노드 안에서 드래그 선택하면 서식 바를 선택 위에 띄운다.
+// IME(한글) 조합 중인지 — 조합 글자는 선택 상태로 잡히는 경우가 있어(특히 iOS),
+// 그대로 두면 글자마다 서식 바가 떴다 사라지며 조합을 방해한다.
+let imeComposing = false;
+document.addEventListener("compositionstart", () => { imeComposing = true; }, true);
+document.addEventListener("compositionend", () => { imeComposing = false; }, true);
+
 document.addEventListener("selectionchange", () => {
   if (state.inlineEdit == null) { hideFmtBar(); return; }
+  if (imeComposing) return;                           // 조합 중엔 건드리지 않는다
   if (fmtBarHasFocus()) return;                       // 바(커스텀 색 피커) 조작 중엔 유지
   const node = inlineNode(state.inlineEdit);
   const sel = window.getSelection();

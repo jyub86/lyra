@@ -73,6 +73,8 @@
     <input id="import-file" type="file" accept="application/json,.json" hidden />
     <input id="import-ppt-file" type="file" accept=".pptx,.ppt,.odp,application/pdf,image/*" hidden />
 
+    <!-- 좁은 화면(아이패드 세로 등)에서 속성 패널을 서랍으로 여닫는다 -->
+    <button id="props-toggle" class="props-toggle" title="속성 패널 열기/닫기" aria-label="속성 패널">⚙</button>
     <a id="open-presenter" class="present-btn" href="/presenter" target="_blank" rel="noopener">▶ 발표</a>
   </header>
 
@@ -150,6 +152,13 @@
       </div>
     </aside>
   </main>
+
+  <!-- 휴대폰: 한 번에 한 화면만 보여주고 아래 탭으로 전환 -->
+  <nav id="mobile-tabs" class="mobile-tabs" aria-label="화면 전환">
+    <button data-pane="list">☰ 순서</button>
+    <button data-pane="canvas" class="active">✏️ 편집</button>
+    <button data-pane="props">⚙ 속성</button>
+  </nav>
 
   <!-- ===== 타일(전체보기) 뷰 ===== -->
   <section class="tiles-view" id="tiles-view" hidden>

@@ -53,7 +53,7 @@ a { color: var(--accent); text-decoration: none; }
 .present-btn:hover { filter: brightness(1.06); }
 
 .layout { flex: 1; display: grid; grid-template-columns: 280px 1fr 320px; min-height: 0; }
-.col { min-height: 0; overflow: auto; }
+.col { min-height: 0; min-width: 0; overflow: auto; }
 .order { background: var(--panel); border-right: 1px solid var(--line); }
 .panel { background: var(--panel); border-left: 1px solid var(--line); padding: 12px; }
 /* z-index는 썸네일 내부 레이어(최대 2)보다 위여야 목록이 헤더를 뚫고 올라오지 않는다 */
@@ -384,3 +384,73 @@ button:disabled:hover { border-color: var(--line); }
 .rt-bar { display: flex; gap: 4px; align-items: center; margin-top: 5px; flex-wrap: wrap; }
 .rt-bar input[type="color"] { width: 28px; height: 24px; padding: 1px; border-radius: 5px; }
 .rt-bar .mini { padding: 3px 8px; font-size: 11px; }
+
+/* =====================================================================
+   반응형 — 아이패드 세로(768px)·휴대폰까지. 데스크톱(1201px~)은 기존 그대로.
+   기본 3열은 좌우 패널만 600px이라 좁은 화면에선 캔버스 자리가 안 남는다.
+   ===================================================================== */
+.props-toggle, .mobile-tabs { display: none; }
+
+/* --- 태블릿·좁은 데스크톱: 2열 + 속성은 오른쪽 서랍 --- */
+@media (max-width: 1200px) {
+  .layout { grid-template-columns: 240px 1fr; }
+  .props-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 30px; font-size: 15px;
+  }
+  .col.panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(340px, 86vw);
+    z-index: 60; background: var(--panel); border-left: 1px solid var(--line);
+    box-shadow: -12px 0 32px rgba(0,0,0,.45);
+    transform: translateX(100%); transition: transform .18s ease;
+  }
+  body.props-open .col.panel { transform: translateX(0); }
+  body.props-open .props-toggle { background: var(--accent); color: #0b0d12; }
+}
+
+/* --- 휴대폰: 한 번에 한 화면. 아래 탭으로 순서/편집/속성 전환 --- */
+@media (max-width: 767px) {
+  .layout { grid-template-columns: 1fr; }
+  /* 탭 높이만큼 본문을 띄워 마지막 항목이 가리지 않게 */
+  .layout, .tiles-view { padding-bottom: 52px; }
+
+  .col.order, .col.canvas { display: none; }
+  body[data-pane="list"] .col.order { display: block; }
+  body[data-pane="canvas"] .col.canvas { display: flex; flex-direction: column; }
+  /* 속성은 이 화면에서도 서랍을 그대로 쓴다(탭이 서랍을 연다) */
+  .col.panel { width: 100vw; }
+
+  .mobile-tabs {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 70;
+    background: var(--panel); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);   /* 아이폰 홈 인디케이터 */
+  }
+  .mobile-tabs button {
+    background: none; border: 0; color: var(--muted);
+    padding: 12px 4px; font-size: 13px; border-radius: 0;
+  }
+  .mobile-tabs button.active { color: var(--accent); box-shadow: inset 0 2px 0 var(--accent); }
+
+  /* 상단바: 브랜드·구분선을 접고, 항목을 줄이지 말고 가로 스크롤 */
+  .topbar { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 6px 8px; }
+  .topbar > * { flex: 0 0 auto; white-space: nowrap; }
+  .topbar .spacer { display: none; }        /* 스크롤 바에서 빈 공간은 의미가 없다 */
+  .topbar .brand, .topbar .tb-sep { display: none; }
+  body { overflow-x: hidden; }              /* 본문이 가로로 밀리지 않게 */
+  #service-select { max-width: 40vw; }
+  .menu-panel { max-width: 92vw; }
+
+  /* 캔버스: 화면 폭에 맞춰 크게 */
+  #preview { width: 100%; }
+  .canvas-tools { flex-wrap: wrap; }
+  .tile-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+}
+
+/* 터치 기기: 순서 바꾸기용 ▲▼ (HTML5 드래그는 터치에서 동작하지 않는다) */
+.slide-row .movers { display: none; gap: 2px; }
+.slide-row .movers button {
+  width: 26px; height: 24px; padding: 0; font-size: 12px; line-height: 1;
+  background: var(--btn); border: 1px solid var(--line); border-radius: 5px; color: var(--fg);
+}
+body.touch .slide-row .movers { display: flex; }

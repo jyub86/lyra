@@ -219,6 +219,46 @@ function wireDrag(el) {
   });
 }
 
+// ===== 좁은 화면(휴대폰·아이패드 세로) =====
+// 3열 고정 레이아웃은 좌우 패널만 600px이라 좁은 화면에선 캔버스가 안 들어간다.
+// CSS가 레이아웃을 바꾸고, 여기서는 "지금 어느 화면인지"와 서랍 여닫기만 관리한다.
+function setPane(pane) {
+  document.body.dataset.pane = pane;
+  for (const b of document.querySelectorAll("#mobile-tabs button")) b.classList.toggle("active", b.dataset.pane === pane);
+  // 속성은 서랍으로 띄운다(휴대폰에선 화면 전체를 덮음)
+  document.body.classList.toggle("props-open", pane === "props");
+  if (pane === "canvas") renderPreview();   // 숨어 있던 캔버스는 크기가 0이었으므로 다시 그린다
+}
+function togglePropsDrawer(open) {
+  const on = open ?? !document.body.classList.contains("props-open");
+  document.body.classList.toggle("props-open", on);
+}
+function wireResponsive() {
+  // 터치 기기면 순서 바꾸기 ▲▼를 띄운다(HTML5 드래그는 터치에서 동작하지 않음).
+  if (matchMedia("(hover: none)").matches || navigator.maxTouchPoints > 0) document.body.classList.add("touch");
+  $("props-toggle").onclick = () => togglePropsDrawer();
+  for (const b of document.querySelectorAll("#mobile-tabs button")) b.onclick = () => setPane(b.dataset.pane);
+  // 휴대폰 폭에서만 탭 화면을 쓴다. 넓어지면 3열로 돌아가므로 서랍도 닫는다.
+  const narrow = matchMedia("(max-width: 767px)");
+  const sync = () => {
+    if (narrow.matches) setPane(document.body.dataset.pane || "canvas");
+    else { delete document.body.dataset.pane; document.body.classList.remove("props-open"); }
+  };
+  narrow.addEventListener("change", sync);
+  sync();
+}
+// 슬라이드 한 칸 위/아래로 (터치에서 드래그 대신)
+async function moveSlide(id, delta) {
+  const ids = slides().map((s) => s.id);
+  const i = ids.indexOf(id);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= ids.length) return;
+  ids.splice(j, 0, ids.splice(i, 1)[0]);
+  await callTool("reorder_slides", { service_id: state.serviceId, ordered_slide_ids: ids });
+  await refresh();
+  revealSlide(id);
+}
+
 // List-row click with multi-select (plain / ⌘·Ctrl toggle / Shift range).
 function onRowClick(s, e) {
   state.editEl = null;
@@ -428,7 +468,16 @@ function renderList() {
     hide.onclick = (e) => { e.stopPropagation(); toggleHidden(s.id); };
     const del = elx("button", "del danger", "✕");
     del.onclick = (e) => { e.stopPropagation(); removeSlide(s.id); };
-    row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, hide, del);
+    // 터치 기기용 순서 이동(▲▼). CSS가 body.touch일 때만 보여준다.
+    const movers = elx("div", "movers");
+    const mv = (label, delta, title) => {
+      const b = elx("button", null, label);
+      b.title = title;
+      b.onclick = (e) => { e.stopPropagation(); moveSlide(s.id, delta); };
+      return b;
+    };
+    movers.append(mv("▲", -1, "위로"), mv("▼", 1, "아래로"));
+    row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, movers, hide, del);
     row.onclick = (e) => onRowClick(s, e);
     wireDrag(row);
     root.appendChild(row);
@@ -2534,6 +2583,7 @@ async function loadNetwork() {
 
 function init() {
   initThemeSelect();
+  wireResponsive();      // 좁은 화면: 하단 탭 · 속성 서랍 · 터치용 ▲▼
   wireStaticGroups();   // 정적 접이식 그룹(슬라이드 배경)의 열림 상태 기억
   wireMenu("menu-add-btn", "menu-add", { closeOnItem: true });
   wireMenu("menu-service-btn", "menu-service", { closeOnItem: true });

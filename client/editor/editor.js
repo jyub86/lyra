@@ -1182,19 +1182,29 @@ function renderDesignPanel() {
     const track = () => { const s = window.getSelection(); if (s.rangeCount && ed.contains(s.anchorNode)) range = s.getRangeAt(0).cloneRange(); };
     ed.addEventListener("keyup", track);
     ed.addEventListener("mouseup", track);
-    // 타이핑 중엔 미리보기 갱신을 살짝 미룬다. 글자마다 repaintEls()를 돌리면 슬라이드의
-    // 모든 요소 노드를 새로 만들고(이미지 <img>까지) innerText가 레이아웃을 강제해,
-    // 빠르게 치거나 느린 PC에서 입력이 밀린다. 모델(el.html)은 즉시 반영하므로 저장은 안전.
+    // 타이핑 중엔 미리보기 갱신을 미룬다. 글자마다 repaintEls()를 돌리면 슬라이드의 모든
+    // 요소 노드를 새로 만들고(배경 <img>까지 재생성) innerText가 레이아웃을 강제한다.
+    // 아이패드/사파리처럼 CPU가 약한 기기에서 이 비용이 그대로 입력 지연으로 나타난다.
+    // 모델(el.html)은 즉시 반영하므로 저장은 언제 끊겨도 안전.
     let liveT = null, composing = false;
     const liveSave = () => {
       el.html = ed.innerHTML;                 // innerText는 레이아웃을 강제하므로 여기선 안 읽는다
       clearTimeout(liveT);
-      liveT = setTimeout(() => { if (ed.isConnected) save(false); }, 150);   // 패널이 다시 그려졌으면 무시
+      liveT = setTimeout(function tick() {    // 조합 중이면 끝날 때까지 기다렸다 그린다
+        if (!ed.isConnected) return;
+        if (composing) { liveT = setTimeout(tick, 250); return; }
+        save(false);
+      }, 250);
     };
-    // 한글 조합 중(IME)에는 아무것도 건드리지 않는다 — 조합이 깨져 글자가 씹힌다.
+    // 한글 조합 중(IME)에는 DOM을 건드리지 않는다 — 조합이 깨져 글자가 씹힌다.
+    // iOS 사파리는 compositionstart/end가 빠지기도 해서 inputType으로도 판별한다.
     ed.addEventListener("compositionstart", () => { composing = true; });
-    ed.addEventListener("compositionend", () => { composing = false; liveSave(); });
-    ed.addEventListener("input", () => { track(); if (!composing) liveSave(); });
+    ed.addEventListener("compositionend", () => { composing = false; });
+    ed.addEventListener("input", (e) => {
+      track();
+      if (e.inputType && e.inputType.startsWith("insertComposition")) composing = true;
+      liveSave();
+    });
     ed.addEventListener("blur", () => { clearTimeout(liveT); save(true); });
     const apply = (fn) => {
       ed.focus();

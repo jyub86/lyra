@@ -103,6 +103,9 @@ a { color: var(--accent); text-decoration: none; }
    안 열린다. manipulation이면 더블탭 확대를 끄고 dblclick이 지연 없이 온다(데스크톱 영향 없음). */
 #preview { width: min(100%, 70vh * 16 / 9); max-height: 100%; box-shadow: 0 8px 40px rgba(0,0,0,.6); border-radius: 6px; touch-action: manipulation; }
 .canvas-bar { display: flex; align-items: center; gap: 8px; }
+/* 아이콘+글자 버튼: 넓은 화면에선 아이콘을 숨기고 글자만(기존 모습 그대로) */
+.canvas-bar .ico { display: none; }
+.canvas-bar .lbl { display: inline; }
 .slide-pos { color: var(--muted); min-width: 120px; text-align: center; }
 
 /* template-edit banner */
@@ -452,6 +455,13 @@ button:disabled:hover { border-color: var(--line); }
 
   /* 캔버스: 화면 폭에 맞춰 크게 */
   #preview { width: 100%; }
+  /* 아래 버튼줄: 글자를 숨기고 아이콘만 — "발표로 보내기"가 두 줄로 접히던 것 해결.
+     터치 목표는 최소 40px로 키운다. */
+  .canvas-bar .ico { display: inline; font-size: 17px; line-height: 1; }
+  .canvas-bar .lbl { display: none; }
+  .canvas-bar { gap: 6px; }
+  .canvas-bar button { min-width: 40px; min-height: 40px; padding: 6px 10px; }
+  .slide-pos { min-width: 0; flex: 1; font-size: 12px; }
   .canvas-tools { flex-wrap: wrap; }
   .tile-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 }

@@ -117,8 +117,13 @@
         <span id="slide-pos" class="slide-pos">—</span>
         <button id="next-slide" title="다음 슬라이드 (Page Down)">▶</button>
         <span class="spacer"></span>
-        <button id="present-here" title="이 슬라이드를 발표 화면에 띄움">발표로 보내기</button>
-        <button id="del-slide" class="danger">슬라이드 삭제</button>
+        <!-- 좁은 화면에선 글자를 숨기고 아이콘만 남긴다(.lbl) — 버튼이 두 줄로 접히는 것 방지 -->
+        <button id="present-here" title="이 슬라이드를 발표 화면에 띄움" aria-label="발표로 보내기">
+          <span class="ico">📺</span><span class="lbl">발표로 보내기</span>
+        </button>
+        <button id="del-slide" class="danger" title="이 슬라이드 삭제" aria-label="슬라이드 삭제">
+          <span class="ico">🗑</span><span class="lbl">슬라이드 삭제</span>
+        </button>
       </div>
     </section>
 

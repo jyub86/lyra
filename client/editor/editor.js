@@ -79,16 +79,19 @@ function updatePresentingBadge(id) {
   if (!btn) return;
   if (!present.live) { btn.hidden = true; return; }
   btn.hidden = false;
-  if (id != null) {
-    const n = slides().findIndex((s) => s.id === id) + 1;
-    btn.textContent = `● 발표중 ${n}/${slides().length}`;
-    btn.title = "발표 중인 슬라이드로 이동";
-    btn.classList.remove("other");
-  } else {
+  const otherService = present.service_id && present.service_id !== state.serviceId;
+  btn.classList.toggle("other", !!otherService);
+  if (otherService) {
     // 발표 중이지만 지금 편집 중인 예배가 아니다 → 누르면 그 예배로 전환.
     btn.textContent = "● 발표중 · 다른 예배";
     btn.title = "발표 중인 예배로 전환";
-    btn.classList.add("other");
+  } else if (id != null) {
+    btn.textContent = `● 발표중 ${slides().findIndex((s) => s.id === id) + 1}/${slides().length}`;
+    btn.title = "발표 중인 슬라이드로 이동";
+  } else {
+    // 같은 예배인데 그 자리가 없다(그 슬라이드를 지웠거나 순서가 줄었을 때).
+    btn.textContent = "● 발표중";
+    btn.title = "발표 중";
   }
 }
 // 상단바 표시 클릭 → 발표 중인 슬라이드(또는 예배)로 이동.

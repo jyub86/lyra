@@ -49,6 +49,15 @@ a { color: var(--accent); text-decoration: none; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
 .set-row select { flex: 0 0 auto; }
 .set-row input[type="color"] { width: 30px; height: 24px; padding: 1px; border-radius: 5px; }
+/* 상단바 "발표중" 표시 — 발표 화면이 켜져 있을 때만 나온다(updatePresentingBadge) */
+.presenting-now {
+  display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
+  background: rgba(226,59,59,.14); border-color: #e23b3b; color: #ff8a8a;
+  font-weight: 700; font-size: 12px; padding: 5px 9px;
+  animation: present-pulse 1.6s ease-in-out infinite;
+}
+.presenting-now:hover { background: #e23b3b; color: #fff; border-color: #e23b3b; }
+.presenting-now.other { color: var(--muted); border-color: var(--line); background: var(--panel2); animation: none; }
 .present-btn { background: var(--accent); color: #0b0e14 !important; font-weight: 700; padding: 7px 12px; border-radius: 6px; }
 .present-btn:hover { filter: brightness(1.06); }
 

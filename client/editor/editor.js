@@ -68,8 +68,46 @@ function presentingSlideId() {
 function updatePresentingMarker() {
   const id = presentingSlideId();
   for (const n of document.querySelectorAll(".slide-row.presenting, .tile.presenting")) n.classList.remove("presenting");
+  if (id != null) {
+    for (const n of document.querySelectorAll(`.slide-row[data-id="${id}"], .tile[data-id="${id}"]`)) n.classList.add("presenting");
+  }
+  updatePresentingBadge(id);
+}
+// 상단바 표시 — 목록이 안 보이는 화면(휴대폰의 편집·속성 탭)에서도 무엇이 나가는지 알 수 있게.
+function updatePresentingBadge(id) {
+  const btn = $("presenting-now");
+  if (!btn) return;
+  if (!present.live) { btn.hidden = true; return; }
+  btn.hidden = false;
+  if (id != null) {
+    const n = slides().findIndex((s) => s.id === id) + 1;
+    btn.textContent = `● 발표중 ${n}/${slides().length}`;
+    btn.title = "발표 중인 슬라이드로 이동";
+    btn.classList.remove("other");
+  } else {
+    // 발표 중이지만 지금 편집 중인 예배가 아니다 → 누르면 그 예배로 전환.
+    btn.textContent = "● 발표중 · 다른 예배";
+    btn.title = "발표 중인 예배로 전환";
+    btn.classList.add("other");
+  }
+}
+// 상단바 표시 클릭 → 발표 중인 슬라이드(또는 예배)로 이동.
+async function goToPresenting() {
+  if (!present.live) return;
+  if (present.service_id && present.service_id !== state.serviceId) {
+    const sel = $("service-select");
+    if ([...sel.options].some((o) => o.value === present.service_id)) {
+      sel.value = present.service_id;
+      await selectService(present.service_id);
+    }
+    return;
+  }
+  const id = presentingSlideId();
   if (id == null) return;
-  for (const n of document.querySelectorAll(`.slide-row[data-id="${id}"], .tile[data-id="${id}"]`)) n.classList.add("presenting");
+  setSingleSelection(id);
+  if (document.body.dataset.pane) setPane("list");   // 휴대폰: 순서 화면으로 넘어가 보여준다
+  render();
+  revealSlide(id);
 }
 function connectPresentWs() {
   const ws = new WebSocket(`ws://${location.host}/ws?role=editor`);
@@ -237,6 +275,7 @@ function wireResponsive() {
   // 터치 기기면 순서 바꾸기 ▲▼를 띄운다(HTML5 드래그는 터치에서 동작하지 않음).
   if (matchMedia("(hover: none)").matches || navigator.maxTouchPoints > 0) document.body.classList.add("touch");
   $("props-toggle").onclick = () => togglePropsDrawer();
+  $("presenting-now").onclick = goToPresenting;
   for (const b of document.querySelectorAll("#mobile-tabs button")) b.onclick = () => setPane(b.dataset.pane);
   // 휴대폰 폭에서만 탭 화면을 쓴다. 넓어지면 3열로 돌아가므로 서랍도 닫는다.
   const narrow = matchMedia("(max-width: 767px)");
@@ -435,6 +474,7 @@ function render() {
   if (editing) $("tpl-edit-name").textContent = state.editingTemplate.name;
   if (state.mode === "tiles") renderTiles();
   else { renderList(); renderPreview(); renderInspector(); renderDesignPanel(); renderTemplatePanel(); }
+  updatePresentingBadge(presentingSlideId());   // 예배를 바꿔도 상단바 표시가 따라오게
 }
 
 // The slide the canvas/design editor is operating on: the template draft while

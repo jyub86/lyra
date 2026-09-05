@@ -1,58 +1,54 @@
 {
-  "date": "2026-08-02",
+  "date": "2026-09-06",
   "hymn1": {
-    "number": 30,
-    "title": "전능하고 놀라우신"
+    "number": 35,
+    "title": "큰 영화로신 주"
   },
   "hymn2": {
-    "number": 228,
-    "title": "오 나의 주님 친히 뵈오니"
+    "number": 545,
+    "title": "이 눈에 아무 증거 아니 뵈어도"
   },
   "reading": {
-    "number": 64,
-    "title": "시편 148편"
+    "number": 69,
+    "title": "이사야 40장"
   },
   "prayer": {
-    "part1": "임대룡 집사",
-    "part2": "강병환 장로"
+    "part1": "김경태 집사",
+    "part2": "최병원 장로"
   },
   "offering": {
-    "part1": "김경태 집사",
-    "part2": "고영성 집사"
+    "part1": "박지섭 집사",
+    "part2": "임대룡 집사"
   },
   "scripture": {
     "book": "요",
-    "chapter": 6,
-    "verse_start": 41,
-    "verse_end": 59,
-    "ref_text": "요한복음 6:41-59",
-    "page_text": "(신약 154쪽)",
+    "chapter": 7,
+    "verse_start": 25,
+    "verse_end": 36,
+    "ref_text": "요한복음 7:25-36",
+    "page_text": "(신약 156쪽)",
     "layout": "one-per-verse"
   },
   "choir": {
     "part1": {
       "team": "시온 찬양대",
-      "song": "나의 영원하신 기업"
+      "song": "나 주의 도움 받고자"
     },
     "part2": {
-      "team": "할렐루야 찬양대",
-      "song": "찬양! 주 영광"
+      "team": "할렐루야 찬양대 & 셀라 챔버",
+      "song": "만복의 근원 하나님"
     }
   },
   "sermon": {
-    "title": "불편한 진실",
+    "title": "견강부회(牽强附會)",
     "preacher": "강길수 목사"
   },
   "announcements": [
     {
-      "text": "이번주 수요 성경 아카데미는 휴강입니다."
+      "text": "제3차 20일 은혜路 기도회가 9월 7일(월)-11일(금)까지\n있습니다. (주제 : Turning point)"
     },
     {
-      "text": "2026 교육부서 여름행사 안내",
-      "image": "/Users/jisubpark/code/lyra/data/bulletins/2026-08-02/table-2.png"
-    },
-    {
-      "text": "교직원 휴가 - 김현겸 목사 : 8/3-5\n한성숙 전도사 : 8/3-8"
+      "image": "/Users/jisubpark/code/lyra/data/bulletins/2026-09-06/schedule.png"
     }
   ]
 }

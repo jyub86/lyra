@@ -53,7 +53,7 @@ const ORDER = [
 ];
 export const BUILTIN_IDS = new Set(ORDER);
 
-function paramsFromTool(schema) {
+export function paramsFromTool(schema) {
   const s = schema ? structuredClone(schema) : { type: "object", properties: {} };
   if (s.properties) delete s.properties.service_id;
   if (Array.isArray(s.required)) s.required = s.required.filter((r) => r !== "service_id");

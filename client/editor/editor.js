@@ -18,7 +18,9 @@ const state = {
   inlineEdit: null,     // 캔버스에서 인라인 편집 중인 텍스트 요소 index (null=아님)
   templates: [],        // design templates (cached)
   editingTemplate: null, // { id, name, kind, draft } while editing a template's design
+  styleSource: null,    // 서식 복사기: 서식을 가져올 원본 슬라이드 id
   fonts: [],            // self-host 웹폰트 목록 (list_fonts)
+  backgrounds: [],      // 저장해 둔 배경 라이브러리 (list_backgrounds)
 };
 
 // 글꼴 <select>를 "테마 기본" + 용도 그룹(optgroup)으로 채운다. current=현재 family.
@@ -500,7 +502,7 @@ function renderList() {
   const sound = slidesWithSound();
   slides().forEach((s, i) => {
     const sel = state.selectedSet.has(s.id);
-    const row = elx("div", "slide-row" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.id === pid ? " presenting" : "") + (s.hidden ? " hidden" : ""));
+    const row = elx("div", "slide-row" + (sel ? " sel" : "") + (s.id === state.selected ? " primary" : "") + (s.id === pid ? " presenting" : "") + (s.hidden ? " hidden" : "") + (s.id === state.styleSource ? " style-src" : ""));
     row.draggable = true;
     row.dataset.id = s.id;
     const meta = elx("div", "row-meta");
@@ -1603,8 +1605,39 @@ function renderTemplatePanel() {
     last.onclick = () => (t.kind === "builtin" ? resetTemplate(t.id) : deleteTemplate(t.id));
     acts.append(edit, stamp, ren, last);
     row.append(name, acts);
+    // 입력칸이 없는 커스텀 템플릿 = 내용이 굳어 있어 "가사만 넣어 여러 장" 이 안 된다.
+    // 한 번 눌러 입력칸을 만들 수 있게 안내한다(디자인은 유지, 굳은 내용만 지워짐).
+    const params = Object.keys(t.params_schema?.properties || {});
+    if (t.kind === "custom") {
+      if (params.length) {
+        row.append(elx("p", "tpl-note muted", `입력: ${params.map((k) => PARAM_LABELS[k] || k).join(" · ")}`));
+      } else if (hasFillable(t)) {
+        const note = elx("p", "tpl-note muted", "내용이 굳어 있어 추가하면 저장 당시 내용 그대로 한 장만 들어갑니다.");
+        const up = elx("button", "mini accent", "⚡ 입력칸 만들기");
+        up.title = "디자인은 그대로 두고 가사 입력칸을 만듭니다. 저장 당시 내용은 지워집니다.";
+        up.onclick = () => upgradeTemplate(t.id, t.name);
+        note.appendChild(up);
+        row.append(note);
+      }
+    }
     list.appendChild(row);
   }
+}
+
+// 내용을 채울 수 있는 요소(가사 등 bind 텍스트 · 성경/찬송/교독 콘텐츠 요소)가 있는지.
+function hasFillable(t) {
+  return (t?.spec?.elements || []).some((e) =>
+    ["bible", "hymn", "reading"].includes(e.type) || (e.type === "text" && e.bind));
+}
+
+async function upgradeTemplate(id, name) {
+  if (!confirm(`“${name}”에 입력칸을 만들까요?\n\n디자인(위치·글꼴·크기·배경)은 그대로 남고, 저장 당시의 내용(지난 가사 등)은 지워집니다.\n이후엔 추가할 때 가사를 넣으면 같은 디자인으로 여러 장이 생성됩니다.`)) return;
+  try {
+    const r = await callTool("upgrade_template_params", { template_id: id });
+    await loadTemplates();
+    renderTemplatePanel();
+    msg("tpl-msg", `“${name}” 입력칸 생성: ${r.params.map((k) => PARAM_LABELS[k] || k).join(" · ")}`);
+  } catch (e) { msg("tpl-msg", e.message, true); }
 }
 
 async function saveCurrentAsTemplate() {
@@ -1612,9 +1645,13 @@ async function saveCurrentAsTemplate() {
   if (!slide) { msg("tpl-msg", "슬라이드를 먼저 선택하세요.", true); return; }
   const name = prompt("새 디자인 템플릿 이름", slideLabel(slide) || "새 템플릿");
   if (!name) return;
-  await callTool("save_template", { name, slide: slideDesign(slide) });
-  msg("tpl-msg", `“${name}” 저장됨`);
+  const r = await callTool("save_template", { name, slide: slideDesign(slide) });
+  const params = Object.keys(r?.params_schema?.properties || {});
   await loadTemplates();
+  renderTemplatePanel();
+  msg("tpl-msg", params.length
+    ? `“${name}” 저장됨 · 추가할 때 ${params.map((k) => PARAM_LABELS[k] || k).join(" · ")}를 입력하면 같은 디자인으로 생성됩니다`
+    : `“${name}” 저장됨`);
 }
 async function updateTemplate(id) {
   const slide = serviceSlide();
@@ -1729,7 +1766,8 @@ const PARAM_LABELS = {
   title: "제목", subtitle: "부제", label: "구분 제목",
   book: "책 (이름/약칭)", chapter: "장", verse_start: "시작 절", verse_end: "끝 절", layout: "분할",
   number: "번호", verse_nos: "절 (예: 1,3)", lines_per_slide: "슬라이드당 줄 수",
-  segments_per_slide: "슬라이드당 문장 수", sections: "가사 (한 줄씩)", items: "광고 항목 (한 줄씩)",
+  segments_per_slide: "슬라이드당 문장 수", sections: "가사 (한 줄씩)", lyrics: "가사 (한 줄씩)",
+  items: "광고 항목 (한 줄씩)",
 };
 // 필드 아래 안내 문구 (페이지당 개수 조절이 무엇인지 명확히)
 const PARAM_HINTS = {
@@ -1806,6 +1844,103 @@ function renderAddFields() {
     wrap.appendChild(input);
     if (PARAM_HINTS[key]) wrap.appendChild(elx("p", "hint muted", PARAM_HINTS[key]));
   }
+  renderAddStyleFields(tpl, wrap);
+}
+
+// 추가할 때 이번 것만 서식(글꼴·크기·색·정렬)을 바꿀 수 있는 접이식 그룹.
+// 템플릿 자체는 건드리지 않는다 — 곡마다 다르게 하고 싶을 때. 비워두면 템플릿 기본값.
+// 위치·크기는 여기서 숫자로 넣기보다 캔버스에서 끌어 맞추고 "서식 퍼뜨리기"가 낫다.
+const STYLE_ROWS = [
+  ["size", "글자 크기", "number"],
+  ["color", "글자 색", "color"],
+  ["align", "정렬(가로)", "select", [["left", "왼쪽"], ["center", "가운데"], ["right", "오른쪽"]]],
+  ["valign", "정렬(세로)", "select", [["middle", "가운데"], ["top", "위"], ["bottom", "아래"]]],
+  ["weight", "굵기", "select", [["400", "보통"], ["600", "중간"], ["700", "굵게"], ["800", "매우 굵게"]]],
+  ["line_height", "줄 간격", "number"],
+];
+
+// 이 템플릿에서 서식을 덮어쓸 "본문 요소"(가사·성경 본문 등). 서버의 styleTargets와 같은 규칙.
+function bodyElementOf(tpl) {
+  const els = tpl?.spec?.elements || [];
+  const body = els.filter((e) =>
+    (["bible", "hymn", "reading"].includes(e.type) && (!e.field || ["all", "text", "body", "lyrics"].includes(e.field))) ||
+    (e.type === "text" && ["lyrics", "items"].includes(e.bind)));
+  if (body.length) return body[0];
+  return els.find((e) => e.type === "text" && e.bind) || null;
+}
+
+function renderAddStyleFields(tpl, wrap) {
+  const body = bodyElementOf(tpl);
+  if (!body) return;
+  const d = elx("details", "pgroup add-style");
+  d.open = isGroupOpen("add-style", false);
+  d.addEventListener("toggle", () => setGroupOpen("add-style", d.open));
+  d.appendChild(elx("summary", null, "디자인 (이번에 추가하는 것만)"));
+  const inner = elx("div", "pgroup-body");
+  inner.appendChild(elx("p", "hint muted",
+    "비워두면 템플릿 기본값을 씁니다. 템플릿 자체는 바뀌지 않아요 — 이 곡만 다르게 할 때 쓰세요."));
+  for (const [key, label, type, options] of STYLE_ROWS) {
+    inner.appendChild(elx("label", null, label));
+    let input;
+    if (type === "select") {
+      input = document.createElement("select");
+      const blank = document.createElement("option");
+      blank.value = ""; blank.textContent = `템플릿 기본 (${optLabel(options, body[key])})`;
+      input.appendChild(blank);
+      for (const [v, t] of options) { const o = document.createElement("option"); o.value = v; o.textContent = t; input.appendChild(o); }
+    } else if (type === "color") {
+      // 색은 "안 바꿈"을 표현할 수 없으니 체크박스로 사용 여부를 함께 둔다.
+      const row = elx("div", "size-row");
+      const use = document.createElement("input"); use.type = "checkbox";
+      input = document.createElement("input"); input.type = "color";
+      input.value = body.color || "#ffffff";
+      input.disabled = true;
+      use.onchange = () => { input.disabled = !use.checked; };
+      use.title = "체크하면 이 색으로 바꿉니다";
+      row.append(use, input);
+      input.dataset.styleKey = key;
+      input.dataset.styleUse = "checkbox";
+      inner.appendChild(row);
+      continue;
+    } else {
+      input = document.createElement("input"); input.type = "number";
+      input.step = key === "line_height" ? 0.1 : 0.1;
+      input.placeholder = body[key] != null ? `템플릿 기본 ${body[key]}` : "템플릿 기본";
+    }
+    input.dataset.styleKey = key;
+    inner.appendChild(input);
+  }
+  // 글꼴은 목록이 커서 마지막에
+  inner.appendChild(elx("label", null, "글꼴"));
+  const fsel = document.createElement("select");
+  fillFontSelect(fsel, "");
+  fsel.options[0].textContent = body.font ? `템플릿 기본 (${body.font})` : "템플릿 기본";
+  fsel.dataset.styleKey = "font";
+  inner.appendChild(fsel);
+  d.appendChild(inner);
+  wrap.appendChild(d);
+}
+
+function optLabel(options, value) {
+  const hit = (options || []).find(([v]) => String(v) === String(value));
+  return hit ? hit[1] : (value ?? "기본");
+}
+
+// 추가 모달의 디자인 그룹에서 값이 채워진 것만 모아 style 객체로.
+function collectStyle() {
+  const style = {};
+  for (const input of $("add-fields").querySelectorAll("[data-style-key]")) {
+    const key = input.dataset.styleKey;
+    if (input.dataset.styleUse === "checkbox") {
+      const cb = input.previousElementSibling;
+      if (cb?.checked && input.value) style[key] = input.value;
+      continue;
+    }
+    const v = String(input.value).trim();
+    if (v === "") continue;
+    style[key] = (input.type === "number" || key === "weight") ? Number(v) : v;
+  }
+  return Object.keys(style).length ? style : undefined;
 }
 
 function collectParams(tpl) {
@@ -1844,7 +1979,10 @@ async function addSlide(where = "end") {
     if (idx >= 0) position = idx + 1;
   }
   try {
-    const res = await callTool("apply_template", { template_id: templateId, service_id: state.serviceId, params: collectParams(tpl), position });
+    const res = await callTool("apply_template", {
+      template_id: templateId, service_id: state.serviceId,
+      params: collectParams(tpl), position, style: collectStyle(),
+    });
     await refresh();
     if (res?.slide_ids?.[0]) { setSingleSelection(res.slide_ids[0]); render(); }
     closeAddSlide();
@@ -1920,6 +2058,15 @@ function renderInspector() {
   empty.hidden = true; body.hidden = false;
   $("insp-bg-type").value = slide.background?.type || "theme";
   renderBgFields(slide.background);
+  // 여러 장을 골라 뒀으면 배경은 그 전체에 함께 적용된다(가사 여러 장 = 같은 배경 영상).
+  const n = state.editingTemplate ? 1 : state.selectedSet.size;
+  const multi = $("insp-bg-multi");
+  if (multi) { multi.hidden = n <= 1; multi.textContent = `선택한 ${n}장에 함께 적용됩니다`; }
+  const save = $("insp-save");
+  if (save) save.textContent = n > 1 ? `${n}장에 배경 적용` : "배경 저장";
+  const pick = $("bg-pick-btn");
+  if (pick) pick.hidden = !!state.editingTemplate;   // 템플릿 초안엔 예배 배경 목록이 없다
+  renderStyleCopy(n);
   // 발표에서 숨기기 — 순서 목록의 ◉/⊘ 버튼과 같은 동작(템플릿 초안엔 해당 없음)
   const hide = $("insp-hidden");
   const row = hide?.closest(".insp-hide-row");
@@ -1992,11 +2139,92 @@ async function saveInspector() {
       slide.background = bg;
       renderPreview();
     } else {
-      await callTool("set_slide_background", { slide_id: slide.id, background: bg });
+      // 여러 장을 선택해 뒀으면 그 전체에 같은 배경(= 가사 여러 장에 같은 배경 영상).
+      const ids = bgTargetIds();
+      await callTool("set_slide_background", { slide_ids: ids, background: bg });
       await refresh();
+      msg("insp-msg", ids.length > 1 ? `${ids.length}장에 배경 적용됨` : "배경 적용됨");
+      return;
     }
     msg("insp-msg", "배경 적용됨");
   } catch (e) { msg("insp-msg", e.message, true); }
+}
+
+// ---------- 서식 복사기 ----------
+// 가사 한 장을 캔버스에서 원하는 대로 꾸민 뒤(위치·글꼴·크기), 나머지 장에 같은 서식을 입힌다.
+// 내용은 그대로 두고 서식만 복사되므로 장마다 다시 만질 필요가 없다.
+// "복사 → 붙이기" 2단계인 이유: 대상을 ⌘클릭으로 고르면 그 순간 현재 슬라이드가 바뀌어서,
+// 한 단계로 하면 원본이 마지막에 클릭한 대상으로 슬쩍 바뀌어 버린다.
+function styleSourceId() {
+  const id = state.styleSource;
+  return id && slides().some((s) => s.id === id) ? id : null;
+}
+
+function renderStyleCopy() {
+  const box = document.querySelector(".insp-style-copy");
+  const btn = $("style-copy-btn"), hint = $("style-copy-hint");
+  if (!box || !btn) return;
+  if (state.editingTemplate) { box.hidden = true; return; }
+  box.hidden = false;
+  const src = styleSourceId();
+  const total = slides().length;
+  if (!src) {
+    btn.textContent = "🎨 이 서식 복사";
+    btn.disabled = total <= 1 || !state.selected;
+    hint.textContent = total > 1
+      ? "이 슬라이드처럼 꾸민 뒤 눌러 두고, 대상 슬라이드를 골라 붙여넣으세요."
+      : "서식을 옮길 다른 슬라이드가 없습니다.";
+    return;
+  }
+  const srcNo = slides().findIndex((s) => s.id === src) + 1;
+  const targets = [...state.selectedSet].filter((id) => id !== src);
+  btn.disabled = false;
+  if (targets.length) {
+    btn.textContent = `🖌 ${targets.length}장에 서식 붙이기`;
+    hint.textContent = `원본 ${srcNo}번 · 선택한 ${targets.length}장의 같은 요소에 글꼴·크기·색·정렬·위치가 복사됩니다.`;
+  } else {
+    btn.textContent = "🖌 나머지 전체에 붙이기";
+    hint.textContent = `원본 ${srcNo}번 · 대상을 골라두면 그 장들만. 지금 누르면 나머지 ${total - 1}장에 적용됩니다.`;
+  }
+  const cancel = elx("button", "mini style-src-cancel", "복사 취소");
+  cancel.onclick = () => { state.styleSource = null; render(); };
+  hint.appendChild(cancel);
+}
+
+async function copyStyleToOthers() {
+  const src = styleSourceId();
+  // 1단계: 원본 지정
+  if (!src) {
+    if (!state.selected) return;
+    state.styleSource = state.selected;
+    render();
+    toast("서식 복사됨 · 대상 슬라이드를 고르고 “붙이기”를 누르세요");
+    return;
+  }
+  // 2단계: 붙이기
+  const picked = [...state.selectedSet].filter((id) => id !== src);
+  const targets = picked.length ? picked : slides().map((s) => s.id).filter((id) => id !== src);
+  if (!targets.length) { toast("붙일 다른 슬라이드가 없습니다"); return; }
+  if (!picked.length && !confirm(`나머지 ${targets.length}장 전체에 이 서식을 붙일까요?\n(내용은 그대로, 같은 역할의 요소만 글꼴·크기·색·정렬·위치가 바뀝니다)`)) return;
+  try {
+    const r = await callTool("copy_slide_style", { source_slide_id: src, target_slide_ids: targets });
+    await refresh();
+    toast(r.elements ? `${r.slides}장에 서식 적용됨 (요소 ${r.elements}개)` : `짝이 맞는 요소가 없어 바뀐 게 없습니다`);
+  } catch (e) { msg("insp-msg", e.message, true); }
+}
+
+// 배경을 적용할 슬라이드들 — 멀티셀렉이면 선택 전체, 아니면 현재 한 장.
+function bgTargetIds() {
+  const sel = [...state.selectedSet];
+  return sel.length > 1 ? sel : [state.selected].filter(Boolean);
+}
+
+// 배경을 여러 슬라이드에 한 번에 적용(배경 고르기 모달·라이브러리에서 사용).
+async function applyBackgroundTo(ids, bg) {
+  if (!ids.length) { toast("슬라이드를 먼저 선택하세요"); return; }
+  await callTool("set_slide_background", { slide_ids: ids, background: bg });
+  await refresh();
+  toast(ids.length > 1 ? `${ids.length}장에 배경 적용됨` : "배경 적용됨");
 }
 
 // ---------- mutations ----------
@@ -2075,14 +2303,41 @@ function presentHere() {
 }
 
 // ---------- export / import ----------
+const MB = 1048576;
+// 첨부를 base64로 넣으면 1.33배로 커진다. 배경 영상은 수십 MB가 예사라 이 선을 넘으면 물어본다.
+const ASSET_WARN_BYTES = 40 * MB;
+
 async function exportService() {
-  const payload = await callTool("export_service", { service_id: state.serviceId });
+  if (!state.serviceId) { toast("예배를 먼저 선택하세요"); return; }
+  // 먼저 첨부 없이(가벼움) 받아 어떤 파일이 얼마나 큰지 확인한다.
+  let payload = await callTool("export_service", { service_id: state.serviceId, assets: false });
+  const refs = payload.asset_refs || [];
+  const bytes = refs.reduce((n, r) => n + (r.bytes || 0), 0);
+  let withAssets = refs.length > 0;
+  if (bytes > ASSET_WARN_BYTES) {
+    const mb = (bytes / MB).toFixed(0);
+    const est = ((bytes * 1.34) / MB).toFixed(0);
+    withAssets = confirm(
+      `첨부 파일(배경 영상·이미지·음악)이 ${refs.length}개, 합계 ${mb}MB입니다.\n` +
+      `JSON에 함께 넣으면 파일이 약 ${est}MB가 됩니다.\n\n` +
+      `확인 = 함께 넣기 (오래 걸리고 브라우저가 버벅일 수 있음)\n` +
+      `취소 = JSON만 내보내기 (영상 파일은 따로 전달 · 전체 이관은 ⚙설정의 데이터 번들 권장)`
+    );
+  }
+  if (withAssets) {
+    showBusy("내보내기 준비 중…", refs.length ? `첨부 ${refs.length}개 포함` : "");
+    try { payload = await callTool("export_service", { service_id: state.serviceId }); }
+    finally { hideBusy(); }
+  }
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `${payload.date || "service"}_${payload.worship_part || ""}_${payload.title || "예배"}.json`.replace(/\s+/g, "-");
   a.click();
   URL.revokeObjectURL(a.href);
+  if (!withAssets && refs.length) {
+    toast(`JSON만 내보냈습니다 · 첨부 ${refs.length}개는 따로 전달하세요`);
+  }
 }
 // 슬라이드를 이미지(WebP)로 내보내기 → zip 다운로드.
 // 렌더는 서버가 헤드리스 크롬으로 /export 화면을 굽는다 → 발표 화면과 같은 그림이 나온다.
@@ -2191,6 +2446,274 @@ function openSound() {
   renderSoundList();
 }
 function closeSound() { stopTrackPreview(); $("sound-modal").hidden = true; }
+
+// ===== 찬양 가사 검색 (기존 PPT 모음에서 추출한 가사) =====
+// 곡을 고르면 원본 PPT의 장 나눔 그대로 가사 슬라이드가 들어간다.
+// 가사는 OCR 산출물이라 오탈자가 있을 수 있어 conf가 낮은 곡엔 표시를 준다.
+let songTimer = null;
+
+function openSongs() {
+  if (!state.serviceId) { toast("예배 순서를 먼저 선택하세요"); return; }
+  $("song-modal").hidden = false;
+  fillSongTemplates();
+  msg("song-status", "");
+  $("song-query").focus();
+  searchSongs();
+}
+function closeSongs() { $("song-modal").hidden = true; }
+
+// 가사를 담을 수 있는 템플릿(bind:lyrics)만 고를 수 있게 채운다.
+function fillSongTemplates() {
+  const sel = $("song-template");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.replaceChildren();
+  const usable = state.templates.filter((t) =>
+    (t.spec?.elements || []).some((e) => e.type === "text" && e.bind === "lyrics"));
+  for (const t of usable) {
+    const o = document.createElement("option");
+    o.value = t.id;
+    o.textContent = t.kind === "builtin" ? t.name : `${t.name} (내 템플릿)`;
+    sel.appendChild(o);
+  }
+  if (!usable.length) {
+    const o = document.createElement("option");
+    o.value = "builtin-praise"; o.textContent = "찬양(가사)";
+    sel.appendChild(o);
+  }
+  sel.value = prev && [...sel.options].some((o) => o.value === prev) ? prev : (usable[0]?.id || "builtin-praise");
+}
+
+async function searchSongs() {
+  const q = $("song-query").value.trim();
+  const list = $("song-list");
+  try {
+    const r = q
+      ? await callTool("search_song", { query: q, limit: 60 })
+      : await callTool("list_songs", { limit: 60 });
+    const songs = r.results || r.songs || [];
+    list.replaceChildren();
+    if (!songs.length) {
+      list.appendChild(elx("p", "muted", q ? "일치하는 곡이 없습니다." : "추출된 찬양 가사가 없습니다. scripts/extract-song-lyrics.js 로 먼저 추출하세요."));
+      msg("song-status", "");
+      return;
+    }
+    if (!q && r.total) msg("song-status", `전체 ${r.total}곡`);
+    for (const s of songs) {
+      const row = elx("div", "lib-row song-row");
+      const name = elx("span", "lib-name", s.title);
+      const meta = elx("span", "muted song-meta", `${s.pages}장`);
+      if (s.conf != null && s.conf < 0.4) {
+        const w = elx("span", "song-warn", "검토");
+        w.title = "OCR 신뢰도가 낮습니다 — 가사에 오탈자가 있을 수 있어요";
+        meta.appendChild(w);
+      }
+      const add = elx("button", "mini accent", "추가");
+      add.onclick = () => addSongSlides(s);
+      row.append(name, meta, add);
+      row.onclick = (e) => { if (e.target === add) return; addSongSlides(s); };
+      list.appendChild(row);
+    }
+  } catch (e) { msg("song-status", e.message, true); }
+}
+
+async function addSongSlides(song) {
+  const keep = $("song-keep-pages").checked;
+  const idx = slides().findIndex((s) => s.id === state.selected);
+  try {
+    msg("song-status", `“${song.title}” 추가 중…`);
+    const r = await callTool("add_song_slides", {
+      service_id: state.serviceId,
+      song_id: song.id,
+      template_id: $("song-template").value || "builtin-praise",
+      keep_pages: keep,
+      lines_per_slide: Number($("song-lines").value) || 2,
+      position: idx >= 0 ? idx + 1 : undefined,
+    });
+    await refresh();
+    if (r.slide_ids?.[0]) { setSingleSelection(r.slide_ids[0]); render(); }
+    closeSongs();
+    toast(`“${song.title}” ${r.slide_ids?.length || 0}장 추가됨`);
+  } catch (e) { msg("song-status", e.message, true); }
+}
+
+// ===== 배경 고르기 (여러 슬라이드에 같은 배경 영상/이미지) =====
+// 가사만 띄우는 구성에서는 배경 루프 영상을 여러 장에 똑같이 깔아야 한다. 여기서 고른
+// 배경은 선택한 슬라이드 전체에 한 번에 적용되고, 자주 쓰는 배경은 이름 붙여 저장해 둔다.
+async function loadBackgrounds() {
+  try { state.backgrounds = (await callTool("list_backgrounds")).backgrounds || []; }
+  catch { state.backgrounds = []; }
+}
+
+function openBgPicker() {
+  if (!state.serviceId) { toast("예배 순서를 먼저 선택하세요"); return; }
+  $("bg-modal").hidden = false;
+  msg("bg-status", "");
+  renderBgPicker();
+}
+function closeBgPicker() { $("bg-modal").hidden = true; }
+
+// 이 예배에서 실제로 쓰이고 있는 배경들(중복 제거) — 한 장에 깔아 본 뒤 나머지에 퍼뜨릴 때.
+function backgroundsInUse() {
+  const seen = new Map();
+  for (const s of slides()) {
+    if (!s.background) continue;
+    const k = JSON.stringify(s.background);
+    const cur = seen.get(k);
+    if (cur) cur.count += 1;
+    else seen.set(k, { background: s.background, count: 1 });
+  }
+  return [...seen.values()].sort((a, b) => b.count - a.count);
+}
+
+// 배경 미리보기 카드. 영상은 첫 프레임만(#t=0.1) 보여준다 — 여러 개를 동시에 재생하지 않는다.
+function bgThumb(bg) {
+  const t = elx("div", "bg-thumb");
+  if (!bg) { t.classList.add("bg-none"); t.textContent = "테마 기본"; return t; }
+  if (bg.type === "video") {
+    const v = document.createElement("video");
+    v.src = (bg.url || "") + "#t=0.1";
+    v.muted = true; v.playsInline = true; v.preload = "metadata";
+    t.appendChild(v);
+    t.appendChild(elx("span", "bg-tag", "영상"));
+  } else if (bg.type === "image") {
+    t.style.backgroundImage = `url("${bg.url}")`;
+    t.style.backgroundSize = "cover";
+    t.style.backgroundPosition = "center";
+    if (/\.gif(\?|#|$)/i.test(bg.url || "")) t.appendChild(elx("span", "bg-tag", "GIF"));
+  } else if (bg.type === "gradient") {
+    t.style.background = `linear-gradient(${bg.angle ?? 135}deg, ${bg.from}, ${bg.to})`;
+  } else {
+    t.style.background = bg.value || "#000";
+  }
+  return t;
+}
+
+function bgCard(bg, label, actions) {
+  const card = elx("div", "bg-card");
+  card.appendChild(bgThumb(bg));
+  card.appendChild(elx("div", "bg-name", label));
+  card.title = "선택한 슬라이드에 이 배경 적용";
+  card.onclick = async () => {
+    try { await applyBackgroundTo(bgTargetIds(), bg); renderBgPicker(); }
+    catch (e) { msg("bg-status", e.message, true); }
+  };
+  const acts = [...(actions || [])];
+  // 영상 배경은 "루프로 만들기"를 붙인다 — 이음새가 안 맞아 반복할 때 툭 튀는 영상을 고친다.
+  if (bg?.type === "video" && bg.url) acts.unshift(["🔁 루프로", "", () => askLoopMode(bg, card)]);
+  if (acts.length) {
+    const row = elx("div", "bg-acts");
+    for (const [text, cls, fn] of acts) {
+      const b = elx("button", "mini " + (cls || ""), text);
+      b.onclick = (e) => { e.stopPropagation(); fn(); };
+      row.appendChild(b);
+    }
+    card.appendChild(row);
+  }
+  return card;
+}
+
+// 루프 방식 선택 — 카드 안에서 바로 고른다(둘의 결과가 꽤 다르므로 설명을 붙인다).
+function askLoopMode(bg, card) {
+  const old = card.querySelector(".bg-acts");
+  const box = elx("div", "bg-loop-ask");
+  box.appendChild(elx("div", "muted", "어떻게 이을까요?"));
+  const pick = (text, title, mode) => {
+    const b = elx("button", "mini", text);
+    b.title = title;
+    b.onclick = (e) => { e.stopPropagation(); makeLoopBackground(bg, mode); };
+    return b;
+  };
+  box.append(
+    pick("디졸브", "끝과 시작을 겹쳐 서서히 넘긴다. 길이가 조금 짧아진다. 물·구름·보케처럼 방향성 없는 배경에 자연스럽다(권장).", "crossfade"),
+    pick("왕복", "정방향으로 갔다가 거꾸로 돌아온다. 이음새는 완벽하지만 되돌아가는 게 티 날 수 있다. 길이 2배.", "pingpong"),
+  );
+  const cancel = elx("button", "mini", "취소");
+  cancel.onclick = (e) => { e.stopPropagation(); box.replaceWith(old); };
+  box.appendChild(cancel);
+  old.replaceWith(box);
+}
+
+// 루프 영상을 굽고(서버 ffmpeg) → 라이브러리에 저장 + 선택한 슬라이드에 바로 적용.
+async function makeLoopBackground(bg, mode) {
+  const label = mode === "pingpong" ? "왕복" : "디졸브";
+  showBusy(`루프 영상 만드는 중 (${label})…`, "영상 길이에 따라 몇 초~1분 정도 걸립니다");
+  try {
+    const r = await callTool("make_loop_video", { url: bg.url, mode });
+    const looped = { ...bg, url: r.url, loop: true, muted: true };
+    const name = `${r.filename.replace(/\.mp4$/i, "")} (${label})`;
+    await callTool("save_background", { name, background: looped });
+    await loadBackgrounds();
+    const ids = bgTargetIds();
+    if (ids.length) await applyBackgroundTo(ids, looped);
+    renderBgPicker();
+    msg("bg-status", `루프 완성 · ${r.source_seconds}초 → ${r.result_seconds}초 (저장한 배경에 추가됨)`);
+  } catch (e) {
+    msg("bg-status", e.message, true);
+  } finally { hideBusy(); }
+}
+
+function renderBgPicker() {
+  const n = bgTargetIds().length;
+  $("bg-target-count").textContent = n > 1 ? `선택한 ${n}장` : "선택한 슬라이드 1장";
+
+  const saved = $("bg-saved");
+  saved.replaceChildren();
+  if (!state.backgrounds.length) {
+    saved.appendChild(elx("p", "muted", "아직 저장한 배경이 없습니다. 아래 “이 예배에서 쓰는 배경”에서 ⭐로 저장하거나, ＋로 영상을 올리세요."));
+  }
+  for (const item of state.backgrounds) {
+    saved.appendChild(bgCard(item.background, item.name, [
+      ["삭제", "danger", async () => {
+        if (!confirm(`저장한 배경 “${item.name}”을(를) 목록에서 지울까요?`)) return;
+        await callTool("remove_background", { background_id: item.id });
+        await loadBackgrounds();
+        renderBgPicker();
+      }],
+    ]));
+  }
+
+  const inuse = $("bg-inuse");
+  inuse.replaceChildren();
+  inuse.appendChild(bgCard(null, "테마 기본 (배경 없음)"));
+  for (const { background, count } of backgroundsInUse()) {
+    inuse.appendChild(bgCard(background, `${bgLabel(background)} · ${count}장`, [
+      ["⭐ 저장", "", async () => {
+        const name = prompt("배경 이름 (예: 잔잔한 물결 루프)", bgLabel(background));
+        if (!name) return;
+        await callTool("save_background", { name, background });
+        await loadBackgrounds();
+        renderBgPicker();
+        toast("배경 저장됨");
+      }],
+    ]));
+  }
+}
+
+function bgLabel(bg) {
+  if (!bg) return "테마 기본";
+  if (bg.type === "video" || bg.type === "image") {
+    return decodeURIComponent(String(bg.url || "").split("/").pop() || bg.type);
+  }
+  if (bg.type === "gradient") return "그라데이션";
+  return bg.value || "색";
+}
+
+// 영상/이미지를 올려 바로 선택한 슬라이드에 배경으로 깐다.
+async function uploadBackground(file) {
+  if (!file) return;
+  const isVideo = /^video\//.test(file.type);
+  msg("bg-status", "업로드 중…");
+  try {
+    const { url } = await uploadFile(file);
+    const bg = isVideo
+      ? { type: "video", url, loop: true, muted: true, overlay_dim: 0.4 }
+      : { type: "image", url, fit: "cover", overlay_dim: 0.35 };
+    await applyBackgroundTo(bgTargetIds(), bg);
+    msg("bg-status", "적용 완료");
+    renderBgPicker();
+  } catch (e) { msg("bg-status", e.message, true); }
+}
 
 // 슬라이드 선택 <select> — 값=슬라이드 id. blankLabel이 있으면 "" 옵션을 맨 앞에.
 function slideSelect(value, blankLabel, onPick) {
@@ -2594,7 +3117,8 @@ document.addEventListener("keydown", (e) => {
   closeMenus();
   // 열려 있는 모달도 Esc로 닫는다(추가·템플릿·사운드·성구·라이브러리).
   for (const [id, close] of [["add-modal", closeAddSlide], ["tpl-modal", closeTemplates],
-    ["sound-modal", closeSound], ["bibleref-modal", closeBibleRef], ["library-modal", closeLibrary]]) {
+    ["sound-modal", closeSound], ["bibleref-modal", closeBibleRef], ["library-modal", closeLibrary],
+    ["bg-modal", closeBgPicker], ["song-modal", closeSongs]]) {
     if (!$(id)?.hidden) { close(); break; }
   }
 });
@@ -2786,6 +3310,19 @@ function init() {
   $("sound-add").onclick = () => $("sound-file").click();
   $("sound-file").onchange = (e) => { const f = e.target.files[0]; if (f) addTrackFile(f); e.target.value = ""; };
   $("sound-modal").addEventListener("mousedown", (e) => { if (e.target === $("sound-modal")) closeSound(); });
+  // 찬양 가사 모달
+  $("song-btn").onclick = openSongs;
+  $("song-close").onclick = closeSongs;
+  $("song-query").addEventListener("input", () => { clearTimeout(songTimer); songTimer = setTimeout(searchSongs, 200); });
+  $("song-keep-pages").onchange = (e) => { $("song-lines").disabled = e.target.checked; };
+  $("song-modal").addEventListener("mousedown", (e) => { if (e.target === $("song-modal")) closeSongs(); });
+  $("style-copy-btn").onclick = copyStyleToOthers;
+  // 배경 고르기 모달 (여러 슬라이드에 같은 배경 영상)
+  $("bg-pick-btn").onclick = openBgPicker;
+  $("bg-close").onclick = closeBgPicker;
+  $("bg-upload-btn").onclick = () => $("bg-file").click();
+  $("bg-file").onchange = (e) => { const f = e.target.files[0]; if (f) uploadBackground(f); e.target.value = ""; };
+  $("bg-modal").addEventListener("mousedown", (e) => { if (e.target === $("bg-modal")) closeBgPicker(); });
   // 성구 모달
   $("bibleref-btn").onclick = openBibleRef;
   $("bibleref-close").onclick = closeBibleRef;
@@ -2800,6 +3337,7 @@ function init() {
   loadServices();
   loadTemplates();
   loadFonts();
+  loadBackgrounds();
   loadNetwork();
   connectPresentWs();   // 발표 위치를 따라가 리스트·타일에 "발표중" 표시
 }

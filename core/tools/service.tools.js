@@ -3,7 +3,7 @@
 import { register } from "./registry.js";
 import { ulid } from "../lib/ulid.js";
 import { nowIso, parseSlide } from "./_helpers.js";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, dirname, basename, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { saveUpload } from "../lib/uploads.js";
@@ -15,6 +15,20 @@ const ASSET_PREFIXES = ["/uploads/", "/render-cache/"];
 
 function slidesOf(db, serviceId) {
   return db.query("SELECT * FROM slides WHERE service_id = ? ORDER BY position").all(serviceId).map(parseSlide);
+}
+
+// 내보내는 JSON의 문자열을 NFC로 맞춘다. macOS 파일명·OCR에서 들어온 NFD(자모 분리)가
+// 공유 파일로 새어 나가면 받는 쪽에서 검색·비교가 어긋난다. 첨부 base64는 손대지 않는다
+// (거대한 문자열이고 정규화 대상도 아니다).
+function toNfc(v) {
+  if (typeof v === "string") return v.normalize("NFC");
+  if (Array.isArray(v)) return v.map(toNfc);
+  if (v && typeof v === "object") {
+    const out = {};
+    for (const [k, val] of Object.entries(v)) out[k] = k === "data_base64" ? val : toNfc(val);
+    return out;
+  }
+  return v;
 }
 
 function isAssetUrl(u) {
@@ -284,21 +298,27 @@ register({
       ({ background, elements, transition, hidden }));
     // 사운드 트랙은 구간을 슬라이드 순번으로 바꿔 내보낸다(가져온 쪽에서 새 id에 다시 연결).
     const tracks = tracksToPortable(parseTracks(s.tracks), full);
-    // 참조된 업로드 파일을 base64로 번들 (다른 머신에서도 이미지·음악 유지)
+    // 참조된 첨부 파일 목록 — assets=false 여도 항상 알려준다. 배경 영상은 수십~수백 MB가
+    // 되기도 해서(base64는 1.33배로 커진다) 넣을지 말지 부르는 쪽이 판단할 수 있어야 한다.
+    const refs = collectAssetUrls(slides, tracks).map((url) => {
+      const p = assetFilePath(url);
+      return { url, bytes: p && existsSync(p) ? statSync(p).size : null };
+    });
+    // base64로 번들 (다른 머신에서도 이미지·영상·음악 유지). 같은 파일은 한 번만.
     const bundled = [];
     if (assets) {
-      for (const url of collectAssetUrls(slides, tracks)) {
+      for (const { url } of refs) {
         const p = assetFilePath(url);
         if (p && existsSync(p)) bundled.push({ url, data_base64: readFileSync(p).toString("base64") });
       }
     }
-    return {
+    return toNfc({
       format: SHARE_FORMAT,
       title: s.title, date: s.date, worship_part: s.worship_part, theme_id: s.theme_id,
       theme_overrides: s.theme_overrides ? JSON.parse(s.theme_overrides) : null,
       transition: s.transition || "none",
-      slides, tracks, assets: bundled,
-    };
+      slides, tracks, assets: bundled, asset_refs: refs,
+    });
   },
 });
 

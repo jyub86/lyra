@@ -221,6 +221,57 @@ a { color: var(--accent); text-decoration: none; }
 /* 순서/타일에서 사운드가 재생되는 슬라이드 표시 */
 .sound-mark { color: var(--accent); font-size: 11px; }
 
+/* 배경 고르기 모달 — 카드 하나를 누르면 선택한 슬라이드 전체에 그 배경이 깔린다 */
+.bg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+.bg-grid > .muted { grid-column: 1 / -1; font-size: 12px; margin: 0; }
+.bg-card {
+  display: flex; flex-direction: column; gap: 5px; padding: 6px;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+}
+.bg-card:hover { border-color: var(--accent); }
+.bg-thumb {
+  position: relative; aspect-ratio: 16 / 9; border-radius: 5px; overflow: hidden;
+  background: #0b0e14; display: flex; align-items: center; justify-content: center;
+}
+.bg-thumb video { width: 100%; height: 100%; object-fit: cover; }
+.bg-thumb.bg-none { color: var(--muted); font-size: 12px; border: 1px dashed var(--line); }
+.bg-tag {
+  position: absolute; right: 4px; bottom: 4px; padding: 1px 5px; border-radius: 4px;
+  background: rgba(0,0,0,.6); color: #fff; font-size: 10px; font-weight: 700;
+}
+.bg-name { font-size: 12px; line-height: 1.3; word-break: break-all; }
+.bg-acts { display: flex; gap: 4px; }
+.bg-acts .mini { flex: 1; font-size: 11px; padding: 3px 4px; }
+/* 루프 방식 고르기 (영상 카드) */
+.bg-loop-ask { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.bg-loop-ask > .muted { flex: 1 0 100%; font-size: 11px; }
+.bg-loop-ask .mini { flex: 1; font-size: 11px; padding: 3px 4px; }
+/* 인스펙터: 배경 버튼 줄 + 여러 장 선택 안내 */
+.insp-bg-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.bg-multi { font-size: 11px; margin: 4px 0 0; color: var(--accent); }
+/* 찬양 가사 검색 모달 */
+.song-opts { display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--muted); }
+.song-opts input[type="number"] { width: 56px; }
+.song-row { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.song-row:hover { border-color: var(--accent); }
+.song-row .lib-name { flex: 1; }
+.song-meta { display: flex; gap: 6px; align-items: center; white-space: nowrap; font-size: 11px; }
+.song-warn { padding: 1px 5px; border-radius: 4px; background: #e0af68; color: #1a1a2e; font-weight: 700; }
+
+/* 서식 복사기 (복사 → 붙이기) */
+.insp-style-copy { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.insp-style-copy > .mini { width: 100%; }
+.insp-style-copy .hint { font-size: 11px; margin: 4px 0 0; line-height: 1.45; }
+.style-src-cancel { margin-left: 6px; font-size: 10px; padding: 1px 5px; }
+/* 서식 원본으로 지정된 슬라이드 표시 */
+.slide-row.style-src { box-shadow: inset 2px 0 0 #e0af68; }
+.slide-row.style-src .num::after { content: " 🎨"; }
+/* 추가 모달의 "디자인(이번만)" 그룹 */
+.add-style { margin-top: 8px; }
+.add-style .hint { font-size: 11px; margin: 0 0 6px; line-height: 1.45; }
+/* 템플릿 목록의 입력칸 안내 */
+.tpl-note { flex: 1 0 100%; font-size: 11px; margin: 4px 0 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
 /* 성구 모달 */
 .bibleref-hint { font-size: 12px; margin: 0; }
 .bibleref-bar { display: flex; gap: 8px; align-items: center; }

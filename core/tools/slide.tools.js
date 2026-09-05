@@ -149,16 +149,34 @@ register({
 
 register({
   name: "set_slide_background",
-  description: "슬라이드 배경을 설정한다. null이면 테마 기본.",
+  description: "슬라이드 배경을 설정한다. null이면 테마 기본. slide_ids로 여러 장에 같은 배경을 한 번에 " +
+    "적용할 수 있다(가사 슬라이드 여러 장에 같은 배경 영상을 까는 용도). 발표 화면은 연속된 슬라이드의 " +
+    "배경 영상/GIF가 같으면 되감지 않고 이어서 재생한다.",
   input_schema: {
     type: "object",
-    properties: { slide_id: { type: "string" }, background: { type: "object" } },
-    required: ["slide_id"],
+    properties: {
+      slide_id: { type: "string", description: "대상 슬라이드 하나" },
+      slide_ids: { type: "array", items: { type: "string" }, description: "여러 슬라이드에 같은 배경 적용" },
+      background: { type: "object", description: "배경 객체(color/gradient/image/video). 생략·null이면 테마 기본" },
+    },
   },
-  handler: ({ slide_id, background }, { db }) => {
-    db.query("UPDATE slides SET background = ? WHERE id = ?").run(background == null ? null : JSON.stringify(background), slide_id);
-    touchService(db, serviceIdForSlide(db, slide_id));
-    return { ok: true };
+  handler: ({ slide_id, slide_ids, background }, { db }) => {
+    const ids = [...new Set([...(slide_ids || []), ...(slide_id ? [slide_id] : [])])];
+    if (!ids.length) throw new Error("slide_id 또는 slide_ids가 필요합니다");
+    const value = background == null ? null : JSON.stringify(background);
+    const q = db.query("UPDATE slides SET background = ? WHERE id = ?");
+    const services = new Set();
+    const tx = db.transaction(() => {
+      for (const id of ids) {
+        const r = q.run(value, id);
+        if (r.changes === 0) throw new Error(`unknown slide: ${id}`);
+        const sid = serviceIdForSlide(db, id);
+        if (sid) services.add(sid);
+      }
+      for (const sid of services) touchService(db, sid);
+    });
+    tx();
+    return { ok: true, count: ids.length };
   },
 });
 

@@ -10,6 +10,32 @@ const indexParam = q.get("index");
 const idsParam = q.get("ids");
 const includeHidden = q.get("hidden") === "1";   // 기본: 발표에서 숨긴 장은 제외
 
+// 배경 영상은 <video>로 그리지 않고 **정지 이미지로 바꿔서** 그린다.
+// --print-to-pdf 의 --virtual-time-budget 은 미디어 디코드를 기다려주지 않아서, 영상을
+// 그대로 두면 첫 프레임(루프 배경은 보통 검정)이 찍히거나 아예 비어 나온다. 서버에서
+// ffmpeg으로 대표 프레임(기본=중간 지점, background.poster_time 으로 지정 가능)을 뽑아
+// <img>로 그리면 이미지 대기 경로(waitPainted)가 그대로 통해 확실하게 찍힌다.
+// ffmpeg이 없으면 원래대로 <video>를 그린다(첫 프레임 · graceful).
+async function withPosterBackgrounds(slides) {
+  const posters = new Map();   // 영상 url → 정지 이미지 url (여러 장이 같은 배경을 쓴다)
+  const out = [];
+  for (const s of slides) {
+    const bg = s.background;
+    if (bg?.type !== "video" || !bg.url) { out.push(s); continue; }
+    const key = `${bg.url}|${bg.poster_time ?? ""}`;
+    if (!posters.has(key)) {
+      const args = { url: bg.url };
+      if (bg.poster_time != null) args.seconds = bg.poster_time;
+      posters.set(key, await callTool("get_video_poster", args).then((r) => r.url).catch(() => null));
+    }
+    const poster = posters.get(key);
+    out.push(poster
+      ? { ...s, background: { type: "image", url: poster, fit: bg.fit || "cover", overlay_dim: bg.overlay_dim } }
+      : s);
+  }
+  return out;
+}
+
 // 폰트와 모든 이미지가 실제로 그려질 때까지 기다린다. 이걸 안 하면 스크린샷에
 // 폰트 대체(네모)나 빈 이미지가 찍힌다.
 async function waitPainted(root) {
@@ -41,6 +67,8 @@ async function main() {
     slides = slides[i] ? [slides[i]] : [];
     document.body.classList.add("single");
   }
+
+  slides = await withPosterBackgrounds(slides);   // 배경 영상 → 대표 프레임 정지 이미지
 
   for (const s of slides) {
     const page = document.createElement("div");

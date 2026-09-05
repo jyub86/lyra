@@ -28,6 +28,130 @@
 >   프로필은 `-env:UserInstallation`(OS 무관). 미설치 시 명확 안내로 graceful. Windows: LibreOffice/poppler 설치+PATH.
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
+> ⚠️ **v4.12 추가 (찬양 PPT 모음 → 가사 데이터)** — 구현 기준(현행)
+> - 왜: 악보 PPT를 그만 쓰고 "가사만 + 배경 영상"으로 바꾸면서, 기존 찬양 PPT 모음의 **가사를 Lyra 안에서
+>   검색·재사용**해야 했다. 대상 = `찬양/찬양ppt모음_WIDE` 474곡(.ppt 296 + .pptx 93 + .ppt 85).
+> - **왜 OCR인가 (실측 근거)**: `.pptx` 93곡 중 가사 텍스트가 제대로 든 건 **11곡뿐**, 69곡은 가사가
+>   **이미지로 박혀** 있다(예: "시선" = 슬라이드마다 PNG 2개, 추출 텍스트는 6자). `.ppt`는 텍스트가 있어도
+>   **홀수 줄만 담긴 목차 텍스트박스**라 화면에 보이는 가사와 다르다. → 슬라이드를 렌더해 보이는 그대로
+>   읽는 것만이 일관된 방법. `pptx` 임베드 텍스트만 믿으면 80%를 놓친다.
+> - **파이프라인** `scripts/extract-song-lyrics.js`: LibreOffice(`--convert-to pdf`) → `pdftoppm`(PNG, 110dpi)
+>   → **macOS Vision OCR**(`scripts/ocr-vision.swift` → `data/bin/ocr`, 필요 시 자동 빌드) → 장식 제거.
+>   worker마다 LibreOffice 프로필을 분리해야 병렬이 막히지 않는다(`--jobs`, 기본 4).
+>   곡당 ~7.5초 · 474곡 ≈ 13분(jobs 6).
+> - **장식 제거는 결정적 규칙**(휴리스틱 파서 아님 → 설계 §15 위반 아님. 슬라이드·줄 나눔은 원본 그대로 가져온다):
+>   ① 글자 높이 < 5% (작게 박힌 목차·출처) ② **여러 장에 반복되는 줄**(제목·목차·워터마크 — 가사는 장마다 다르다)
+>   ③ 한 글자·기호 ④ 숫자/구분선만. 앞뒤의 빈 장(표지·간지)은 떼고 중간 빈 장은 원본 구성이라 남긴다.
+>   OCR이 좌표(x·y·w·h)와 신뢰도를 함께 내보내는 이유가 이 필터다.
+> - **데이터**: `data/source/songs.json`(gitignore됨 — 저작권 콘텐츠, bible/hymns와 같은 취급).
+>   `lyra-songs/v1` = `{songs:[{title, source, ext, slides, pages:[[줄…],…], lines, chars, conf}], failed}`.
+>   **사람이 직접 고쳐도 되는 원본** → 고친 뒤 `bun run core/db/seed/index.js --songs`로 재적재(성경·찬송 재적재 생략).
+> - **DB**: `songs(id,title,source,pages,conf)` + `song_pages(song_id,page_no,text)` + `songs_fts(title,text)`.
+>   `page_no` = **원본 PPT의 슬라이드 순서 그대로** → 가져오면 원래 넘김이 재현되고, 필요하면 다시 나눌 수도 있다.
+>   적재 시 `cleanTitle`이 파일명 잡음을 정리한다(`PPT `, `16_9`, `_Wide`, `(WIDE)`, `(검)` …). 원본명은 `source`에 남는다.
+> - **도구**: `search_song(query,limit)` · `get_song(song_id)` · `list_songs(limit,offset)` (`core/tools/search.tools.js`),
+>   `add_song_slides(service_id, song_id, template_id?, keep_pages?, lines_per_slide?, position?, style?)`
+>   (`core/tools/content.tools.js`). keep_pages=true(기본)면 **장마다 apply_template을 한 번씩** 불러 원본 구성을
+>   그대로 만든다(이어붙이면 lines_per_slide 규칙이 원본 나눔을 뭉갠다). v4.11의 커스텀 가사 템플릿·style과 그대로 조합된다.
+> - **편집기**: ＋추가 → **🎵 찬양 가사에서 찾기**(`#song-modal`) = 제목·가사 검색 + 디자인 템플릿 선택
+>   (bind:lyrics를 가진 템플릿만 나열) + "원본 장 나눔 유지" 토글. `conf < 0.4`인 곡엔 **검토** 배지.
+> - **NFC 정규화 필수(실측 함정)**: macOS 파일명은 한글을 **NFD(자모 분리)**로 준다. 그대로 넣으면
+>   제목 **381/400곡이 NFD**로 저장돼 `LIKE '%내 안에 사는 이%'`가 **0건**이 된다 —
+>   FTS(unicode61)는 우연히 동작해서 눈에 안 띈다. 그래서 ① 추출 스크립트가 title·source·OCR 줄을
+>   NFC로 쓰고 ② `cleanTitle`·`import-songs`가 제목·가사를 다시 NFC로 맞추고
+>   ③ **`export_service`가 내보내는 JSON 전체를 NFC로 정규화**한다(`toNfc`, `data_base64`는 제외)
+>   → 공유 파일에 자모 분리가 새어 나가지 않는다. 라이브러리 색인의 NFC 정책과 같은 이유.
+> - **후렴이 장식으로 걸러지던 버그(실측 수정)**: "여러 장에 반복되면 장식" 규칙만으로 지우면
+>   **후렴이 날아간다**(15곡 손실 관측: 원본 10장 → 가사 2장 등). 화면 가사는 그 장에서 가장 큰 글자이므로
+>   **반복 + 그 장 최대 높이의 70% 미만**일 때만 장식으로 본다(`bigRatio`). 수정 후 15곡 전부 복구,
+>   가사줄 9,727 → 10,646(+919). Vision은 실행마다 인접 줄을 합치는 편차가 있어 장수 동일·줄 수만
+>   1~7줄 차이 나는 곡이 3곡 생겼다(구조 손실은 아님).
+> - **실적(현행 데이터)**: 473/474곡 · 4,213장 · 가사 10,646줄 · 13.4분(jobs 6) · `songs.json` 704KB.
+>   실패 1곡 = `고단한 인생길…(예수, 늘 함께하시네)_WIDE_PPT.pptx` — 정상 pptx인데 LibreOffice가
+>   이 파일의 PDF 쓰기에만 실패(Io/Write). 짧은 ASCII 이름으로 복사해도 동일 → 파일명 문제 아님.
+> - **한계(정직하게)**: OCR 산출물이므로 오탈자가 남는다. 신뢰도(conf)는 Vision 기준이며 외곽선 장식 글꼴에서
+>   0.5 근처로 낮게 나오지만 실제 정확도는 그보다 높다(자모 분리 0% 관측). 추출은 **macOS 전용**(Vision) —
+>   윈도우에서는 만들어진 `songs.json`을 가져다 쓰면 된다.
+
+> ⚠️ **v4.11 추가 (가사 템플릿 자유화 · 서식 복사기)** — 구현 기준(현행)
+> - 문제였던 것: 찬양(가사)로 추가하면 **템플릿에 저장된 한 가지 디자인**만 나왔다. 곡마다 다르게 하려면
+>   템플릿 자체를 바꿔야 했고(= 다음 주에도 그 디자인), 이미 추가한 10장을 고치려면 장마다 반복해야 했다.
+>   더 결정적으로 **커스텀 템플릿은 가사를 생성하지 못했다** — `save_template`이 `params_schema='{}'`로
+>   고정 저장하고 `apply_template`이 custom을 `buildSlidesFromTemplate` 없이 그대로 한 장 넣었기 때문.
+>   (사용자의 "크로마키 가사"·"루마키 가사"가 정확히 이 상태였다: `bind:"lyrics"`는 살아 있고 입력칸만 없음)
+> - **① `apply_template(…, style)`**: 이번에 추가하는 **본문 요소**의 서식만 덮어쓴다(템플릿 불변).
+>   필드 = `STYLE_FIELDS` = font·size·color·align·valign·weight·line_height·x·y·w·h·opacity.
+>   대상은 `styleTargets()` — 콘텐츠 요소의 본문(field 없음/all/text/body/lyrics)이나 `bind`이 lyrics·items인
+>   텍스트. 없으면 bind된 텍스트 전부(타이틀 등). 제목·참조까지 같이 키우면 배치가 무너지므로 본문만.
+>   편집기 = ＋추가 모달의 접이식 **"디자인 (이번에 추가하는 것만)"**(글꼴·크기·색·가로/세로정렬·굵기·줄간격,
+>   비우면 템플릿 기본). 위치·크기는 캔버스에서 맞추고 아래 ③으로 퍼뜨리는 쪽이 낫다.
+> - **② 커스텀 템플릿도 생성형이 된다**: `save_template`이 요소의 `bind`/콘텐츠 종류에서
+>   **`params_schema`를 자동 도출**(`deriveParamsSchema`)하고 굳은 내용을 비운다(`stripForTemplate`이
+>   bind된 텍스트를 자리표시자로). lyrics면 `lines_per_slide`까지. `apply_template`은 custom이라도
+>   **params_schema에 입력칸이 있으면** 기본 종류와 같은 생성·분할 경로를 탄다.
+>   → "내가 꾸민 가사 디자인"을 매주 가사만 넣어 재사용. `update_template`도 custom이면 스키마를 재도출.
+>   **하위호환**: 입력칸이 빈 옛 커스텀 템플릿은 예전처럼 디자인 그대로 한 장 추가(동작 불변).
+>   옛것을 바꾸고 싶으면 `upgrade_template_params(template_id)` — 디자인 유지, 굳은 내용만 삭제.
+>   편집기 템플릿 목록이 해당 템플릿에 **"⚡ 입력칸 만들기"** 버튼과 상태 설명을 띄운다(사용자 확인 후 실행).
+>   `list_templates`가 이제 **spec까지 반환**한다(추가 모달의 기본값·업그레이드 안내에 필요).
+> - **③ 서식 복사기 `copy_slide_style(source_slide_id, target_slide_ids, include_background?, fields?)`**:
+>   한 장을 캔버스에서 원하는 대로 꾸민 뒤 나머지 장에 **서식만** 입힌다(내용 불변).
+>   요소 짝짓기 = `bind:<name>` → `content:<type>:<field>` → `type:<type>:<n번째>`. 짝 없는 요소는 안 건드린다
+>   → 가사 슬라이드에서 실행해도 성경·찬송 슬라이드는 영향 없음(키가 안 겹친다).
+>   UI는 **"복사 → 붙이기" 2단계**(우측 슬라이드 패널). 1단계로 하면 대상을 ⌘클릭하는 순간 현재 슬라이드가
+>   바뀌어 **원본이 마지막에 클릭한 대상으로 슬쩍 바뀐다** — 그래서 원본을 `state.styleSource`에 고정하고
+>   목록 행에 🎨 표시를 준다. 대상 미선택 상태로 누르면 "나머지 전체"(확인 후).
+> - 버그 수정: 추가 모달의 가사 입력칸 라벨이 `lyrics`(원문 키)로 나왔다 → PARAM_LABELS에 추가.
+
+> ⚠️ **v4.10 추가 (여러 슬라이드에 같은 배경 영상)** — 구현 기준(현행)
+> - 배경 목적이 바뀌었다: **악보 PPT 대신 가사만 띄우고 뒤에 루프 영상·GIF를 깐다.** 그래서 한 배경이
+>   여러 슬라이드에 걸린다. 데이터 모델은 그대로(배경은 슬라이드마다) — 대신 **적용**과 **재생 연속성**을 붙였다.
+> - **적용(일괄)**: `set_slide_background` · `set_video_background`가 `slide_ids`(배열)를 받는다. 한 트랜잭션,
+>   touch_service 1회. 편집기는 멀티셀렉(⌘/Shift 클릭) 상태에서 배경을 바꾸면 **선택 전체**에 적용
+>   (`bgTargetIds()`), 버튼 라벨·안내문이 "N장에 배경 적용"으로 바뀐다.
+> - **재생 연속성(핵심)**: 예전엔 슬라이드마다 스테이지를 새로 만들어 `<video>`가 재생성 → **넘길 때마다 루프가
+>   0초로 되감기고 깜박였다**(실측: 4.18초 → 0.68초). 이제
+>   ① `layer-renderer`가 `bgKey(bg)`로 배경 정체성을 비교해 **키가 같으면 배경을 다시 그리지 않는다**
+>     (편집기에서 타이핑·선택할 때마다 영상이 리로드되던 것도 함께 해결),
+>   ② 발표 화면은 영상/GIF 배경(`isLiveBackground`)일 때 그 `.layer-bg`를 **deck 바닥으로 hoist**해 살려두고
+>     그 위에 투명 스테이지(`.on-live-bg`)만 갈아끼운다 → 같은 배경인 동안 `<video>` 1개가 계속 재생
+>     (실측: 3.82 → 4.52 → 5.22 → 5.92초, 동일 element). 배경이 바뀌면 hoist를 풀고 평소 전환 효과를 태운다.
+>   사운드 트랙(`tracks`)이 슬라이드 구간에 걸쳐 `<audio>`를 살려두는 것과 같은 발상.
+> - **배경 라이브러리**: 자주 쓰는 배경을 이름 붙여 저장(`settings.backgrounds` JSON). 도구
+>   `list_backgrounds` / `save_background(name, background)` / `remove_background(background_id)`.
+>   편집기 우측 "슬라이드 > 🎬 배경 고르기" 모달(`#bg-modal`) = 저장한 배경 + **이 예배에서 쓰는 배경**(사용 장수까지)
+>   + 영상·이미지 업로드. 카드를 누르면 선택한 슬라이드 전체에 적용.
+> - **템플릿 경로도 그대로 동작**: 배경을 넣은 슬라이드를 `save_template`으로 저장하면 `apply_template`이 만드는
+>   모든 가사 장에 같은 배경이 복제된다 → 매주 "가사 + 배경 영상" 한 번에 생성.
+> - **루프가 아닌 영상을 루프로 굽기**: 끝 프레임 ≠ 첫 프레임이면 반복할 때마다 툭 튄다. 발표 중에
+>   손보는 게 아니라 **미리 파일로 한 번 구워둔다**(런타임 비용 0). `make_loop_video(url, mode, seconds?)`
+>   → `/uploads/<ulid>.mp4`. `probe_video(url)`로 길이·코덱 확인. `core/lib/ffmpeg.js`(findFfmpeg/probeVideo/makeLoopVideo).
+>   - `crossfade`(기본): body(N~D-N) 뒤에 **[끝 N초 → 첫 N초] xfade**를 붙인다. 디졸브 끝 지점이 원본 N초
+>     = body 시작과 같은 그림이라 되감겨도 이음새가 없다. 길이 = D-N. 겹침은 D/3로 상한.
+>     실측(검정→흰색 램프 6초): 이음새 Y차 **253 → 3**.
+>   - `pingpong`: 정방향+역방향(역방향 첫 프레임 1장 버려 멈칫 제거). 이음새 **완전 일치(0)**, 길이 ≈2배.
+>     `reverse`가 전체를 메모리에 올리므로 **60초 초과는 거부**. 방향성 있는 영상은 되돌아가는 게 티 난다.
+>   - 출력은 항상 **H.264/yuv420p/무음 + faststart** → 윈도우 방송실 PC 코덱 호환 문제(H.265 등)도 같이 해결
+>     (실측: hevc 입력 → h264 출력). ffmpeg은 **선택 외부 도구**, 없으면 설치 안내로 graceful.
+>     `check_environment`에 `ffmpeg` 항목 추가. 탐지 순서 PATH → `LYRA_FFMPEG` → `tools/` → 일반 설치 위치.
+>   - UI: 배경 고르기 모달의 **영상 카드에 `🔁 루프로`** → 카드 안에서 디졸브/왕복 선택(설명은 title) →
+>     busy 오버레이 → 완성되면 라이브러리에 `<이름> (디졸브|왕복)`으로 저장 + 선택한 슬라이드에 즉시 적용.
+> - **내보내기에서의 배경 영상** (경로별로 다르다)
+>   - **이미지 내보내기**: `<video>`를 그대로 두면 **첫 프레임**이 찍힌다 → 루프 배경은 검정에서
+>     페이드인하는 경우가 많아 **배경이 새까맣게 나온다**(실측 확인). `--print-to-pdf`의
+>     `--virtual-time-budget`은 미디어 디코드를 기다려주지 않아서 페이지에서 `currentTime`을
+>     옮기는 방식은 **안 통한다**(실측). 그래서 **서버에서 ffmpeg으로 대표 프레임(기본=중간 지점)을
+>     뽑아 `<img>`로 바꿔 그린다** — `get_video_poster(url, seconds?)` → `/render-cache/poster-<key>.jpg`
+>     (캐시), `client/export/export.js`의 `withPosterBackgrounds`. 이미지 대기 경로(`waitPainted`)를
+>     그대로 타므로 확실하다. `background.poster_time`(초)으로 지점 지정 가능.
+>     같은 배경을 쓰는 여러 장은 poster 1개만 만든다. ffmpeg 없으면 원래대로 `<video>`(첫 프레임) — graceful.
+>   - **JSON 내보내기**(`export_service`): 배경 영상도 **base64로 통째 포함**된다(중복 파일은 1번만).
+>     base64는 1.33배 → 398MB 영상이면 **531MB JSON**(실측). 그래서 `asset_refs:[{url,bytes}]`를
+>     `assets=false`일 때도 항상 반환하고, 편집기는 합계 **40MB 초과 시 물어본다**(함께 넣기 / JSON만).
+>     `assets:false`면 배경 url만 남으므로 받는 쪽에 파일이 없으면 배경이 빈다.
+>   - **데이터 번들**(`scripts/export-bundle.js`): uploads를 파일째 복사 → 영상 그대로 이관(대용량 이관 권장 경로).
+> - 참고: 썸네일·타일은 여전히 영상 배경을 그라데이션 플레이스홀더로 대체한다(`thumbSlide`, `<video>` 남발 방지).
+
 > ⚠️ **v4.9 추가 (이미지 내보내기)** — 구현 기준(현행)
 > - JSON(`export_service`) 외에 **슬라이드를 이미지로** 내보낸다. `export_slide_images(service_id, slide_ids?, include_hidden?, format?)`
 >   → `data/exports/<날짜_부_제목>/001.webp …` + 파일 목록. 편집기는 ⚙예배▾ "🖼 이미지로 내보내기"

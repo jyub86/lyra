@@ -3,6 +3,7 @@ import { register } from "./registry.js";
 import {
   listBibleBooks, getBiblePassage, searchBible,
   getHymn, searchHymn, getReading, searchReading,
+  getSong, searchSong, listSongs,
 } from "../db/content.js";
 
 register({
@@ -69,6 +70,50 @@ register({
     required: ["query"],
   },
   handler: ({ query, limit }, { db }) => ({ results: searchHymn(db, query, limit) }),
+});
+
+// ---- 찬양 가사 (기존 PPT 모음에서 추출) ----
+register({
+  name: "search_song",
+  description: "찬양 가사 검색(제목·가사 본문). 여러 단어는 AND. 일치하는 곡 id·제목·장수를 반환한다. " +
+    "conf는 OCR 신뢰도(낮으면 가사에 오탈자가 있을 수 있다).",
+  read: true,
+  input_schema: {
+    type: "object",
+    properties: { query: { type: "string" }, limit: { type: "integer", default: 20 } },
+    required: ["query"],
+  },
+  handler: ({ query, limit }, { db }) => ({ results: searchSong(db, query, limit) }),
+});
+
+register({
+  name: "get_song",
+  description: "찬양 곡 id로 제목과 장별 가사(lyrics = 원본 PPT의 슬라이드 나눔 그대로)를 반환한다.",
+  read: true,
+  input_schema: {
+    type: "object",
+    properties: { song_id: { type: "integer" } },
+    required: ["song_id"],
+  },
+  handler: ({ song_id }, { db }) => {
+    const song = getSong(db, song_id);
+    if (!song) throw new Error(`unknown song: ${song_id}`);
+    return song;
+  },
+});
+
+register({
+  name: "list_songs",
+  description: "추출된 찬양 곡 목록(제목순). 전체 목록을 훑어볼 때 쓴다.",
+  read: true,
+  input_schema: {
+    type: "object",
+    properties: { limit: { type: "integer", default: 500 }, offset: { type: "integer", default: 0 } },
+  },
+  handler: ({ limit, offset }, { db }) => ({
+    total: db.query("SELECT count(*) n FROM songs").get().n,
+    songs: listSongs(db, limit, offset),
+  }),
 });
 
 register({

@@ -67,6 +67,36 @@ CREATE VIRTUAL TABLE IF NOT EXISTS hymns_fts USING fts5(
 );
 
 -- =====================================================================
+-- CONTENT: 찬양 가사 (Songs) — 기존 찬양 PPT 모음에서 추출한 가사
+-- 슬라이드 나눔을 원본 PPT 그대로 보존한다(page_no) → 가져오면 원래 넘김 그대로 재현되고,
+-- 필요하면 lines_per_slide로 다시 나눌 수도 있다.
+-- 원본 = data/source/songs.json (scripts/extract-song-lyrics.js 산출물, 손으로 고쳐도 됨)
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS songs (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  title    TEXT NOT NULL,             -- 곡 제목(원본 파일명에서)
+  source   TEXT,                      -- 원본 PPT 경로(재추출·확인용)
+  pages    INTEGER NOT NULL DEFAULT 0,-- 가사 장 수
+  conf     REAL,                      -- OCR 신뢰도 평균(낮으면 검토 대상)
+  UNIQUE (title, source)
+);
+
+CREATE TABLE IF NOT EXISTS song_pages (
+  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+  song_id INTEGER NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+  page_no INTEGER NOT NULL,           -- 1..N (원본 슬라이드 순서)
+  text    TEXT NOT NULL,              -- 줄바꿈(\n)으로 구분된 그 장의 가사 줄
+  UNIQUE (song_id, page_no)
+);
+CREATE INDEX IF NOT EXISTS idx_song_pages ON song_pages(song_id, page_no);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS songs_fts USING fts5(
+  title, text,
+  song_id UNINDEXED,
+  tokenize = 'unicode61'
+);
+
+-- =====================================================================
 -- CONTENT: 교독문 (Responsive readings)
 -- =====================================================================
 CREATE TABLE IF NOT EXISTS responsive_readings (

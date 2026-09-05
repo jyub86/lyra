@@ -81,6 +81,31 @@ export function searchHymn(db, query, limit = 20) {
   ).all(m, limit);
 }
 
+// ---------- 찬양 가사 ----------
+// 기존 찬양 PPT 모음에서 추출한 가사. pages = 원본 PPT의 슬라이드 나눔 그대로.
+
+export function getSong(db, id) {
+  const song = db.query("SELECT id, title, source, pages, conf FROM songs WHERE id = ?").get(id);
+  if (!song) return null;
+  const rows = db.query("SELECT page_no, text FROM song_pages WHERE song_id = ? ORDER BY page_no").all(id);
+  return { ...song, lyrics: rows.map((r) => r.text.split("\n")) };
+}
+
+export function searchSong(db, query, limit = 20) {
+  const m = ftsQuery(query);
+  if (!m) return [];
+  return db.query(
+    `SELECT song_id FROM songs_fts WHERE songs_fts MATCH ? ORDER BY rank LIMIT ?`
+  ).all(m, limit).map((r) => {
+    const meta = db.query("SELECT id, title, pages, conf FROM songs WHERE id = ?").get(r.song_id);
+    return meta || { id: r.song_id };
+  }).filter(Boolean);
+}
+
+export function listSongs(db, limit = 500, offset = 0) {
+  return db.query("SELECT id, title, pages, conf FROM songs ORDER BY title LIMIT ? OFFSET ?").all(limit, offset);
+}
+
 // ---------- 교독문 ----------
 
 export function getReading(db, number) {

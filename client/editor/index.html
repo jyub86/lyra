@@ -31,6 +31,7 @@
         <div id="menu-add-templates"></div>
         <div class="menu-sep"></div>
         <button id="bibleref-btn" class="menu-item">📖 성구로 추가 <span class="mi-sub">참조 · 주보 PDF</span></button>
+        <button id="song-btn" class="menu-item">🎵 찬양 가사에서 찾기 <span class="mi-sub">PPT 모음에서 뽑은 가사</span></button>
         <button id="import-ppt" class="menu-item">🖼 파일에서 가져오기 <span class="mi-sub">PPT · PDF · 이미지</span></button>
         <button id="library-btn" class="menu-item">🔎 PPT 라이브러리에서 찾기</button>
       </div>
@@ -145,11 +146,19 @@
                 </select>
               </label>
               <div id="insp-bg-fields" class="fields"></div>
-              <button id="insp-save" class="mini">배경 저장</button>
+              <p id="insp-bg-multi" class="muted bg-multi" hidden></p>
+              <div class="insp-bg-btns">
+                <button id="insp-save" class="mini">배경 저장</button>
+                <button id="bg-pick-btn" class="mini" title="자주 쓰는 배경(루프 영상 등)을 골라 선택한 슬라이드 전체에 적용">🎬 배경 고르기</button>
+              </div>
+              <p id="insp-msg" class="msg"></p>
+              <div class="insp-style-copy">
+                <button id="style-copy-btn" class="mini" title="이 슬라이드의 글꼴·크기·색·정렬·위치를 선택한 다른 슬라이드의 같은 요소에 복사합니다 (내용은 그대로)">🎨 이 서식을 나머지에 적용</button>
+                <p id="style-copy-hint" class="hint muted"></p>
+              </div>
               <label class="set-row insp-hide-row" title="발표에서 이 슬라이드를 건너뜁니다">발표에서 숨기기
                 <input id="insp-hidden" type="checkbox" />
               </label>
-              <p id="insp-msg" class="msg"></p>
             </div>
           </div>
         </details>
@@ -292,6 +301,59 @@
       </div>
       <div id="sound-list" class="sound-list"></div>
       <input id="sound-file" type="file" accept="audio/*" hidden />
+    </div>
+  </div>
+
+  <!-- ===== 찬양 가사 검색 모달 (추출해 둔 PPT 가사) ===== -->
+  <div id="song-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <strong>🎵 찬양 가사</strong>
+        <span class="spacer"></span>
+        <button id="song-close" class="mini">닫기 ✕</button>
+      </div>
+      <p class="muted sound-hint">
+        기존 찬양 PPT 모음에서 뽑아 둔 가사입니다. 곡을 고르면 <b>원본 PPT의 장 나눔 그대로</b> 가사 슬라이드가 추가됩니다.
+        가사는 OCR로 읽은 것이라 <b>오탈자가 있을 수 있습니다</b> — 추가한 뒤 캔버스에서 고치세요.
+      </p>
+      <div class="lib-search">
+        <input id="song-query" type="search" placeholder="제목·가사 검색 (여러 단어는 모두 포함, 비우면 전체 목록)" />
+        <select id="song-template" title="가사 디자인 템플릿"></select>
+      </div>
+      <div class="song-opts">
+        <label class="sd-check" title="끄면 아래 줄 수대로 다시 나눕니다">
+          <input id="song-keep-pages" type="checkbox" checked /> 원본 장 나눔 유지
+        </label>
+        <label class="sd-fade">줄 수 <input id="song-lines" type="number" min="1" max="8" value="2" disabled /></label>
+        <span id="song-status" class="muted"></span>
+      </div>
+      <div id="song-list" class="lib-results"></div>
+    </div>
+  </div>
+
+  <!-- ===== 배경 고르기 모달 (여러 슬라이드에 같은 배경) ===== -->
+  <div id="bg-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <strong>🎬 배경</strong>
+        <span class="spacer"></span>
+        <button id="bg-close" class="mini">닫기 ✕</button>
+      </div>
+      <p class="muted sound-hint">
+        고른 배경이 <b id="bg-target-count">선택한 슬라이드</b>에 한 번에 적용됩니다.
+        가사 슬라이드를 <b>⌘/Ctrl·Shift 클릭</b>으로 여러 장 고른 뒤 배경을 누르세요.
+        연속된 슬라이드가 같은 영상이면 발표 중 <b>되감기지 않고 이어서</b> 재생됩니다.
+        반복될 때 끝에서 툭 튀는 영상은 <b>🔁 루프로</b>를 눌러 매끄럽게 이어지도록 구울 수 있습니다.
+      </p>
+      <div class="sound-bar">
+        <button id="bg-upload-btn" class="mini accent">＋ 영상·이미지 올리기</button>
+        <span id="bg-status" class="muted"></span>
+      </div>
+      <div class="section-title">저장한 배경</div>
+      <div id="bg-saved" class="bg-grid"></div>
+      <div class="section-title">이 예배에서 쓰는 배경</div>
+      <div id="bg-inuse" class="bg-grid"></div>
+      <input id="bg-file" type="file" accept="video/*,image/*" hidden />
     </div>
   </div>
 

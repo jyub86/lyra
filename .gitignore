@@ -28,3 +28,7 @@ data/base-backups/
 
 # 이미지 내보내기 산출물 (생성물)
 data/exports/
+
+# Vision OCR 빌드 산출물 (scripts/ocr-vision.swift → 생성물)
+data/bin/
+data/.lyrics-work/

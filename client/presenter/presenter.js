@@ -2,13 +2,16 @@
 // 조작(도구를 호출해 모두 동기화). 렌더링은 편집과 동일한 layer-renderer 사용.
 // 슬라이드 전환은 service.transition(none|fade|slide)을 따른다.
 import { callTool, loadServiceTheme } from "/shared/api.js";
-import { renderSlideWithLayers } from "/shared/layer-renderer.js";
+import { renderSlideWithLayers, bgKey, isLiveBackground } from "/shared/layer-renderer.js";
 
 const deck = document.getElementById("deck");
 const black = document.getElementById("black");
 const hint = document.getElementById("hint");
 
-const state = { service: null, theme: null, index: 0, blackout: false, stage: null };
+const state = {
+  service: null, theme: null, index: 0, blackout: false, stage: null,
+  bgLayer: null, bgKey: null,   // 슬라이드를 넘겨도 살려두는 배경(영상·GIF) 레이어
+};
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
 function flatSlides() { return state.service?.slides || []; }
@@ -28,17 +31,48 @@ async function loadService(serviceId) {
   state.theme = await loadServiceTheme(state.service);
 }
 
-function makeStage(slide) {
+// ---- 여러 슬라이드에 걸친 배경 영상/GIF ----
+// 가사 슬라이드 뒤에 루프 영상을 까는 구성에서는, 슬라이드를 넘길 때마다 <video>를 새로
+// 만들면 루프가 처음으로 되감기고 검게 깜박인다. 그래서 배경이 같은 동안에는 그 배경
+// 레이어를 deck 바닥에 남겨두고 글씨(스테이지)만 갈아끼운다 — 사운드 트랙과 같은 발상.
+// (배경이 바뀌는 순간에는 평소대로 스테이지 안에서 그려 전환 효과를 그대로 태운다)
+const TRANSPARENT_BG = { type: "color", value: "transparent" };
+
+function liveKey(slide) {
+  const bg = slide?.background ?? state.theme?.background ?? null;
+  return isLiveBackground(bg) ? bgKey(bg) : null;
+}
+
+function dropLiveBg() {
+  state.bgLayer?.remove();
+  state.bgLayer = null;
+  state.bgKey = null;
+}
+
+// 방금 붙인 스테이지의 배경 레이어를 deck 바닥으로 옮긴다. 위치·크기가 같아 화면상 변화는
+// 없고(옮기는 것이라 영상은 계속 재생), 이후 슬라이드는 그 위에 글씨만 얹는다.
+function hoistLiveBg(stage, key) {
+  const bg = stage.querySelector(":scope > .layer-bg");
+  if (!bg) return;
+  deck.insertBefore(bg, deck.firstChild);
+  stage.classList.add("on-live-bg");
+  state.bgLayer = bg;
+  state.bgKey = key;
+}
+
+function makeStage(slide, onLiveBg) {
   const el = document.createElement("div");
-  el.className = "slide-layers";
-  renderSlideWithLayers(el, slide, state.theme, { live: true });   // 발표: 영상 요소 소리 재생
+  el.className = "slide-layers" + (onLiveBg ? " on-live-bg" : "");
+  // 배경이 이미 바닥에서 재생 중이면 스테이지는 투명하게 그린다(아래 영상이 비쳐 보이도록).
+  const s = onLiveBg ? { ...slide, background: TRANSPARENT_BG } : slide;
+  renderSlideWithLayers(el, s, state.theme, { live: true });   // 발표: 영상 요소 소리 재생
   return el;
 }
 
 // 새 스테이지를 만들되, 이미지가 디코드될 때까지 기다린다. 교체 전에 디코드해두면
 // 화면을 바꿀 때 이미지가 아직 안 그려져 생기는 검정 깜박임이 없다.
-async function makeStageDecoded(slide) {
-  const el = makeStage(slide);
+async function makeStageDecoded(slide, onLiveBg) {
+  const el = makeStage(slide, onLiveBg);
   const imgs = [...el.querySelectorAll("img")].filter((i) => i.getAttribute("src"));
   // 최대 300ms만 기다림(느리거나 깨진 이미지에 무한정 매달리지 않게).
   await Promise.race([
@@ -58,11 +92,17 @@ async function renderNow() {
   syncTracks();                                  // 현재 위치에 맞는 사운드 트랙 재생/정지
   const slide = slides[state.index];
   const seq = ++renderSeq;
-  if (!slide) { deck.replaceChildren(); state.stage = null; return; }
-  const stage = await makeStageDecoded(slide);
+  if (!slide) { deck.replaceChildren(); dropLiveBg(); state.stage = null; return; }
+  const key = liveKey(slide);
+  const reuse = !!key && key === state.bgKey && !!state.bgLayer?.isConnected;
+  const stage = await makeStageDecoded(slide, reuse);
   if (seq !== renderSeq) return;                 // 그 사이 더 최신 렌더가 시작됨 → 버림
-  deck.replaceChildren(stage);                   // 디코드 완료 후 한 번에 교체
+  if (!reuse) dropLiveBg();
+  // 디코드 완료 후 한 번에 교체 — 단, 계속 재생 중인 배경 레이어는 남긴다.
+  for (const n of [...deck.children]) if (n !== state.bgLayer) n.remove();
+  deck.appendChild(stage);
   state.stage = stage;
+  if (!reuse && key) hoistLiveBg(stage, key);
 }
 
 // Crossfade / slide from the current stage to `newIndex` per service.transition.
@@ -79,8 +119,11 @@ async function transitionTo(newIndex) {
   if (!slide) { renderNow(); return; }
   if (transition === "none" || !state.stage) { renderNow(); return; }
 
+  // 배경이 이전 슬라이드와 같은 영상/GIF면 그 배경은 건드리지 않는다 → 글씨만 바뀐다.
+  const key = liveKey(slide);
+  const reuse = !!key && key === state.bgKey && !!state.bgLayer?.isConnected;
   const outgoing = state.stage;
-  const incoming = await makeStageDecoded(slide);   // 이미지 디코드 후 애니메이션 시작(깜박임 방지)
+  const incoming = await makeStageDecoded(slide, reuse);   // 이미지 디코드 후 애니메이션 시작(깜박임 방지)
   if (state.stage !== outgoing) return;             // 그 사이 다른 렌더/전환이 시작됨 → 취소
   state.stage = incoming;
 
@@ -91,7 +134,8 @@ async function transitionTo(newIndex) {
     // 게 보인다. 옛 글씨와 새 글씨가 대칭으로 교차(옛↓ 새↑)해 겹침도 과하지 않다.
     const outEls = outgoing.querySelector(":scope > .layer-elements");
     const inEls = incoming.querySelector(":scope > .layer-elements");
-    const inBg = incoming.querySelector(":scope > .layer-bg");
+    // 배경을 이어 쓰는 중이면 페이드시킬 새 배경이 없다(바닥의 영상이 그대로 보인다).
+    const inBg = reuse ? null : incoming.querySelector(":scope > .layer-bg");
     deck.appendChild(incoming);   // incoming = 위(나중 DOM), outgoing 배경이 바닥
     const ease = `opacity ${DUR}ms ease`;
     incoming.style.opacity = "1";
@@ -111,6 +155,12 @@ async function transitionTo(newIndex) {
     outgoing.style.transition = ease;
     incoming.style.transform = "translateX(0)";
     outgoing.style.transform = `translateX(${dir > 0 ? -100 : 100}%)`;
+    // 배경 영상 구간을 벗어나는 중이면 옛 배경도 같이 밀어낸다(혼자 서 있지 않도록).
+    // 이어 쓰는 중이면 배경은 그대로 두고 글씨만 밀린다.
+    if (!reuse && state.bgLayer) {
+      state.bgLayer.style.transition = ease;
+      state.bgLayer.style.transform = `translateX(${dir > 0 ? -100 : 100}%)`;
+    }
   }
 
   setTimeout(() => {
@@ -119,6 +169,11 @@ async function transitionTo(newIndex) {
     // fade에서 만졌던 내부 레이어 인라인 스타일 원복(다음 전환에 재사용되므로)
     for (const layer of incoming.querySelectorAll(":scope > .layer-bg, :scope > .layer-elements")) {
       layer.style.transition = layer.style.opacity = "";
+    }
+    if (state.stage !== incoming) return;   // 그 사이 다른 전환이 시작됨 → 배경은 그쪽이 관리
+    if (!reuse) {
+      dropLiveBg();                          // 옛 배경 영상 정리(새 배경이 이미 위를 덮고 있다)
+      if (key) hoistLiveBg(incoming, key);   // 새 배경이 영상/GIF면 다음 슬라이드를 위해 살려둔다
     }
   }, DUR + 40);
 }

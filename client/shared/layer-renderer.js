@@ -15,7 +15,27 @@ export function applyTheme(root, theme) {
   set("--font-family", f.family || "sans-serif");
 }
 
+// 배경의 "정체성" 키. 두 슬라이드의 키가 같으면 같은 배경이다.
+// 가사 뒤에 루프 영상/GIF를 까는 구성에서, 슬라이드를 넘길 때마다 배경을 새로 만들면
+// 영상이 처음으로 되감기고 검게 깜박인다 → 키가 같으면 아예 다시 그리지 않는다.
+export function bgKey(bg) {
+  if (!bg) return "none";
+  return [bg.type, bg.url || bg.value || "", bg.from || "", bg.to || "", bg.angle ?? "",
+    bg.fit || "", bg.loop !== false, bg.muted !== false, bg.playback_rate ?? "",
+    bg.overlay_dim ?? ""].join("|");
+}
+
+// 영상·GIF처럼 "계속 움직이는" 배경인지. 이런 배경만 슬라이드를 넘길 때 살려둘 값이 있다.
+export function isLiveBackground(bg) {
+  if (!bg) return false;
+  if (bg.type === "video") return true;
+  return bg.type === "image" && /\.gif(\?|#|$)/i.test(bg.url || "");
+}
+
 export function renderBackground(bgEl, bg) {
+  const key = bgKey(bg);
+  if (bgEl.dataset.bgKey === key) return;   // 같은 배경 → 그대로 둔다(영상 재시작·깜박임 방지)
+  bgEl.dataset.bgKey = key;
   bgEl.replaceChildren();
   bgEl.style.cssText = "";
   if (!bg || bg.type === "color") {
@@ -31,6 +51,8 @@ export function renderBackground(bgEl, bg) {
     v.src = bg.url; v.autoplay = true; v.muted = bg.muted !== false; v.loop = bg.loop !== false; v.playsInline = true;
     v.className = "bg-video";
     if (bg.playback_rate) v.playbackRate = bg.playback_rate;
+    // 이미지로 내보낼 때 찍을 프레임 위치(초). 지정 없으면 내보내기 화면이 중간 지점을 쓴다.
+    if (bg.poster_time != null) v.dataset.posterTime = String(bg.poster_time);
     bgEl.appendChild(v); v.play?.().catch(() => {});
   }
   const dim = bg && bg.overlay_dim;

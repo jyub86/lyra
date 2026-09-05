@@ -15,6 +15,10 @@ html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor
   overflow: hidden;
 }
 .deck .slide-layers { position: absolute; inset: 0; width: 100%; }
+/* 여러 슬라이드가 같은 배경 영상/GIF를 쓸 때: 배경 레이어는 deck 바닥에 계속 살아 있고
+   그 위의 슬라이드는 투명하게 얹힌다(→ 넘겨도 영상이 되감기지 않는다). */
+.deck > .layer-bg { position: absolute; inset: 0; z-index: 0; }
+.deck .slide-layers.on-live-bg { background: transparent; }
 .blackout { position: fixed; inset: 0; background: #000; z-index: 10; }
 
 /* 자동재생이 막혔을 때만 뜨는 "소리 켜기" 버튼 (사운드 트랙) */

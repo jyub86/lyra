@@ -126,20 +126,37 @@ function buildSlidesFromTemplate(db, spec, params, style) {
     // every content element of that type (e.g. hymn title/label/lyrics) shares the chunk
     return chunks.map((chunk) => ({
       background: bg,
-      elements: els.map((e) =>
-        e.type === type ? { ...e, params: chunk.params, content: chunk.content }
-          : CONTENT_TYPES.has(e.type) ? { ...e }
-            : fillElement(e, params)),
+      elements: els.map((e) => {
+        if (e.type === type) {
+          // 새로 가져온 내용을 넣을 땐 옛 인라인 편집(html)을 버린다 — 남기면 렌더러가
+          // html을 우선해 방금 가져온 가사가 아니라 옛 글이 그려진다.
+          const { html, ...rest } = e;
+          return { ...rest, params: chunk.params, content: chunk.content };
+        }
+        return CONTENT_TYPES.has(e.type) ? { ...e } : fillElement(e, params);
+      }),
     }));
   }
 
-  // lyrics text splits by lines_per_slide
+  // lyrics text → 장 나누기
   const lyricsEl = els.find((e) => e.type === "text" && e.bind === "lyrics");
   if (lyricsEl && params.lyrics) {
-    const lines = String(params.lyrics).split("\n").map((s) => s.trim()).filter(Boolean);
-    const per = params.lines_per_slide || 2;
-    const chunks = [];
-    for (let i = 0; i < lines.length; i += per) chunks.push(lines.slice(i, i + per).join("\n"));
+    const raw = String(params.lyrics).replace(/\r\n?/g, "\n");
+    // 빈 줄이 있으면 **그것을 장 구분으로** 본다. "찬양 가사에서 찾기"의 복사가 원본 PPT의
+    // 장 나눔을 빈 줄로 실어 보내므로, 붙여넣기만 해도 원래 넘김이 그대로 재현된다.
+    // 빈 줄이 없으면 예전처럼 lines_per_slide로 균등 분할.
+    const blocks = raw.split(/\n[ \t]*\n/)
+      .map((b) => b.split("\n").map((s) => s.trim()).filter(Boolean))
+      .filter((b) => b.length);
+    let chunks;
+    if (blocks.length > 1) {
+      chunks = blocks.map((b) => b.join("\n"));
+    } else {
+      const lines = blocks[0] || [];
+      const per = params.lines_per_slide || 2;
+      chunks = [];
+      for (let i = 0; i < lines.length; i += per) chunks.push(lines.slice(i, i + per).join("\n"));
+    }
     if (!chunks.length) chunks.push("");
     return chunks.map((text) => ({
       background: bg,
@@ -155,7 +172,11 @@ function buildSlidesFromTemplate(db, spec, params, style) {
 // (다음에 이 템플릿으로 추가할 때 params로 채워지므로 지난주 가사가 남아 있으면 안 된다).
 function stripForTemplate(elements) {
   return (elements || []).map((e) => {
-    if (CONTENT_TYPES.has(e.type)) { const { content, params, ...rest } = e; return rest; }
+    // 콘텐츠 요소는 **디자인만** 남긴다. html은 그 슬라이드의 내용을 인라인 편집한 흔적이라
+    // 템플릿에 남으면 다음에 이 템플릿으로 만든 슬라이드가 새로 가져온 가사 대신 옛 글을
+    // 그대로 그린다(렌더러가 html을 우선한다). 게다가 편집기가 남긴 빈 <div>·ce-line 여백까지
+    // 따라와 줄 간격이 실제보다 넓어진다. → content·params와 함께 html도 뗀다.
+    if (CONTENT_TYPES.has(e.type)) { const { content, params, html, ...rest } = e; return rest; }
     if (e.type === "text" && e.bind) {
       const { html, ...rest } = e;
       return { ...rest, text: PLACEHOLDER[e.bind] || e.bind };

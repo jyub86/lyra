@@ -79,6 +79,8 @@ export async function loadTools() {
     import("./media.tools.js"),
     import("./track.tools.js"),
     import("./template.tools.js"),
+    import("./song.tools.js"),
+    import("./package.tools.js"),
     import("./library.tools.js"),
     import("./export.tools.js"),
     import("./font.tools.js"),

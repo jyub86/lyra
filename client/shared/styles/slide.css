@@ -42,7 +42,12 @@
 .ce-head .ce-no { color: var(--accent); }
 .ce-hno { color: var(--accent); font-weight: 700; }  /* field="title" 장 번호 */
 .ce-label { font-size: 0.55em; color: var(--accent); margin-bottom: 0.15em; }
-.ce-line { margin: 0.12em 0; }
+/* 가사 줄 간격은 line-height 하나로만 정해진다.
+   예전엔 margin: 0.12em 0 이 붙어 있었는데, .el-content가 flex(세로정렬)라 이 여백이
+   합쳐지지 않고 위아래로 그대로 더해져(0.24em) 줄 간격이 설정값보다 넓어졌다.
+   게다가 인라인 편집을 거치면 한 블록으로 바뀌어 여백이 사라져서, 같은 요소인데도
+   "생성 직후"와 "고친 뒤"의 줄 간격이 달랐다. (실측 128px vs 112px) */
+.ce-line { margin: 0; }
 .ce-seg { margin: 0.32em 0; }
 .ce-tag {
   display: inline-block; font-size: 0.5em; padding: 0.15em 0.6em; border-radius: 1em;

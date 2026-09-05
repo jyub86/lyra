@@ -35,9 +35,20 @@ const LEAD_GLYPH = /^[^\s가-힣][ \t](?=[가-힣])/;
 // 줄 앞뒤에 남는 장식 문자(줄표·가운뎃점·별표·따옴표 등). 가사 안쪽 문장부호는 건드리지 않는다.
 const EDGE_JUNK = /^[\s\-–—~·•*※◆■□○●▶▷「」『』"'`^_=+|\\/<>()[\]{}.,:;!?]+|[\s\-–—~·•*※◆■□○●▶▷「」『』"'`^_=+|\\/<>.,:;]+$/g;
 
+// 음절 늘임표(하－시, 사랑을－) 제거.
+// 원본 PPT는 음을 끄는 자리에 줄표를 넣어두는데, 가사 데이터로는 방해만 된다(실측 4,740줄).
+// 영문 하이픈(Way-maker)은 단어의 일부이므로 **영문자 사이**에 있을 때만 남긴다.
+function stripDashes(s) {
+  return s.replace(/[\-–—]/g, (m, i, str) => {
+    const a = str[i - 1], b = str[i + 1];
+    return (a && b && /[A-Za-z]/.test(a) && /[A-Za-z]/.test(b)) ? m : "";
+  });
+}
+
 export function stripLeadGlyph(line) {
   let s = String(line).normalize("NFC");
   s = s.replace(LEAD_GLYPH, "");
+  s = stripDashes(s);
   s = s.replace(EDGE_JUNK, "");
   return s.replace(/\s{2,}/g, " ").trim();
 }

@@ -2307,37 +2307,40 @@ const MB = 1048576;
 // 첨부를 base64로 넣으면 1.33배로 커진다. 배경 영상은 수십 MB가 예사라 이 선을 넘으면 물어본다.
 const ASSET_WARN_BYTES = 40 * MB;
 
+// 예배를 .lyra 패키지로 내보낸다. 서버가 zip을 굽고 스트리밍으로 내려주므로
+// 브라우저가 수백 MB를 메모리에 들지 않는다(예전 base64 JSON 방식의 실패 원인).
+// 첨부가 크면 "참조만" 내보낼지 물어본다 — 받는 쪽에 같은 파일이 있으면 그걸 재사용한다.
 async function exportService() {
   if (!state.serviceId) { toast("예배를 먼저 선택하세요"); return; }
-  // 먼저 첨부 없이(가벼움) 받아 어떤 파일이 얼마나 큰지 확인한다.
-  let payload = await callTool("export_service", { service_id: state.serviceId, assets: false });
-  const refs = payload.asset_refs || [];
+  const refs = (await callTool("export_service", { service_id: state.serviceId, assets: false })).asset_refs || [];
   const bytes = refs.reduce((n, r) => n + (r.bytes || 0), 0);
-  let withAssets = refs.length > 0;
+  let include = refs.length > 0;
   if (bytes > ASSET_WARN_BYTES) {
     const mb = (bytes / MB).toFixed(0);
-    const est = ((bytes * 1.34) / MB).toFixed(0);
-    withAssets = confirm(
-      `첨부 파일(배경 영상·이미지·음악)이 ${refs.length}개, 합계 ${mb}MB입니다.\n` +
-      `JSON에 함께 넣으면 파일이 약 ${est}MB가 됩니다.\n\n` +
-      `확인 = 함께 넣기 (오래 걸리고 브라우저가 버벅일 수 있음)\n` +
-      `취소 = JSON만 내보내기 (영상 파일은 따로 전달 · 전체 이관은 ⚙설정의 데이터 번들 권장)`
+    include = confirm(
+      `첨부 파일(배경 영상·이미지·음악)이 ${refs.length}개, 합계 ${mb}MB입니다.\n\n` +
+      `확인 = 첨부까지 담기 (약 ${mb}MB · 처음 옮기거나 다른 교회에 줄 때)\n` +
+      `취소 = 참조만 담기 (수십 KB · 받는 쪽에 같은 파일이 이미 있을 때)`
     );
   }
-  if (withAssets) {
-    showBusy("내보내기 준비 중…", refs.length ? `첨부 ${refs.length}개 포함` : "");
-    try { payload = await callTool("export_service", { service_id: state.serviceId }); }
-    finally { hideBusy(); }
-  }
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${payload.date || "service"}_${payload.worship_part || ""}_${payload.title || "예배"}.json`.replace(/\s+/g, "-");
-  a.click();
-  URL.revokeObjectURL(a.href);
-  if (!withAssets && refs.length) {
-    toast(`JSON만 내보냈습니다 · 첨부 ${refs.length}개는 따로 전달하세요`);
-  }
+  showBusy("패키지 만드는 중…", include ? `첨부 ${refs.length}개 포함` : "참조만");
+  try {
+    const res = await fetch("/api/export/package", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-lyra-client": CLIENT_ID },
+      body: JSON.stringify({ service_id: state.serviceId, include_assets: include }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "내보내기 실패");
+    const name = decodeURIComponent((res.headers.get("content-disposition") || "").split("filename*=UTF-8''")[1] || "service.lyra");
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast(include ? `패키지 내보냄 · 첨부 ${refs.length}개 포함` : `패키지 내보냄 · 참조만(첨부 ${refs.length}개 제외)`);
+  } catch (e) { toast(e.message); }
+  finally { hideBusy(); }
 }
 // 슬라이드를 이미지(WebP)로 내보내기 → zip 다운로드.
 // 렌더는 서버가 헤드리스 크롬으로 /export 화면을 굽는다 → 발표 화면과 같은 그림이 나온다.
@@ -2379,7 +2382,17 @@ async function importService(file) {
     if (!res.ok) throw new Error(body.error || "가져오기 실패");
     await loadServices(body.service_id);
     hideBusy();
-    msg("add-msg", "가져오기 완료");
+    // 첨부가 어떻게 처리됐는지 알려준다 — "참조만" 패키지를 받았을 때 무엇이 빠졌는지 알아야 한다.
+    const miss = (body.missing || []).length;
+    const parts = [];
+    if (body.restored) parts.push(`첨부 ${body.restored}개 복원`);
+    if (body.reused) parts.push(`${body.reused}개는 이미 있어 재사용`);
+    msg("add-msg", parts.length ? `가져오기 완료 · ${parts.join(" · ")}` : "가져오기 완료");
+    if (miss) {
+      alert(`가져왔지만 첨부 ${miss}개가 없습니다.\n\n` +
+        `"참조만" 패키지를 받았고 이 PC에 그 파일이 없을 때 생깁니다.\n` +
+        `보낸 쪽에서 첨부까지 담아 다시 내보내거나, 해당 배경을 직접 지정해 주세요.`);
+    }
   } catch (e) { hideBusy(); alert("가져오기 실패: " + e.message); }
 }
 
@@ -2448,40 +2461,26 @@ function openSound() {
 function closeSound() { stopTrackPreview(); $("sound-modal").hidden = true; }
 
 // ===== 찬양 가사 검색 (기존 PPT 모음에서 추출한 가사) =====
-// 곡을 고르면 원본 PPT의 장 나눔 그대로 가사 슬라이드가 들어간다.
+// 곡을 고르면 **가사를 복사**해 준다 — 슬라이드는 만들지 않는다. 사용자가 이미 만들어 둔
+// 디자인 템플릿(＋추가)으로 넣는 게 낫기 때문. 복사 형식은 "빈 줄 = 장 구분"이라
+// apply_template이 원본 PPT의 넘김을 그대로 재현한다.
 // 가사는 OCR 산출물이라 오탈자가 있을 수 있어 conf가 낮은 곡엔 표시를 준다.
 let songTimer = null;
 
 function openSongs() {
   if (!state.serviceId) { toast("예배 순서를 먼저 선택하세요"); return; }
   $("song-modal").hidden = false;
+  $("song-preview").hidden = true;
   fillSongTemplates();
+  songPicked = null;
   msg("song-status", "");
   $("song-query").focus();
   searchSongs();
 }
-function closeSongs() { $("song-modal").hidden = true; }
-
-// 가사를 담을 수 있는 템플릿(bind:lyrics)만 고를 수 있게 채운다.
-function fillSongTemplates() {
-  const sel = $("song-template");
-  if (!sel) return;
-  const prev = sel.value;
-  sel.replaceChildren();
-  const usable = state.templates.filter((t) =>
-    (t.spec?.elements || []).some((e) => e.type === "text" && e.bind === "lyrics"));
-  for (const t of usable) {
-    const o = document.createElement("option");
-    o.value = t.id;
-    o.textContent = t.kind === "builtin" ? t.name : `${t.name} (내 템플릿)`;
-    sel.appendChild(o);
-  }
-  if (!usable.length) {
-    const o = document.createElement("option");
-    o.value = "builtin-praise"; o.textContent = "찬양(가사)";
-    sel.appendChild(o);
-  }
-  sel.value = prev && [...sel.options].some((o) => o.value === prev) ? prev : (usable[0]?.id || "builtin-praise");
+async function closeSongs() {
+  if (!(await confirmSongDiscard())) return;
+  markSongDirty(false);
+  $("song-modal").hidden = true;
 }
 
 async function searchSongs() {
@@ -2498,7 +2497,7 @@ async function searchSongs() {
       msg("song-status", "");
       return;
     }
-    if (!q && r.total) msg("song-status", `전체 ${r.total}곡`);
+    msg("song-status", q ? `${songs.length}곡` : `전체 ${r.total ?? songs.length}곡`);
     for (const s of songs) {
       const row = elx("div", "lib-row song-row");
       const name = elx("span", "lib-name", s.title);
@@ -2508,34 +2507,162 @@ async function searchSongs() {
         w.title = "OCR 신뢰도가 낮습니다 — 가사에 오탈자가 있을 수 있어요";
         meta.appendChild(w);
       }
-      const add = elx("button", "mini accent", "추가");
-      add.onclick = () => addSongSlides(s);
-      row.append(name, meta, add);
-      row.onclick = (e) => { if (e.target === add) return; addSongSlides(s); };
+      row.append(name, meta);
+      row.onclick = () => pickSong(s, row);
       list.appendChild(row);
     }
   } catch (e) { msg("song-status", e.message, true); }
 }
 
-async function addSongSlides(song) {
-  const keep = $("song-keep-pages").checked;
+// 가사를 "빈 줄 = 장 구분" 형식의 텍스트로. 이대로 붙여넣으면 원본 넘김이 재현된다.
+function songText(lyrics) {
+  return (lyrics || []).map((page) => page.join("\n")).join("\n\n");
+}
+
+// 클립보드 복사. 아이패드 등에서 http로 접속하면 navigator.clipboard를 못 쓰므로
+// (보안 컨텍스트가 아님) 선택 후 execCommand로 넘어간다. 그것도 막히면 직접 고르도록 남긴다.
+async function copyText(text, srcEl) {
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch { /* 아래 폴백 */ }
+  try {
+    const ta = srcEl || Object.assign(document.createElement("textarea"), { value: text });
+    if (!srcEl) { ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); }
+    ta.focus(); ta.select(); ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    if (!srcEl) ta.remove();
+    return ok;
+  } catch { return false; }
+}
+
+async function pickSong(song, row) {
+  if (!(await confirmSongDiscard())) return;
+  for (const r of document.querySelectorAll("#song-list .song-row.sel")) r.classList.remove("sel");
+  row?.classList.add("sel");
+  try {
+    const full = await callTool("get_song_text", { song_id: song.id });
+    showSongEditor({ id: full.id, title: full.title, text: full.text });
+    const ok = await copyText(full.text, $("song-lyrics"));
+    msg("song-status", ok
+      ? `“${full.title}” 가사 복사됨 · ＋추가에서 템플릿을 고르고 붙여넣으세요`
+      : "복사가 막혔습니다 — 아래 칸에서 직접 선택해 복사하세요");
+  } catch (e) { msg("song-status", e.message, true); }
+}
+
+// 가사를 담을 수 있는 템플릿(bind:lyrics를 가진 것)만 고를 수 있게 채운다.
+// 마지막에 쓴 디자인을 기억해 둔다 — 매주 같은 걸 쓰기 때문.
+function fillSongTemplates() {
+  const sel = $("song-template");
+  if (!sel) return;
+  const usable = state.templates.filter((t) =>
+    (t.spec?.elements || []).some((e) => e.type === "text" && e.bind === "lyrics"));
+  sel.replaceChildren();
+  for (const t of usable) {
+    const o = document.createElement("option");
+    o.value = t.id;
+    o.textContent = t.kind === "builtin" ? t.name : `${t.name} (내 템플릿)`;
+    sel.appendChild(o);
+  }
+  if (!usable.length) {
+    const o = document.createElement("option");
+    o.value = "builtin-praise"; o.textContent = "찬양(가사)";
+    sel.appendChild(o);
+  }
+  const last = localStorage.getItem("lyra.songTemplate");
+  if (last && [...sel.options].some((o) => o.value === last)) sel.value = last;
+}
+
+// 편집 칸에 있는 가사 그대로 슬라이드를 만든다(저장하지 않은 수정·새 곡도 그대로 반영).
+// 빈 줄이 장 구분이라 apply_template이 원본 넘김을 그대로 재현한다.
+async function addSongToService() {
+  const lyrics = $("song-lyrics").value;
+  if (!lyrics.trim()) { msg("song-status", "가사가 비어 있습니다", true); return; }
+  if (!state.serviceId) { msg("song-status", "예배를 먼저 선택하세요", true); return; }
+  const templateId = $("song-template").value || "builtin-praise";
+  localStorage.setItem("lyra.songTemplate", templateId);
   const idx = slides().findIndex((s) => s.id === state.selected);
   try {
-    msg("song-status", `“${song.title}” 추가 중…`);
-    const r = await callTool("add_song_slides", {
+    const r = await callTool("apply_template", {
+      template_id: templateId,
       service_id: state.serviceId,
-      song_id: song.id,
-      template_id: $("song-template").value || "builtin-praise",
-      keep_pages: keep,
-      lines_per_slide: Number($("song-lines").value) || 2,
+      params: { lyrics },
       position: idx >= 0 ? idx + 1 : undefined,
     });
     await refresh();
     if (r.slide_ids?.[0]) { setSingleSelection(r.slide_ids[0]); render(); }
-    closeSongs();
-    toast(`“${song.title}” ${r.slide_ids?.length || 0}장 추가됨`);
+    const name = $("song-title").value.trim() || "가사";
+    msg("song-status", `“${name}” ${r.slide_ids?.length || 0}장 추가됨`);
+    toast(`${r.slide_ids?.length || 0}장 추가됨`);
   } catch (e) { msg("song-status", e.message, true); }
 }
+
+// 오른쪽 편집 칸을 채운다. id가 없으면 새 곡.
+function showSongEditor({ id, title, text }) {
+  songPicked = { id: id ?? null, title: title || "", text: text || "" };
+  $("song-preview").hidden = false;
+  $("song-title").value = songPicked.title;
+  $("song-lyrics").value = songPicked.text;
+  $("song-delete").hidden = !id;
+  markSongDirty(false);
+  updateSongMeta();
+}
+
+// 가사 칸의 현재 내용으로 "N장 · 장당 M줄" 표시를 갱신한다(빈 줄 = 장 구분).
+function updateSongMeta() {
+  const pages = $("song-lyrics").value.replace(/\r\n?/g, "\n").split(/\n[ \t]*\n/)
+    .map((b) => b.split("\n").filter((l) => l.trim())).filter((b) => b.length);
+  if (!pages.length) { $("song-preview-meta").textContent = ""; return; }
+  const per = pages.map((p) => p.length);
+  const lo = Math.min(...per), hi = Math.max(...per);
+  $("song-preview-meta").textContent = `${pages.length}장 · 장당 ${lo === hi ? lo : `${lo}~${hi}`}줄`;
+}
+
+function markSongDirty(on) {
+  songDirty = on;
+  $("song-dirty").hidden = !on;
+}
+
+// 저장하지 않은 편집이 있으면 물어본다(다른 곡 선택·모달 닫기 전에).
+async function confirmSongDiscard() {
+  if (!songDirty) return true;
+  return confirm("저장하지 않은 가사 수정이 있습니다. 버릴까요?");
+}
+
+async function saveSong() {
+  const title = $("song-title").value.trim();
+  const lyrics = $("song-lyrics").value;
+  if (!title) { msg("song-status", "제목을 입력하세요", true); return; }
+  try {
+    const r = await callTool("save_song", { song_id: songPicked?.id ?? undefined, title, lyrics });
+    songPicked = { id: r.song_id, title: r.title, text: lyrics };
+    $("song-delete").hidden = false;   // 새 곡이었다면 이제 지울 수 있다
+    markSongDirty(false);
+    await searchSongs();
+    // 저장한 곡을 목록에서 다시 선택 표시
+    for (const row of document.querySelectorAll("#song-list .song-row"))
+      if (row.querySelector(".lib-name")?.textContent === r.title) row.classList.add("sel");
+    msg("song-status", `“${r.title}” 저장됨 · ${r.pages}장 ${r.lines}줄`);
+  } catch (e) { msg("song-status", e.message, true); }
+}
+
+async function deleteSong() {
+  if (!songPicked?.id) return;
+  if (!confirm(`“${songPicked.title}”을(를) 목록에서 지울까요?\n원본 PPT 파일은 그대로 남습니다.`)) return;
+  try {
+    await callTool("delete_song", { song_id: songPicked.id });
+    songPicked = null;
+    markSongDirty(false);
+    $("song-preview").hidden = true;
+    await searchSongs();
+    msg("song-status", "삭제됨");
+  } catch (e) { msg("song-status", e.message, true); }
+}
+
+let songPicked = null;
+let songDirty = false;
 
 // ===== 배경 고르기 (여러 슬라이드에 같은 배경 영상/이미지) =====
 // 가사만 띄우는 구성에서는 배경 루프 영상을 여러 장에 똑같이 깔아야 한다. 여기서 고른
@@ -3314,8 +3441,29 @@ function init() {
   $("song-btn").onclick = openSongs;
   $("song-close").onclick = closeSongs;
   $("song-query").addEventListener("input", () => { clearTimeout(songTimer); songTimer = setTimeout(searchSongs, 200); });
-  $("song-keep-pages").onchange = (e) => { $("song-lines").disabled = e.target.checked; };
-  $("song-modal").addEventListener("mousedown", (e) => { if (e.target === $("song-modal")) closeSongs(); });
+  $("song-copy").onclick = async () => {
+    const text = $("song-lyrics").value;   // 편집 중인 내용을 그대로 복사
+    if (!text.trim()) return;
+    const ok = await copyText(text, $("song-lyrics"));
+    msg("song-status", ok ? "가사 복사됨 · ＋추가에서 템플릿을 고르고 붙여넣으세요"
+      : "복사가 막혔습니다 — 아래 칸에서 직접 선택해 복사하세요");
+  };
+  $("song-new").onclick = async () => {
+    if (!(await confirmSongDiscard())) return;
+    for (const r of document.querySelectorAll("#song-list .song-row.sel")) r.classList.remove("sel");
+    showSongEditor({ id: null, title: "", text: "" });
+    msg("song-status", "새 곡 — 제목과 가사를 넣고 저장하세요");
+    $("song-title").focus();
+  };
+  $("song-add").onclick = addSongToService;
+  $("song-save").onclick = saveSong;
+  $("song-delete").onclick = deleteSong;
+  // 편집 중 표시 + 장/줄 수 실시간 갱신
+  $("song-lyrics").addEventListener("input", () => { markSongDirty(true); updateSongMeta(); });
+  $("song-title").addEventListener("input", () => markSongDirty(true));
+  $("song-modal").addEventListener("mousedown", async (e) => {
+    if (e.target === $("song-modal") && await confirmSongDiscard()) closeSongs();
+  });
   $("style-copy-btn").onclick = copyStyleToOthers;
   // 배경 고르기 모달 (여러 슬라이드에 같은 배경 영상)
   $("bg-pick-btn").onclick = openBgPicker;

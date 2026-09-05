@@ -58,9 +58,9 @@
         <button id="sound-btn" class="menu-item">🎵 사운드 트랙… <span class="mi-sub">발표 중 배경 음악</span></button>
         <button id="tpl-btn" class="menu-item">🎨 디자인 템플릿…</button>
         <div class="menu-sep"></div>
-        <button id="export-btn" class="menu-item">⬇ 예배 순서 내보내기 <span class="mi-sub">JSON</span></button>
+        <button id="export-btn" class="menu-item">⬇ 예배 순서 내보내기 <span class="mi-sub">.lyra 패키지 · 첨부 포함/참조만</span></button>
         <button id="export-img-btn" class="menu-item">🖼 이미지로 내보내기 <span class="mi-sub">WebP · 선택한 장만도 가능</span></button>
-        <button id="import-btn" class="menu-item">⬆ 예배 순서 가져오기 <span class="mi-sub">JSON</span></button>
+        <button id="import-btn" class="menu-item">⬆ 예배 순서 가져오기 <span class="mi-sub">.lyra 패키지 · 예전 JSON</span></button>
         <div class="menu-sep"></div>
         <button id="new-service" class="menu-item">＋ 새 예배 순서</button>
         <button id="edit-service" class="menu-item">✎ 이름·날짜 수정</button>
@@ -73,7 +73,7 @@
       </div>
     </div>
 
-    <input id="import-file" type="file" accept="application/json,.json" hidden />
+    <input id="import-file" type="file" accept=".lyra,application/zip,application/json,.json" hidden />
     <input id="import-ppt-file" type="file" accept=".pptx,.ppt,.odp,application/pdf,image/*" hidden />
 
     <!-- 좁은 화면(아이패드 세로 등)에서 속성 패널을 서랍으로 여닫는다 -->
@@ -313,21 +313,37 @@
         <button id="song-close" class="mini">닫기 ✕</button>
       </div>
       <p class="muted sound-hint">
-        기존 찬양 PPT 모음에서 뽑아 둔 가사입니다. 곡을 고르면 <b>원본 PPT의 장 나눔 그대로</b> 가사 슬라이드가 추가됩니다.
-        가사는 OCR로 읽은 것이라 <b>오탈자가 있을 수 있습니다</b> — 추가한 뒤 캔버스에서 고치세요.
+        기존 찬양 PPT 모음에서 뽑아 둔 가사입니다. 곡을 고르면 <b>가사가 복사</b>됩니다 —
+        ＋추가에서 원하는 디자인 템플릿을 고른 뒤 가사 칸에 붙여넣으세요.
+        <b>빈 줄이 장 구분</b>이라 원본 PPT의 넘김이 그대로 재현됩니다.
+        OCR로 읽은 가사라 <b>오탈자가 있을 수 있습니다</b>.
       </p>
       <div class="lib-search">
         <input id="song-query" type="search" placeholder="제목·가사 검색 (여러 단어는 모두 포함, 비우면 전체 목록)" />
-        <select id="song-template" title="가사 디자인 템플릿"></select>
-      </div>
-      <div class="song-opts">
-        <label class="sd-check" title="끄면 아래 줄 수대로 다시 나눕니다">
-          <input id="song-keep-pages" type="checkbox" checked /> 원본 장 나눔 유지
-        </label>
-        <label class="sd-fade">줄 수 <input id="song-lines" type="number" min="1" max="8" value="2" disabled /></label>
+        <button id="song-new" class="mini">＋ 새 곡</button>
         <span id="song-status" class="muted"></span>
       </div>
-      <div id="song-list" class="lib-results"></div>
+      <div class="song-split">
+        <div id="song-list" class="lib-results"></div>
+        <div class="song-preview" id="song-preview" hidden>
+          <div class="song-preview-head">
+            <input id="song-title" type="text" placeholder="곡 제목" />
+            <span id="song-preview-meta" class="muted"></span>
+          </div>
+          <textarea id="song-lyrics" spellcheck="false"
+            placeholder="가사를 한 줄씩. 빈 줄을 넣으면 그 자리에서 슬라이드가 나뉩니다."
+            title="빈 줄이 장 구분입니다."></textarea>
+          <div class="song-actions">
+            <select id="song-template" title="이 디자인으로 가사 슬라이드를 만듭니다"></select>
+            <button id="song-add" class="mini accent">＋ 이 디자인으로 추가</button>
+            <button id="song-copy" class="mini">📋 복사</button>
+            <span class="spacer"></span>
+            <button id="song-save" class="mini">💾 저장</button>
+            <button id="song-delete" class="mini danger">🗑 삭제</button>
+            <span id="song-dirty" class="muted" hidden>수정됨 · 저장하지 않음</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

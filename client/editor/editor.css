@@ -249,11 +249,27 @@ a { color: var(--accent); text-decoration: none; }
 /* 인스펙터: 배경 버튼 줄 + 여러 장 선택 안내 */
 .insp-bg-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .bg-multi { font-size: 11px; margin: 4px 0 0; color: var(--accent); }
-/* 찬양 가사 검색 모달 */
-.song-opts { display: flex; gap: 12px; align-items: center; font-size: 12px; color: var(--muted); }
-.song-opts input[type="number"] { width: 56px; }
+/* 찬양 가사 검색 모달 — 왼쪽 목록 / 오른쪽 가사 미리보기(복사용) */
+.song-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 10px; min-height: 0; }
+.song-split > .lib-results { min-height: 200px; }
+.song-preview { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.song-preview-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.song-preview-head strong { font-size: 13px; word-break: break-all; }
+#song-title { flex: 1; min-width: 140px; font-weight: 600; }
+.song-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.song-actions .spacer { flex: 1; }
+#song-template { max-width: 190px; font-size: 12px; }
+#song-dirty { font-size: 11px; color: #e0af68; }
+#song-preview-meta { font-size: 11px; white-space: nowrap; }
+#song-lyrics {
+  flex: 1; min-height: 220px; resize: vertical; font-size: 13px; line-height: 1.6;
+  background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  color: var(--text); font-family: inherit;
+}
+@media (max-width: 720px) { .song-split { grid-template-columns: 1fr; } }
 .song-row { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 .song-row:hover { border-color: var(--accent); }
+.song-row.sel { border-color: var(--accent); background: var(--panel2); }
 .song-row .lib-name { flex: 1; }
 .song-meta { display: flex; gap: 6px; align-items: center; white-space: nowrap; font-size: 11px; }
 .song-warn { padding: 1px 5px; border-radius: 4px; background: #e0af68; color: #1a1a2e; font-weight: 700; }

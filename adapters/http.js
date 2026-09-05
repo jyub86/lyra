@@ -80,8 +80,10 @@ export async function handleApi(req, url) {
     const title = form?.get("title") || undefined;
     if (!file || typeof file === "string") return json({ error: "no file" }, 400);
     try {
-      const payload = JSON.parse(await file.text());
-      return json(await execute("import_service", { payload, title }, ctx()));
+      // .lyra 패키지(zip)와 예전 JSON을 모두 받는다 — 매직바이트로 알아서 갈린다.
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const { importPackageBytes } = await import("../core/tools/package.tools.js");
+      return json(await importPackageBytes(bytes, title ? String(title) : undefined, ctx()));
     } catch (e) {
       return json({ error: e.message }, 500);
     }
@@ -118,6 +120,26 @@ export async function handleApi(req, url) {
           "content-disposition": `attachment; filename="export.zip"; filename*=UTF-8''${encodeURIComponent(name)}`,
           "x-lyra-count": String(res.count),
           "x-lyra-method": res.method,
+        },
+      });
+    } catch (e) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
+  // 예배 → .lyra 패키지. 서버가 파일로 굽고 그 파일을 **스트리밍**으로 내려준다.
+  // (JSON+base64는 브라우저가 수백 MB 문자열을 메모리에 들어야 해서 큰 예배에서 실패했다)
+  if (url.pathname === "/api/export/package" && req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    try {
+      const res = await execute("export_service_package", body, ctx());
+      return new Response(Bun.file(res.path), {
+        headers: {
+          "content-type": "application/zip",
+          "content-length": String(res.bytes),
+          "content-disposition": `attachment; filename="service.lyra"; filename*=UTF-8''${encodeURIComponent(res.filename)}`,
+          "x-lyra-assets": `${res.assets}/${res.assets_total}`,
+          "x-lyra-slides": String(res.slides),
         },
       });
     } catch (e) {

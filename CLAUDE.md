@@ -28,6 +28,37 @@
 >   프로필은 `-env:UserInstallation`(OS 무관). 미설치 시 명확 안내로 graceful. Windows: LibreOffice/poppler 설치+PATH.
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
+> ⚠️ **v4.13 추가 (예배 공유 패키지 · 가사 관리 UI · 줄 간격 수정)** — 구현 기준(현행)
+> - **`.lyra` 공유 패키지** (`core/tools/package.tools.js`): 예배 하나를 zip 파일로 주고받는다.
+>   구조 = `service.json`(기존 worship-service/v2 그대로, `assets`는 비우고 `asset_refs`에 url·bytes·sha256)
+>   + `assets/<uploads 저장명>`. **재압축 안 함(level 0)** — mp4/webp는 이미 압축돼 있다(이미지 내보내기와 같은 정책).
+>   서버가 `data/exports/`에 굽고 `Bun.file()`로 **스트리밍** → 브라우저가 수백 MB를 메모리에 들지 않는다
+>   (base64 JSON이 큰 예배에서 실패하던 원인. 실측 23.5MB → 17.6MB).
+>   - **`include_assets: false` = "참조만"**: 첨부를 빼고 참조만 담는다. 매주 같은 배경 영상을 쓰면
+>     받는 쪽에 파일이 이미 있으므로 **143KB(127배 절감)**. 파일명에 `_참조만`을 붙여 구분한다
+>     (같은 이름이면 한쪽이 다른 쪽을 덮어써서 "첨부가 든 줄 알았는데 참조뿐"인 파일을 건네게 된다 — 실제로 겪음).
+>   - **가져오기**: uploads에 같은 이름이 있으면 **재사용**(ULID라 이름이 같으면 같은 파일 → 중복 저장·url 재매핑 없음),
+>     패키지에 있으면 꺼내 쓰고, 없으면 `missing`으로 알리되 **나머지는 정상 진행**.
+>     `/api/import-service`가 zip 매직바이트(PK)로 갈라 **`.lyra`와 예전 `.json`을 모두** 받는다(하위호환).
+>   - 도구: `export_service_package` · `import_service_package`. HTTP: `POST /api/export/package`.
+>   - `export_service`/`import_service`(JSON)는 그대로 유지 — CLI·MCP에서 텍스트로 다루는 경로.
+>   - 전체 데이터 이관은 여전히 `scripts/export-bundle.js`(DB+uploads 전부). 목적이 다르므로 셋 다 유지.
+> - **찬양 가사 관리 UI** (`core/tools/song.tools.js`): 🎵 찬양 가사 모달에서 **편집·추가·삭제**.
+>   `save_song(song_id?, title, lyrics)` · `delete_song` · `get_song_text`. 가사는 **"빈 줄 = 장 구분" 텍스트**로
+>   주고받는다(복사 형식과 동일 → 보는 것과 저장되는 것이 같다).
+>   **DB와 `data/source/songs.json`을 함께 갱신**한다 — DB만 고치면 `--songs` 재적재 때 편집이 사라진다.
+>   모달에서 **템플릿을 골라 바로 추가**(＋ 이 디자인으로 추가)도 가능하고, 이때 **편집 중인 가사 그대로** 들어간다.
+>   `apply_template`의 가사 분할이 **빈 줄을 장 구분으로** 인식한다(빈 줄이 없으면 예전처럼 lines_per_slide).
+> - **줄 간격 버그 수정(원인 2개)**:
+>   ① `.ce-line { margin: 0.12em 0 }` — `.el-content`가 flex라 **여백이 합쳐지지 않고** 위아래로 더해져
+>      설정한 line-height보다 넓어졌다(실측 128px vs 112px). 인라인 편집을 거치면 한 블록이 되어 여백이
+>      사라지므로 "고치면 원래대로 돌아오는" 증상이 났다. → `margin: 0`, 줄 간격은 line-height 하나로만.
+>   ② 콘텐츠 요소의 `html`이 템플릿에 저장돼 있었다 — 렌더러가 `html`을 우선하므로 **새로 가져온 가사가 아니라
+>      템플릿에 굳은 옛 글**이 그려졌다(빈 `<div>`까지 따라와 간격도 벌어졌다).
+>      `stripForTemplate`이 `html`을 떼고, `buildSlidesFromTemplate`도 새 content를 넣을 때 `html`을 버린다.
+> - **가사 줄표 제거**: `의-` `하-시` 같은 **음절 늘임표**(원본 PPT의 음 끄는 표시)를 전부 제거(실측 4,740줄).
+>   단 **영문자 사이 하이픈**(Way-maker)은 단어의 일부라 남긴다(9줄).
+
 > ⚠️ **v4.12 추가 (찬양 PPT 모음 → 가사 데이터)** — 구현 기준(현행)
 > - 왜: 악보 PPT를 그만 쓰고 "가사만 + 배경 영상"으로 바꾸면서, 기존 찬양 PPT 모음의 **가사를 Lyra 안에서
 >   검색·재사용**해야 했다. 대상 = `찬양/찬양ppt모음_WIDE` 474곡(.ppt 296 + .pptx 93 + .ppt 85).

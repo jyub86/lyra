@@ -37,6 +37,12 @@ export function validate(schema, input, path = "$") {
     return { valid: true, errors, value };
   }
 
+  // null이 "값 없음"이 아니라 **의미 있는 값**인 자리가 있다:
+  //   배경 null = 테마 기본 · 트랙 end_slide_id null = 예배 끝까지 · overrides null = 초기화.
+  // nullable로 표시된 곳에서는 타입 검사를 건너뛴다.
+  // (이게 없어서 "테마 기본" 배경인 슬라이드를 복사·붙여넣기 하면 거부됐다)
+  if (value === null && schema.nullable) return { valid: true, errors, value };
+
   if (schema.type && !matchesType(value, schema.type)) {
     errors.push(`${path}: expected ${schema.type}, got ${typeOf(value)}`);
     return { valid: false, errors, value };

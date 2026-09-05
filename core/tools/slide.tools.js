@@ -49,7 +49,7 @@ register({
     properties: {
       service_id: { type: "string" },
       elements: { type: "array", description: "요소 배열 (text/shape/image/bible/hymn/reading)" },
-      background: { type: "object" },
+      background: { type: "object", nullable: true, description: "null이면 테마 기본 배경" },
       transition: { type: "string", default: "fade" },
       position: { type: "integer" },
     },
@@ -157,7 +157,7 @@ register({
     properties: {
       slide_id: { type: "string", description: "대상 슬라이드 하나" },
       slide_ids: { type: "array", items: { type: "string" }, description: "여러 슬라이드에 같은 배경 적용" },
-      background: { type: "object", description: "배경 객체(color/gradient/image/video). 생략·null이면 테마 기본" },
+      background: { type: "object", nullable: true, description: "배경 객체(color/gradient/image/video). 생략·null이면 테마 기본" },
     },
   },
   handler: ({ slide_id, slide_ids, background }, { db }) => {

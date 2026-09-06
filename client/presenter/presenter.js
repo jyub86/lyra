@@ -337,6 +337,48 @@ document.addEventListener("keydown", (e) => {
 setTimeout(() => hint.classList.add("fade"), 3500);
 document.addEventListener("mousemove", () => { hint.classList.remove("fade"); setTimeout(() => hint.classList.add("fade"), 2500); });
 
+// ---- 화면 꺼짐·잠금 방지 ----
+// 예배 중 발표 화면이 절전으로 꺼지면 안 된다. 표준은 Screen Wake Lock API인데
+// **보안 컨텍스트(https 또는 localhost)에서만** 쓸 수 있다. 같은 네트워크의 다른 기기가
+// http://192.168.x.x 로 접속하면 못 쓰므로, 그때는 1.5KB짜리 무음 영상을 반복 재생해
+// 절전을 막는다(널리 쓰이는 방법 — 재생 중인 영상이 있으면 화면을 끄지 않는다).
+let wakeLock = null;
+let noSleepVideo = null;
+
+function startNoSleepVideo() {
+  if (!noSleepVideo) {
+    const v = document.createElement("video");
+    v.src = "/presenter/nosleep.mp4";
+    v.muted = true; v.loop = true; v.playsInline = true;
+    v.setAttribute("aria-hidden", "true");
+    // 눈에 띄지 않게. display:none이면 브라우저가 재생을 멈춰 효과가 없다.
+    v.style.cssText = "position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;pointer-events:none";
+    document.body.appendChild(v);
+    noSleepVideo = v;
+  }
+  noSleepVideo.play?.().catch(() => {});   // 자동재생이 막히면 첫 조작 때 다시 시도한다
+}
+
+async function keepAwake() {
+  if (navigator.wakeLock && window.isSecureContext) {
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+      // 탭이 가려지면 브라우저가 자동 해제한다 → 다시 보일 때 재요청해야 계속 유지된다.
+      wakeLock.addEventListener?.("release", () => { wakeLock = null; });
+      return;
+    } catch { /* 거부되면 아래 폴백 */ }
+  }
+  startNoSleepVideo();
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") keepAwake();
+});
+// 자동재생이 막혀 폴백이 못 돌았을 때를 대비 — 첫 조작에서 한 번 더.
+for (const ev of ["keydown", "pointerdown"]) {
+  document.addEventListener(ev, () => { if (!wakeLock) keepAwake(); }, { once: true });
+}
+
 async function init() {
   const ps = await callTool("get_presentation_state").catch(() => ({}));
   state.index = ps.index || 0;
@@ -344,5 +386,6 @@ async function init() {
   await loadService(ps.service_id);
   renderNow();
   connectWs();
+  keepAwake();   // 발표 중 화면이 꺼지거나 잠기지 않게
 }
 init();

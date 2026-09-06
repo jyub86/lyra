@@ -4,10 +4,18 @@
 
 // Tunables for bible "auto" layout (요소 크기를 모를 때 쓰는 기본값).
 const BIBLE_AUTO_MAX_CHARS = 180;
-const BIBLE_AUTO_MAX_VERSES = 4;
+const BIBLE_AUTO_MAX_VERSES = 6;
+
+// 한글 본문의 **평균 글자 폭**(em). 한글 낱글자는 1em이지만 문장에는 어절마다 공백이 있고
+// 공백은 훨씬 좁다(≈0.3em). "1글자 = 1em"으로 잡으면 용량을 크게 낮잡아 한 장에 들어갈
+// 본문을 두 장으로 나눈다.
+// 실측(브라우저에서 같은 CSS로 렌더): size 4.3cqw · 박스폭 0.82 → 한 줄 25자.
+//   1049.6px ÷ 25자 ÷ 55.04px(=4.3cqw) = 0.763em/글자.
+// 성경·찬송 본문 모두 어절 구성이 비슷해 0.78을 쓴다(실측보다 조금 보수적).
+const KO_ADVANCE = 0.78;
 
 // 성경 본문 요소의 박스·글자 크기로 "한 슬라이드에 들어가는 글자 수"를 추정한다.
-// 슬라이드는 16:9이고 크기 단위가 cqw(=가로 1%)라 세로는 56.25cqw. 한글은 한 글자 ≈ 1em.
+// 슬라이드는 16:9이고 크기 단위가 cqw(=가로 1%)라 세로는 56.25cqw.
 // 템플릿 글꼴을 키우면 auto 분할이 그만큼 잘게 나뉘어 본문이 잘리지 않는다.
 export function bibleAutoCapacity(el) {
   if (!el) return { maxChars: BIBLE_AUTO_MAX_CHARS, maxVerses: BIBLE_AUTO_MAX_VERSES };
@@ -15,13 +23,16 @@ export function bibleAutoCapacity(el) {
   const w = Number(el.w) > 0 ? Number(el.w) : 0.84;                  // 0~1
   const h = Number(el.h) > 0 ? Number(el.h) : 0.56;
   const lh = Number(el.line_height) > 0 ? Number(el.line_height) : 1.5;
-  const perLine = Math.max(4, Math.floor((w * 100) / size));         // 한 줄 글자 수
+  const perLine = Math.max(4, Math.floor((w * 100) / (size * KO_ADVANCE)));   // 한 줄 글자 수
   const field = el.field || "all";
   // field가 "all"이면 참조(ce-ref, 0.5em + 여백)가 본문 위 한 줄을 차지한다.
   let lines = Math.floor((h * 56.25) / (size * lh)) - (field === "text" ? 0 : 1);
   lines = Math.max(1, lines);
-  // 0.92 = 어절 단위 줄바꿈으로 생기는 줄 끝 여백 감안(넘치는 것보다 조금 덜 채우는 쪽).
-  return { maxChars: Math.max(20, Math.round(perLine * lines * 0.92)), maxVerses: BIBLE_AUTO_MAX_VERSES };
+  // 여기에 별도 안전계수를 곱하지 않는다 — 이미 두 군데서 보수적으로 잡고 있어 이중 차감이 된다:
+  //   ① perLine·lines의 floor() ② splitBible이 절마다 더하는 +3(절 번호·절 사이 공백)
+  // 실측(실제 렌더러로 넘치는 지점): 1절 123자 · 2절 120 · 3절 120 · 4절 112.
+  // perLine×lines = 120이고 +3×절수를 빼면 1절 117 / 2절 114 / 3절 111 / 4절 108 → 모두 안전.
+  return { maxChars: Math.max(20, perLine * lines), maxVerses: BIBLE_AUTO_MAX_VERSES };
 }
 
 function refString(shortName, chapter, vStart, vEnd) {

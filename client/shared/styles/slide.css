@@ -18,7 +18,11 @@
 .layer-bg { z-index: 0; }
 .layer-elements { z-index: 1; }
 
-.bg-video { width: 100%; height: 100%; object-fit: cover; }
+/* 배경 영상: 첫 프레임이 준비되면 페이드인(.bg-fade가 벗겨진다).
+   기본값을 opacity:1로 두는 이유 — JS 핸드셰이크를 안 타는 경로(내보내기 폴백 등)에서도
+   영상이 보여야 한다. 감추는 건 JS가 .bg-fade를 붙였을 때뿐. */
+.bg-video { width: 100%; height: 100%; object-fit: cover; transition: opacity 260ms ease; }
+.bg-video.bg-fade { opacity: 0; }
 .bg-dim { position: absolute; inset: 0; }
 
 /* ===== elements ===== */

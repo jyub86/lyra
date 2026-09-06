@@ -32,6 +32,35 @@ export function isLiveBackground(bg) {
   return bg.type === "image" && /\.gif(\?|#|$)/i.test(bg.url || "");
 }
 
+// 배경 영상은 첫 프레임이 오기 전까지 아무것도 안 그려서, 그냥 두면 슬라이드가 바뀔 때
+// 검은 순간이 스쳐 "깜박"인다. → 처음엔 투명하게 두고 **첫 프레임이 준비되면 페이드인**한다.
+// 안전장치: 파일이 느리거나 깨져 loadeddata가 안 오면 일정 시간 뒤 그냥 보여준다
+// (안 그러면 배경이 영영 검은 채로 남는다). 이미 재생 가능한 상태면 바로 보여준다.
+const VIDEO_FADE_FALLBACK_MS = 1200;
+export function fadeInVideo(v) {
+  const show = () => v.classList.remove("bg-fade");
+  if (v.readyState >= 2) return;           // 캐시돼 이미 프레임이 있으면 페이드 없이 즉시
+  v.classList.add("bg-fade");
+  const done = () => { clearTimeout(t); show(); };
+  v.addEventListener("loadeddata", done, { once: true });
+  v.addEventListener("error", done, { once: true });
+  const t = setTimeout(show, VIDEO_FADE_FALLBACK_MS);
+}
+
+// 배경 영상의 첫 프레임을 기다린다(최대 ms). 화면을 바꾸기 **전에** 불러 두면
+// 새 슬라이드가 빈 영상으로 뜨는 순간이 아예 없어진다.
+export function waitVideoReady(root, ms = 400) {
+  const vids = [...root.querySelectorAll("video")].filter((v) => v.readyState < 2);
+  if (!vids.length) return Promise.resolve();
+  return Promise.race([
+    Promise.all(vids.map((v) => new Promise((r) => {
+      v.addEventListener("loadeddata", r, { once: true });
+      v.addEventListener("error", r, { once: true });
+    }))),
+    new Promise((r) => setTimeout(r, ms)),
+  ]);
+}
+
 export function renderBackground(bgEl, bg) {
   const key = bgKey(bg);
   if (bgEl.dataset.bgKey === key) return;   // 같은 배경 → 그대로 둔다(영상 재시작·깜박임 방지)
@@ -49,11 +78,13 @@ export function renderBackground(bgEl, bg) {
   } else if (bg.type === "video") {
     const v = document.createElement("video");
     v.src = bg.url; v.autoplay = true; v.muted = bg.muted !== false; v.loop = bg.loop !== false; v.playsInline = true;
+    v.preload = "auto";
     v.className = "bg-video";
     if (bg.playback_rate) v.playbackRate = bg.playback_rate;
     // 이미지로 내보낼 때 찍을 프레임 위치(초). 지정 없으면 내보내기 화면이 중간 지점을 쓴다.
     if (bg.poster_time != null) v.dataset.posterTime = String(bg.poster_time);
     bgEl.appendChild(v); v.play?.().catch(() => {});
+    fadeInVideo(v);
   }
   const dim = bg && bg.overlay_dim;
   if (dim && dim > 0) { const d = document.createElement("div"); d.className = "bg-dim"; d.style.background = `rgba(0,0,0,${dim})`; bgEl.appendChild(d); }

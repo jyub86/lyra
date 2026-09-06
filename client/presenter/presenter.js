@@ -2,7 +2,7 @@
 // 조작(도구를 호출해 모두 동기화). 렌더링은 편집과 동일한 layer-renderer 사용.
 // 슬라이드 전환은 service.transition(none|fade|slide)을 따른다.
 import { callTool, loadServiceTheme } from "/shared/api.js";
-import { renderSlideWithLayers, bgKey, isLiveBackground } from "/shared/layer-renderer.js";
+import { renderSlideWithLayers, bgKey, isLiveBackground, waitVideoReady } from "/shared/layer-renderer.js";
 
 const deck = document.getElementById("deck");
 const black = document.getElementById("black");
@@ -79,6 +79,10 @@ async function makeStageDecoded(slide, onLiveBg) {
     Promise.all(imgs.map((i) => (i.decode ? i.decode().catch(() => {}) : Promise.resolve()))),
     new Promise((r) => setTimeout(r, 300)),
   ]);
+  // 배경 영상의 첫 프레임도 기다린다. 이게 없으면 화면을 바꾼 뒤에야 영상이 뜨기 시작해
+  // 검은 순간이 스쳐 "깜박"인다. 400ms를 넘기면 그냥 진행하고 페이드인이 마무리한다
+  // (예배 중에는 늦게 넘어가는 것이 깜박임보다 나쁘다).
+  await waitVideoReady(el, 400);
   return el;
 }
 

@@ -39,6 +39,9 @@ async function withPosterBackgrounds(slides) {
 // 폰트와 모든 이미지가 실제로 그려질 때까지 기다린다. 이걸 안 하면 스크린샷에
 // 폰트 대체(네모)나 빈 이미지가 찍힌다.
 async function waitPainted(root) {
+  // 배경 영상이 <video>로 남은 경우(ffmpeg이 없어 대표 프레임을 못 뽑은 폴백) 페이드 상태로
+  // 찍히면 검게 나온다 → 굽기 전에 강제로 보이게 한다.
+  for (const v of root.querySelectorAll("video.bg-fade")) v.classList.remove("bg-fade");
   await document.fonts.ready;
   const imgs = [...root.querySelectorAll("img")];
   await Promise.all(imgs.map((im) => (im.complete ? im.decode?.().catch(() => {}) : new Promise((r) => {

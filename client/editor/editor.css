@@ -218,6 +218,10 @@ a { color: var(--accent); text-decoration: none; }
 .sound-row .sd-fade input { width: 62px; }
 .sound-row .sd-unit { color: var(--muted); }
 .sound-row .sd-span { margin-left: auto; }
+/* 두 번 탭으로 발표에 보낼 수 있게 — 브라우저의 "더블탭 확대"가 가로채지 않도록.
+   (캔버스 #preview와 같은 이유) */
+.slide-row, .tile { touch-action: manipulation; }
+
 /* 순서/타일에서 사운드가 재생되는 슬라이드 표시 */
 .sound-mark { color: var(--accent); font-size: 11px; }
 

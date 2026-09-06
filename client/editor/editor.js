@@ -497,7 +497,7 @@ function renderList() {
   const root = $("slide-list");
   root.innerHTML = "";
   if (!state.service) { root.innerHTML = '<p class="muted" style="padding:12px">예배 순서가 없습니다. “+ 새 예배”로 시작하세요.</p>'; return; }
-  root.appendChild(elx("p", "list-hint muted", "드래그로 이동 · ⌘/Ctrl·Shift 클릭으로 여러 개 선택해 함께 이동 · Page↑/↓로 슬라이드 이동"));
+  root.appendChild(elx("p", "list-hint muted", "드래그로 이동 · ⌘/Ctrl·Shift 클릭으로 여러 개 선택해 함께 이동 · Page↑/↓로 슬라이드 이동 · 더블클릭(두 번 탭)하면 발표로"));
   const pid = presentingSlideId();
   const sound = slidesWithSound();
   slides().forEach((s, i) => {
@@ -524,8 +524,25 @@ function renderList() {
     movers.append(mv("▲", -1, "위로"), mv("▼", 1, "아래로"));
     row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, movers, hide, del);
     row.onclick = (e) => onRowClick(s, e);
+    // 더블클릭/두 번 탭 → 발표로 보내기. 휴대폰·아이패드의 "순서" 탭에는 캔버스 하단의
+    // 📺 버튼이 안 보여서 목록에서 바로 띄울 방법이 없었다(타일 뷰는 원래 더블클릭 지원).
+    row.ondblclick = () => presentIndex(i);
+    wireDoubleTap(row, () => presentIndex(i));
     wireDrag(row);
     root.appendChild(row);
+  });
+}
+
+// 터치 기기의 "두 번 탭" → fn(). 아이패드는 네이티브 dblclick이 안 오거나 늦게 오는 경우가
+// 있어 직접 감지한다. 터치 포인터에서만 동작하므로 마우스(데스크톱) 경로는 dblclick 그대로.
+// 버튼(숨기기·삭제·순서이동) 위에서 시작한 탭은 무시한다 — 그 버튼의 동작이 우선.
+function wireDoubleTap(node, fn, { ms = 400 } = {}) {
+  let lastAt = 0;
+  node.addEventListener("pointerup", (e) => {
+    if (e.pointerType !== "touch") return;
+    if (e.target.closest("button")) { lastAt = 0; return; }
+    if (e.timeStamp - lastAt < ms) { lastAt = 0; e.preventDefault(); fn(); }
+    else lastAt = e.timeStamp;
   });
 }
 
@@ -1756,6 +1773,7 @@ function renderTiles() {
     tile.append(buildThumb(s), cap);
     tile.onclick = (e) => onRowClick(s, e);   // same multi-select model as the list
     tile.ondblclick = () => presentIndex(i);
+    wireDoubleTap(tile, () => presentIndex(i));   // 터치: 타일도 두 번 탭으로 발표
     wireDrag(tile);
     grid.appendChild(tile);
   });

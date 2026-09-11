@@ -40,8 +40,10 @@ a { color: var(--accent); text-decoration: none; }
 .menu-item:hover { background: var(--panel2); }
 .menu-item .mi-sub { color: var(--muted); font-size: 11px; margin-left: auto; flex: 0 0 auto; padding-left: 10px; }
 .menu-sep { height: 1px; background: var(--line); margin: 4px 2px; }
-/* 메뉴 안의 소제목 (슬라이드 추가 / 모양 …) */
+/* 메뉴 안의 소제목 (기본 종류 / 모양 / 파일 …). 첫 줄이 아니면 구분선을 겸한다
+   — 라벨과 menu-sep을 둘 다 쓰면 여백만 벌어지고 경계는 오히려 흐려진다. */
 .menu-label { color: var(--muted); font-size: 11px; font-weight: 700; padding: 6px 10px 2px; letter-spacing: .2px; }
+.menu-label:not(:first-child) { border-top: 1px solid var(--line); margin-top: 6px; padding-top: 9px; }
 /* 상단바 그룹 구분선 + 주 동작(＋추가) 강조 */
 .tb-sep { width: 1px; align-self: stretch; margin: 2px 4px; background: var(--line); }
 .menu-btn.accent-btn { border-color: var(--accent); color: var(--accent); font-weight: 700; }
@@ -369,6 +371,26 @@ a { color: var(--accent); text-decoration: none; }
 .insp-hide-row { margin-top: 10px; }
 /* 슬라이드 추가 모달 */
 .modal.modal-sm { width: min(420px, 92vw); }
+.modal.modal-md { width: min(560px, 92vw); }
+
+/* ===== 📤 내보내기 모달 ===== */
+.ex-target { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.ex-radio, .ex-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.ex-radio input, .ex-check input { width: auto; margin: 0; }
+.ex-radio.off { opacity: .45; cursor: default; }   /* 고른 장이 없으면 "선택한 장"을 흐리게 */
+.ex-note { font-size: 12px; margin: 0; }
+
+.ex-formats { display: flex; flex-direction: column; gap: 8px; }
+.ex-card {
+  display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
+  padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel2); color: inherit; cursor: pointer;
+}
+.ex-card:hover { border-color: var(--accent); }
+.ex-ico { font-size: 22px; line-height: 1.1; flex: 0 0 auto; }
+.ex-body { display: flex; flex-direction: column; gap: 3px; }
+.ex-body b { font-size: 14px; }
+.ex-body small { color: var(--muted); font-size: 12px; line-height: 1.45; }
 .add-actions { display: flex; gap: 6px; align-items: center; }
 .add-actions .primary { flex: 1; width: auto; }
 .tpl-hint { font-size: 12px; margin: 0; line-height: 1.5; }

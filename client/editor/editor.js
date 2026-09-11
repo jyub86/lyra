@@ -1579,13 +1579,17 @@ async function loadTemplates() {
 }
 
 // ＋추가 메뉴의 "슬라이드 추가" 항목 = 템플릿 목록(기본 종류 먼저, 내 템플릿은 구분선 뒤).
+// 템플릿 목록. 기본 종류(성경·찬송…)와 내가 만든 디자인은 성격이 전혀 다른데 예전엔
+// 구분선 하나로만 나뉘어 "타이틀"과 "크로마키 가사"가 같은 층위로 보였다 → 라벨로 나눈다.
 function renderAddMenu() {
   const box = $("menu-add-templates");
   if (!box) return;
   box.replaceChildren();
   let lastKind = null;
   for (const t of state.templates || []) {
-    if (lastKind && t.kind !== lastKind) box.appendChild(elx("div", "menu-sep"));
+    if (t.kind !== lastKind) {
+      box.appendChild(elx("div", "menu-label", t.kind === "builtin" ? "기본 종류" : "내 디자인"));
+    }
     lastKind = t.kind;
     const b = elx("button", "menu-item", t.name);
     b.onclick = () => openAddSlide(t.id);
@@ -2329,6 +2333,7 @@ const ASSET_WARN_BYTES = 40 * MB;
 // 브라우저가 수백 MB를 메모리에 들지 않는다(예전 base64 JSON 방식의 실패 원인).
 // 첨부가 크면 "참조만" 내보낼지 물어본다 — 받는 쪽에 같은 파일이 있으면 그걸 재사용한다.
 async function exportService() {
+  closeExport();
   if (!state.serviceId) { toast("예배를 먼저 선택하세요"); return; }
   const refs = (await callTool("export_service", { service_id: state.serviceId, assets: false })).asset_refs || [];
   const bytes = refs.reduce((n, r) => n + (r.bytes || 0), 0);
@@ -2363,17 +2368,71 @@ async function exportService() {
 // 슬라이드를 이미지(WebP)로 내보내기 → zip 다운로드.
 // 렌더는 서버가 헤드리스 크롬으로 /export 화면을 굽는다 → 발표 화면과 같은 그림이 나온다.
 // 여러 장을 골라둔 상태면 그 장들만, 아니면 전장(발표에서 숨긴 장은 제외).
-async function exportImages() {
+// ---------- 📤 내보내기 모달 ----------
+// 대상(전체/선택한 장·숨긴 장 포함)을 고른 뒤 형식을 누른다. 예전엔 "여러 장 골라두면
+// 자동으로 그 장만"이라 눌러보기 전엔 무엇이 나올지 알 수 없었다 → 여기서 명시적으로 고른다.
+function openExport() {
   if (!state.serviceId) { toast("예배를 먼저 선택하세요"); return; }
-  const picked = [...state.selectedSet];
-  const onlyPicked = picked.length > 1;   // 한 장만 선택된 건 "그냥 커서" — 전장으로 본다
-  const total = onlyPicked ? picked.length : slides().filter((s) => !s.hidden).length;
+  const all = slides();
+  const picked = [...state.selectedSet].filter((id) => all.some((s) => s.id === id));
+  const hiddenCount = all.filter((s) => s.hidden).length;
+
+  $("ex-all-label").textContent = `전체 ${all.length - hiddenCount}장`;
+  $("ex-sel-label").textContent = `선택한 ${picked.length}장`;
+  $("ex-hidden-label").textContent = `숨긴 장 포함 (${hiddenCount}장)`;
+
+  // 고른 장이 없으면 "선택한 장"을 못 고르게 한다(누르면 빈 결과가 나올 뿐).
+  const selRadio = document.querySelector('input[name="ex-scope"][value="sel"]');
+  selRadio.disabled = !picked.length;
+  $("ex-sel-wrap").classList.toggle("off", !picked.length);
+  if (!picked.length) document.querySelector('input[name="ex-scope"][value="all"]').checked = true;
+  // 숨긴 장이 없으면 체크박스도 의미 없다.
+  $("ex-hidden-wrap").hidden = !hiddenCount;
+
+  updateExportNote();
+  $("export-modal").hidden = false;
+}
+function closeExport() { $("export-modal").hidden = true; }
+
+function exportScope() {
+  return document.querySelector('input[name="ex-scope"]:checked')?.value || "all";
+}
+
+// 대상 설명문 — 지금 누르면 몇 장이 나오는지 말로 알려준다.
+function updateExportNote() {
+  const note = $("ex-note");
+  if (!note) return;
+  const { total } = exportTarget();
+  note.textContent = exportScope() === "sel"
+    ? `고른 ${total}장이 그대로 나갑니다(숨긴 장이라도).`
+    : `${total}장이 나갑니다.`;
+}
+
+// 내보내기 대상 → 툴 인자. 선택 모드면 고른 그대로(숨김 무관), 전체 모드면 체크박스에 따른다.
+function exportTarget() {
+  const all = slides();
+  const picked = [...state.selectedSet].filter((id) => all.some((s) => s.id === id));
+  const withHidden = !!$("export-hidden")?.checked;
+  if (exportScope() === "sel" && picked.length) {
+    return { slide_ids: picked, include_hidden: true, total: picked.length };
+  }
+  return {
+    slide_ids: undefined,
+    include_hidden: withHidden,
+    total: all.filter((s) => withHidden || !s.hidden).length,
+  };
+}
+
+async function exportImages() {
+  closeExport();
+  if (!state.serviceId) { toast("예배를 먼저 선택하세요"); return; }
+  const { slide_ids, include_hidden, total } = exportTarget();
   showBusy("이미지로 내보내는 중…", `${total}장 · 크롬으로 렌더 중`);
   try {
     const res = await fetch("/api/export/images", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ service_id: state.serviceId, slide_ids: onlyPicked ? picked : undefined }),
+      body: JSON.stringify({ service_id: state.serviceId, slide_ids, include_hidden }),
     });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "내보내기 실패");
     const blob = await res.blob();
@@ -2383,6 +2442,34 @@ async function exportImages() {
     a.click();
     URL.revokeObjectURL(a.href);
     toast(`이미지 ${res.headers.get("x-lyra-count") || total}장 내보냄`);
+  } catch (e) {
+    toast("내보내기 실패: " + e.message);
+  } finally { hideBusy(); }
+}
+
+// 슬라이드를 PDF 한 파일로 내보내기 → 그대로 카톡·메일로 보내 리뷰받는다.
+// 이미지 내보내기와 같은 크롬 렌더를 쓰되 분할하지 않으므로 poppler가 없어도 된다.
+// 각 장에 번호가 찍혀 리뷰어가 "12번 오타"처럼 지목할 수 있다.
+async function exportPdf() {
+  closeExport();
+  if (!state.serviceId) { toast("예배를 먼저 선택하세요"); return; }
+  const { slide_ids, include_hidden, total } = exportTarget();
+  showBusy("PDF로 내보내는 중…", `${total}장 · 크롬으로 렌더 중`);
+  try {
+    const res = await fetch("/api/export/pdf", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ service_id: state.serviceId, slide_ids, include_hidden }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "내보내기 실패");
+    const name = decodeURIComponent((res.headers.get("content-disposition") || "").split("filename*=UTF-8''")[1] || "review.pdf");
+    const blob = await res.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast(`PDF ${res.headers.get("x-lyra-pages") || total}쪽 내보냄`);
   } catch (e) {
     toast("내보내기 실패: " + e.message);
   } finally { hideBusy(); }
@@ -3263,7 +3350,7 @@ document.addEventListener("keydown", (e) => {
   // 열려 있는 모달도 Esc로 닫는다(추가·템플릿·사운드·성구·라이브러리).
   for (const [id, close] of [["add-modal", closeAddSlide], ["tpl-modal", closeTemplates],
     ["sound-modal", closeSound], ["bibleref-modal", closeBibleRef], ["library-modal", closeLibrary],
-    ["bg-modal", closeBgPicker], ["song-modal", closeSongs]]) {
+    ["bg-modal", closeBgPicker], ["song-modal", closeSongs], ["export-modal", closeExport]]) {
     if (!$(id)?.hidden) { close(); break; }
   }
 });
@@ -3431,8 +3518,16 @@ function init() {
     }
   });
 
-  $("export-btn").onclick = exportService;
+  $("export-btn").onclick = openExport;        // 메뉴 → 모달
+  $("export-close").onclick = closeExport;
+  $("export-modal").addEventListener("mousedown", (e) => { if (e.target === $("export-modal")) closeExport(); });
+  $("export-pdf-btn").onclick = exportPdf;
   $("export-img-btn").onclick = exportImages;
+  $("export-pkg-btn").onclick = exportService;
+  // 대상이 바뀌면 "몇 장 나갑니다" 안내를 다시 계산한다.
+  for (const el of document.querySelectorAll('input[name="ex-scope"], #export-hidden')) {
+    el.addEventListener("change", updateExportNote);
+  }
   $("import-btn").onclick = () => $("import-file").click();
   $("import-file").onchange = (e) => e.target.files[0] && importService(e.target.files[0]);
   $("import-ppt").onclick = () => $("import-ppt-file").click();

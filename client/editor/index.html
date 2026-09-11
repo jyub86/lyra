@@ -27,9 +27,9 @@
     <div class="menu">
       <button id="menu-add-btn" class="menu-btn accent-btn">＋ 추가 ▾</button>
       <div id="menu-add" class="menu-panel" hidden>
-        <div class="menu-label">슬라이드 추가</div>
+        <!-- 템플릿 목록은 renderAddMenu가 "기본 종류" / "내 디자인" 라벨과 함께 채운다 -->
         <div id="menu-add-templates"></div>
-        <div class="menu-sep"></div>
+        <div class="menu-label">찾아서 추가</div>
         <button id="bibleref-btn" class="menu-item">📖 성구로 추가 <span class="mi-sub">참조 · 주보 PDF</span></button>
         <button id="song-btn" class="menu-item">🎵 찬양 가사에서 찾기 <span class="mi-sub">PPT 모음에서 뽑은 가사</span></button>
         <button id="import-ppt" class="menu-item">🖼 파일에서 가져오기 <span class="mi-sub">PPT · PDF · 이미지</span></button>
@@ -54,14 +54,13 @@
           </select>
         </label>
         <button id="theme-reset" class="mini">커스텀 색 초기화</button>
-        <div class="menu-sep"></div>
+        <div class="menu-label">이 예배</div>
         <button id="sound-btn" class="menu-item">🎵 사운드 트랙… <span class="mi-sub">발표 중 배경 음악</span></button>
         <button id="tpl-btn" class="menu-item">🎨 디자인 템플릿…</button>
-        <div class="menu-sep"></div>
-        <button id="export-btn" class="menu-item">⬇ 예배 순서 내보내기 <span class="mi-sub">.lyra 패키지 · 첨부 포함/참조만</span></button>
-        <button id="export-img-btn" class="menu-item">🖼 이미지로 내보내기 <span class="mi-sub">WebP · 선택한 장만도 가능</span></button>
-        <button id="import-btn" class="menu-item">⬆ 예배 순서 가져오기 <span class="mi-sub">.lyra 패키지 · 예전 JSON</span></button>
-        <div class="menu-sep"></div>
+        <div class="menu-label">파일</div>
+        <button id="export-btn" class="menu-item">📤 내보내기… <span class="mi-sub">PDF · 이미지 · 패키지</span></button>
+        <button id="import-btn" class="menu-item">📥 가져오기… <span class="mi-sub">.lyra 패키지 · 예전 JSON</span></button>
+        <div class="menu-label">관리</div>
         <button id="new-service" class="menu-item">＋ 새 예배 순서</button>
         <button id="edit-service" class="menu-item">✎ 이름·날짜 수정</button>
         <button id="dup-service" class="menu-item">⧉ 복제(다른 이름으로)</button>
@@ -348,6 +347,45 @@
   </div>
 
   <!-- ===== 배경 고르기 모달 (여러 슬라이드에 같은 배경) ===== -->
+  <!-- 📤 내보내기 — 형식 3종과 옵션을 한곳에서. 메뉴에 4줄로 흩어져 있던 것을 모았다.
+       "숨긴 장 포함"이 여기 있어야 어느 형식에나 걸리는 옵션임이 분명해진다. -->
+  <div id="export-modal" class="modal-overlay" hidden>
+    <div class="modal modal-md">
+      <div class="modal-head">
+        <strong>📤 내보내기</strong>
+        <span class="spacer"></span>
+        <button id="export-close" class="mini">닫기 ✕</button>
+      </div>
+
+      <div class="section-title">대상</div>
+      <div class="ex-target">
+        <label class="ex-radio"><input type="radio" name="ex-scope" value="all" checked /> <span id="ex-all-label">전체</span></label>
+        <label class="ex-radio" id="ex-sel-wrap"><input type="radio" name="ex-scope" value="sel" /> <span id="ex-sel-label">선택한 장</span></label>
+        <label class="ex-check" id="ex-hidden-wrap" title="발표에서 숨긴 장(⊘)도 포함합니다.">
+          <input id="export-hidden" type="checkbox" /> <span id="ex-hidden-label">숨긴 장 포함</span>
+        </label>
+      </div>
+      <p id="ex-note" class="muted ex-note"></p>
+
+      <div class="section-title">형식</div>
+      <div class="ex-formats">
+        <button id="export-pdf-btn" class="ex-card">
+          <span class="ex-ico">📄</span>
+          <span class="ex-body"><b>PDF</b><small>리뷰·공유용. 카톡·메일로 보내면 휴대폰에서 바로 열린다. 각 장에 번호가 찍혀 "12번"처럼 지목할 수 있다.</small></span>
+        </button>
+        <button id="export-img-btn" class="ex-card">
+          <span class="ex-ico">🖼</span>
+          <span class="ex-body"><b>이미지</b><small>장마다 파일 하나(WebP). zip으로 받는다. 다른 프로그램에 붙여 쓸 때.</small></span>
+        </button>
+        <button id="export-pkg-btn" class="ex-card">
+          <span class="ex-ico">📦</span>
+          <span class="ex-body"><b>.lyra 패키지</b><small>다른 Lyra로 예배를 통째로 옮길 때. 영상·이미지 첨부를 포함하거나 참조만 담을 수 있다.</small></span>
+        </button>
+      </div>
+      <p class="muted ex-note">패키지는 예배 <b>전체</b>가 나갑니다 — 위의 대상 설정은 PDF·이미지에만 적용됩니다.</p>
+    </div>
+  </div>
+
   <div id="bg-modal" class="modal-overlay" hidden>
     <div class="modal">
       <div class="modal-head">

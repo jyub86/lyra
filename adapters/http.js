@@ -127,6 +127,25 @@ export async function handleApi(req, url) {
     }
   }
 
+  // 슬라이드 → 리뷰용 PDF 한 파일. 굽고 나서 **스트리밍**으로 내려준다
+  // (수십 MB를 브라우저가 메모리에 들지 않게 — 패키지 내보내기와 같은 이유).
+  if (url.pathname === "/api/export/pdf" && req.method === "POST") {
+    const body = await req.json().catch(() => ({}));
+    try {
+      const res = await execute("export_review_pdf", body, ctx());
+      return new Response(Bun.file(res.path), {
+        headers: {
+          "content-type": "application/pdf",
+          "content-length": String(res.bytes),
+          "content-disposition": `attachment; filename="review.pdf"; filename*=UTF-8''${encodeURIComponent(res.filename)}`,
+          "x-lyra-pages": String(res.pages),
+        },
+      });
+    } catch (e) {
+      return json({ error: e.message }, 500);
+    }
+  }
+
   // 예배 → .lyra 패키지. 서버가 파일로 굽고 그 파일을 **스트리밍**으로 내려준다.
   // (JSON+base64는 브라우저가 수백 MB 문자열을 메모리에 들어야 해서 큰 예배에서 실패했다)
   if (url.pathname === "/api/export/package" && req.method === "POST") {

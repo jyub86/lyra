@@ -76,12 +76,23 @@ function chromeArgs(profileDir) {
   ];
 }
 
-function pageUrl(port, serviceId, { ids, index, includeHidden }) {
+function pageUrl(port, serviceId, { ids, index, includeHidden, numbers }) {
   const q = new URLSearchParams({ service_id: serviceId });
   if (ids?.length) q.set("ids", ids.join(","));
   if (index != null) q.set("index", String(index));
   if (includeHidden) q.set("hidden", "1");
+  if (numbers) q.set("numbers", "1");
   return `http://127.0.0.1:${port}/export/?${q}`;
+}
+
+// /export 화면을 크롬으로 한 번에 PDF로 굽는다. poppler 없이 크롬만 있으면 된다.
+// 이미지 내보내기(분할 전 단계)와 PDF 내보내기(최종 결과물)가 같은 경로를 쓴다.
+function renderPdf(chrome, port, serviceId, opts, profileDir, outPath) {
+  return runUntilFile([
+    chrome, ...chromeArgs(profileDir), "--no-pdf-header-footer",
+    `--print-to-pdf=${outPath}`, "--virtual-time-budget=20000",
+    pageUrl(port, serviceId, opts),
+  ], outPath, { timeoutMs: 300000 });
 }
 
 // PDF 페이지 수 (pdfinfo). 병렬 분할 범위를 정하는 데 쓴다.
@@ -100,11 +111,7 @@ async function viaPdf(chrome, port, serviceId, opts, profileDir) {
   const dir = mkdtempSync(join(tmpdir(), "lyra-export-"));
   try {
     const pdf = join(dir, "deck.pdf");
-    const ok = await runUntilFile([
-      chrome, ...chromeArgs(profileDir), "--no-pdf-header-footer",
-      `--print-to-pdf=${pdf}`, "--virtual-time-budget=20000",
-      pageUrl(port, serviceId, opts),
-    ], pdf, { timeoutMs: 300000 });
+    const ok = await renderPdf(chrome, port, serviceId, opts, profileDir, pdf);
     if (!ok) return null;
     // pdftoppm은 단일 스레드라 145페이지에 2분 넘게 걸린다 → 페이지 범위로 쪼개 병렬 실행.
     const pages = pdfPageCount(pdf);
@@ -149,6 +156,34 @@ async function viaScreenshots(chrome, port, serviceId, opts, count, profileDir, 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+function safeName(s) {
+  return String(s || "").replace(/[\\/:*?"<>|]/g, "_");
+}
+
+// 슬라이드들을 PDF 한 파일로 저장(리뷰·공유용). 반환: { path, filename, bytes, pages }
+// 이미지 경로와 달리 pdftoppm 분할이 없으므로 **poppler 없이 크롬만으로** 동작한다.
+// (pdfinfo가 있으면 페이지 수를 확인해 돌려주고, 없으면 pages=null)
+export async function exportSlidePdf({ serviceId, slideIds, includeHidden = false, port = 4321, name, numbers = true }) {
+  const chrome = findChrome();
+  if (!chrome) {
+    throw new Error("크롬(또는 엣지·크로미움)을 찾지 못했습니다. 설치하거나 LYRA_CHROME 환경변수로 실행파일 경로를 지정하세요.");
+  }
+  mkdirSync(EXPORT_DIR, { recursive: true });
+  const filename = `${safeName(name || serviceId)}.pdf`;
+  const path = join(EXPORT_DIR, filename);
+  rmSync(path, { force: true });   // 같은 이름으로 다시 뽑을 때 옛 파일이 남지 않게
+
+  const profileDir = mkdtempSync(join(tmpdir(), "lyra-chrome-"));
+  try {
+    const ok = await renderPdf(chrome, port, serviceId,
+      { ids: slideIds, includeHidden, numbers }, profileDir, path);
+    if (!ok) throw new Error("PDF 렌더에 실패했습니다. 크롬 실행과 서버 접속을 확인하세요.");
+  } finally {
+    rmSync(profileDir, { recursive: true, force: true });
+  }
+  return { path, filename, bytes: statSync(path).size, pages: pdfPageCount(path) };
 }
 
 // 슬라이드들을 이미지 파일로 저장. 반환: { dir, files, format, method }

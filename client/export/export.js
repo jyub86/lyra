@@ -9,6 +9,9 @@ const serviceId = q.get("service_id");
 const indexParam = q.get("index");
 const idsParam = q.get("ids");
 const includeHidden = q.get("hidden") === "1";   // 기본: 발표에서 숨긴 장은 제외
+// 리뷰용 PDF에서 각 장에 번호를 찍는다. 코멘트 기능이 없으므로 리뷰어가
+// "12번 오타"처럼 지목할 유일한 수단이다. 이미지 내보내기에는 붙이지 않는다.
+const showNumbers = q.get("numbers") === "1";
 
 // 배경 영상은 <video>로 그리지 않고 **정지 이미지로 바꿔서** 그린다.
 // --print-to-pdf 의 --virtual-time-budget 은 미디어 디코드를 기다려주지 않아서, 영상을
@@ -59,11 +62,14 @@ async function main() {
   const service = await callTool("get_service", { service_id: serviceId });
   const theme = await loadServiceTheme(service);
 
+  // ids를 준 경우 **고른 그대로** 그린다(숨긴 장이라도). 전장일 때만 hidden 필터가 걸린다.
+  // → core/tools/export.tools.js 의 pickSlides()와 같은 순서여야 쪽수가 맞는다.
   let slides = service.slides || [];
-  if (!includeHidden) slides = slides.filter((s) => !s.hidden);
   if (idsParam) {
     const want = new Set(idsParam.split(",").filter(Boolean));
     slides = slides.filter((s) => want.has(s.id));
+  } else if (!includeHidden) {
+    slides = slides.filter((s) => !s.hidden);
   }
   if (indexParam != null) {
     const i = Number(indexParam);
@@ -73,13 +79,19 @@ async function main() {
 
   slides = await withPosterBackgrounds(slides);   // 배경 영상 → 대표 프레임 정지 이미지
 
-  for (const s of slides) {
+  for (const [i, s] of slides.entries()) {
     const page = document.createElement("div");
     page.className = "page";
     const stage = document.createElement("div");
     stage.className = "slide-layers";
     renderSlideWithLayers(stage, s, theme, { live: false });   // 영상 요소는 무음 정지 프레임
     page.appendChild(stage);
+    if (showNumbers) {
+      const no = document.createElement("div");
+      no.className = "page-no";
+      no.textContent = String(i + 1);
+      page.appendChild(no);
+    }
     pages.appendChild(page);
   }
 

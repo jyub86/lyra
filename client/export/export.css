@@ -15,6 +15,18 @@ html, body { background: #000; }
 /* 스크린샷 모드: 딱 한 장만, 창 크기에 맞춰 */
 body.single { overflow: hidden; }
 
+/* 리뷰용 PDF의 장 번호(?numbers=1일 때만 생긴다). 본문을 가리지 않도록 오른쪽 아래
+   구석에, 배경이 밝든 어둡든 읽히게 반투명 검정 알약 위에 흰 글자로. */
+.page-no {
+  position: absolute; right: 26px; bottom: 20px; z-index: 2;
+  font: 700 26px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: rgba(255, 255, 255, .94);
+  background: rgba(0, 0, 0, .5);
+  padding: 9px 15px; border-radius: 999px;
+  /* 인쇄 시 배경색이 빠지지 않게(알약이 사라지면 흰 배경에서 번호가 안 보인다) */
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+
 /* 인쇄(PDF) 모드: 한 페이지에 한 장, 여백 0 */
 @page { size: 1920px 1080px; margin: 0; }
 @media print {

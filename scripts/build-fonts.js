@@ -27,7 +27,7 @@ const FONTS = [
   { id: "jua",              family: "Jua",             label: "주아 (둥근)",    group: "한글 · 제목용", category: "display", script: "ko", subsets: ["korean", "latin"], weights: [400] },
   // ---- 한글: 본문용 ----
   { id: "noto-sans-kr",     family: "Noto Sans KR",    label: "노토 산스",      group: "한글 · 본문용", category: "sans",  script: "ko", subsets: ["korean", "latin"], weights: [400, 700] },
-  { id: "gowun-dodum",      family: "Gowun Dodum",     label: "고운 도담",      group: "한글 · 본문용", category: "sans",  script: "ko", subsets: ["korean", "latin"], weights: [400] },
+  { id: "gowun-dodum",      family: "Gowun Dodum",     label: "고운 돋움",      group: "한글 · 본문용", category: "sans",  script: "ko", subsets: ["korean", "latin"], weights: [400] },
   { id: "nanum-myeongjo",   family: "Nanum Myeongjo",  label: "나눔 명조",      group: "한글 · 본문용", category: "serif", script: "ko", subsets: ["korean", "latin"], weights: [400, 700] },
   { id: "song-myung",       family: "Song Myung",      label: "송명 (명조)",    group: "한글 · 본문용", category: "serif", script: "ko", subsets: ["korean", "latin"], weights: [400] },
   // ---- 한글: 손글씨 ----

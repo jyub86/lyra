@@ -245,7 +245,7 @@
 >   예배 중 인터넷이 끊겨도 폰트 유지. 출처=fontsource(jsDelivr), 패밀리별 korean/latin 결합 woff2 1~2파일 +
 >   직접 작성 `@font-face`(unicode-range). 빌드/추가: `bun run scripts/build-fonts.js`(FONTS 배열에 추가 후 재실행).
 >   산출물 `data/fonts/{files/*.woff2, fonts.css, fonts.json}`. 기본 14종(한글 노토산스/나눔명조/송명/블랙한산스/도현/주아/
->   개구/나눔펜/고운도담 + 영어 Montserrat/Roboto/Playfair/Bebas/Dancing).
+>   개구/나눔펜/고운돋움 + 영어 Montserrat/Roboto/Playfair/Bebas/Dancing).
 > - **도구**: `list_fonts()` → 매니페스트(`core/tools/font.tools.js`). Tool-First 일관.
 > - **적용**: 요소(text/bible/hymn/reading)에 `font`=family 문자열 → 렌더러가 `fontFamily` 지정(`layer-renderer.js`).
 >   서비스 기본 글꼴 = `theme_overrides.font`(`mergeTheme`가 `--font-family`에 병합). 요소 font가 없으면 기본 글꼴 상속.

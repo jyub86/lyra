@@ -98,6 +98,11 @@ a { color: var(--accent); text-decoration: none; }
 .slide-row .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .slide-row .del { padding: 2px 7px; font-size: 12px; opacity: 0; }
 .slide-row:hover .del { opacity: 1; }
+/* 터치 기기엔 hover가 없다 → 삭제 버튼이 영영 안 보이면서 자리만 차지했다.
+   판정을 **body.touch 하나로** 통일한다 — 2×2 배치도 같은 신호를 쓰므로,
+   따로 두면 터치 가능한 노트북(마우스 사용)에서 "칸은 잡혔는데 ✕만 안 보이는" 상태가 된다. */
+body.touch .slide-row .del { opacity: 1; }
+@media (hover: none) { .slide-row .del { opacity: 1; } }
 
 .canvas { display: flex; flex-direction: column; padding: 16px; gap: 12px; background: #0b0d12; }
 .canvas-wrap { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
@@ -498,7 +503,20 @@ button:disabled:hover { border-color: var(--line); }
 
 /* --- 태블릿·좁은 데스크톱: 2열 + 속성은 오른쪽 서랍 --- */
 @media (max-width: 1200px) {
-  .layout { grid-template-columns: 240px 1fr; }
+  /* 순서 목록: 240px에선 제목이 29px밖에 못 받아 전부 "…"로 잘렸다(필요 160~184px).
+     칼럼을 조금 넓히고 **썸네일을 줄인다** — 84px는 한 줄의 36%라 이게 진짜 원인이었다. */
+  .layout { grid-template-columns: 272px 1fr; }
+  .slide-row { gap: 6px; padding: 6px; }
+  /* 52px = 실측 분기점. 여기서 제목이 98px을 받아 가장 긴 가사 제목(184px)도 두 줄에
+     들어간다(60px→2개 잘림 / 56px→1개 / 52px→0 / 48px은 더 줄여도 이득 없음). */
+  .slide-row .thumb { flex-basis: 52px; width: 52px; }
+  .slide-row .num { min-width: 14px; font-size: 10px; }
+  /* 가사 제목은 한 줄(97px)에 안 들어간다(160~184px 필요) → 두 줄까지 보여준다.
+     어차피 손가락으로 스크롤하는 화면이라, 줄 수보다 글자가 보이는 쪽이 낫다. */
+  .slide-row .label {
+    white-space: normal; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3;
+  }
   .props-toggle {
     display: inline-flex; align-items: center; justify-content: center;
     width: 34px; height: 30px; font-size: 15px;
@@ -565,4 +583,21 @@ button:disabled:hover { border-color: var(--line); }
   width: 26px; height: 24px; padding: 0; font-size: 12px; line-height: 1;
   background: var(--btn); border: 1px solid var(--line); border-radius: 5px; color: var(--fg);
 }
-body.touch .slide-row .movers { display: flex; }
+/* 행 오른쪽 버튼 묶음. 데스크톱은 예전처럼 한 줄(▲▼는 숨겨져 있어 실제로는 ◉ ✕ 둘뿐). */
+.slide-row .row-acts { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+
+/* 터치 기기: ▲▼◉✕ 네 개가 한 줄이면 제목이 21px밖에 못 받는다(아이패드 실측) →
+   2×2로 접어 가로를 절반 이하로 줄인다. 세로 흐름이라 ▲ 위 / ▼ 아래로 놓여
+   방향 은유도 맞는다(잘못 눌러 순서가 틀어지는 사고를 줄인다).
+     ▲ ◉
+     ▼ ✕
+   .movers는 display:contents로 껍데기를 없애 자식 ▲▼가 그대로 그리드 칸에 들어간다. */
+body.touch .slide-row .movers { display: contents; }
+body.touch .slide-row .row-acts {
+  display: grid; grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto); gap: 3px;
+}
+body.touch .slide-row .row-acts button {
+  width: 28px; height: 26px; padding: 0; font-size: 12px; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}

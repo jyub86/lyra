@@ -522,7 +522,11 @@ function renderList() {
       return b;
     };
     movers.append(mv("▲", -1, "위로"), mv("▼", 1, "아래로"));
-    row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, movers, hide, del);
+    // 버튼 4개를 한 묶음으로. 터치에선 CSS가 이걸 2×2로 접는다 — 한 줄로 늘어놓으면
+    // 좁은 화면에서 제목이 21px밖에 못 받는다(아이패드 실측).
+    const acts = elx("div", "row-acts");
+    acts.append(movers, hide, del);
+    row.append(elx("span", "num", String(i + 1)), buildThumb(s), meta, acts);
     row.onclick = (e) => onRowClick(s, e);
     // 더블클릭/두 번 탭 → 발표로 보내기. 휴대폰·아이패드의 "순서" 탭에는 캔버스 하단의
     // 📺 버튼이 안 보여서 목록에서 바로 띄울 방법이 없었다(타일 뷰는 원래 더블클릭 지원).
@@ -3343,7 +3347,25 @@ function wireMenu(btnId, panelId, { closeOnItem = false } = {}) {
   // 항목은 나중에 그려지기도 하므로(＋추가의 템플릿 목록) 위임으로 닫는다.
   if (closeOnItem) panel.addEventListener("click", (e) => { if (e.target.closest(".menu-item")) closeMenus(); });
 }
-document.addEventListener("click", (e) => { if (openMenu && !openMenu.parentElement.contains(e.target)) closeMenus(); });
+// 바깥을 누르면 메뉴를 닫는다.
+// **iOS(아이패드)에서 click만으로는 안 된다** — 사파리는 버튼·링크가 아닌 요소를 탭했을 때
+// document까지 click을 올려보내지 않는다. 그래서 아이패드에선 캔버스를 눌러도 ⚙예배 메뉴가
+// 닫히지 않고, 키보드가 없어 Esc도 못 쓴다(= 메뉴에 갇힌다). pointerdown은 항상 올라온다.
+// 메뉴 버튼 자신은 panel.parentElement(.menu) 안이라 여기서 안 닫히고 → 토글이 그대로 동작한다.
+function closeMenusOnOutside(e) {
+  if (openMenu && !openMenu.parentElement.contains(e.target)) closeMenus();
+}
+document.addEventListener("click", closeMenusOnOutside);
+document.addEventListener("pointerdown", closeMenusOnOutside);
+
+// 속성 서랍(태블릿·좁은 화면)도 같은 문제 — 배경막이 없어서 바깥을 눌러도 안 닫혔다.
+// 아래 탭으로 화면을 전환하는 휴대폰 모드(data-pane)에서는 탭 상태와 어긋나므로 제외한다.
+document.addEventListener("pointerdown", (e) => {
+  if (!document.body.classList.contains("props-open")) return;
+  if (document.body.dataset.pane) return;
+  if (e.target.closest(".col.panel") || e.target.closest("#props-toggle")) return;
+  togglePropsDrawer(false);
+});
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   closeMenus();
@@ -3399,7 +3421,7 @@ function init() {
   $("add-slide-btn").onclick = () => addSlide("end");
   $("add-after-btn").onclick = () => addSlide("after");
   $("add-close").onclick = closeAddSlide;
-  $("add-modal").addEventListener("mousedown", (e) => { if (e.target === $("add-modal")) closeAddSlide(); });
+  $("add-modal").addEventListener("pointerdown", (e) => { if (e.target === $("add-modal")) closeAddSlide(); });
   $("add-modal").addEventListener("keydown", (e) => {   // Enter = 선택 아래에 추가 (찬송가 검색창은 제외)
     if (e.key !== "Enter" || e.target.tagName === "TEXTAREA" || e.target.closest(".hymn-search")) return;
     e.preventDefault(); addSlide("after");
@@ -3407,7 +3429,7 @@ function init() {
   // 디자인 템플릿 모달
   $("tpl-btn").onclick = openTemplates;
   $("tpl-close").onclick = closeTemplates;
-  $("tpl-modal").addEventListener("mousedown", (e) => { if (e.target === $("tpl-modal")) closeTemplates(); });
+  $("tpl-modal").addEventListener("pointerdown", (e) => { if (e.target === $("tpl-modal")) closeTemplates(); });
 
   // 드래그드롭: 이미지/PDF/PPT 파일을 현재 예배에 슬라이드로 가져오기
   let dragDepth = 0;
@@ -3520,7 +3542,7 @@ function init() {
 
   $("export-btn").onclick = openExport;        // 메뉴 → 모달
   $("export-close").onclick = closeExport;
-  $("export-modal").addEventListener("mousedown", (e) => { if (e.target === $("export-modal")) closeExport(); });
+  $("export-modal").addEventListener("pointerdown", (e) => { if (e.target === $("export-modal")) closeExport(); });
   $("export-pdf-btn").onclick = exportPdf;
   $("export-img-btn").onclick = exportImages;
   $("export-pkg-btn").onclick = exportService;
@@ -3543,13 +3565,13 @@ function init() {
   $("lib-pre-run").onclick = runPrerenderDir;
   $("lib-pre-cancel").onclick = cancelPrerenderDir;
   $("lib-pre-dir").addEventListener("keydown", (e) => { if (e.key === "Enter") scanPrerenderDir(); });
-  $("library-modal").addEventListener("mousedown", (e) => { if (e.target === $("library-modal")) closeLibrary(); });
+  $("library-modal").addEventListener("pointerdown", (e) => { if (e.target === $("library-modal")) closeLibrary(); });
   // 사운드 트랙 모달
   $("sound-btn").onclick = openSound;
   $("sound-close").onclick = closeSound;
   $("sound-add").onclick = () => $("sound-file").click();
   $("sound-file").onchange = (e) => { const f = e.target.files[0]; if (f) addTrackFile(f); e.target.value = ""; };
-  $("sound-modal").addEventListener("mousedown", (e) => { if (e.target === $("sound-modal")) closeSound(); });
+  $("sound-modal").addEventListener("pointerdown", (e) => { if (e.target === $("sound-modal")) closeSound(); });
   // 찬양 가사 모달
   $("song-btn").onclick = openSongs;
   $("song-close").onclick = closeSongs;
@@ -3574,7 +3596,7 @@ function init() {
   // 편집 중 표시 + 장/줄 수 실시간 갱신
   $("song-lyrics").addEventListener("input", () => { markSongDirty(true); updateSongMeta(); });
   $("song-title").addEventListener("input", () => markSongDirty(true));
-  $("song-modal").addEventListener("mousedown", async (e) => {
+  $("song-modal").addEventListener("pointerdown", async (e) => {
     if (e.target === $("song-modal") && await confirmSongDiscard()) closeSongs();
   });
   $("style-copy-btn").onclick = copyStyleToOthers;
@@ -3583,7 +3605,7 @@ function init() {
   $("bg-close").onclick = closeBgPicker;
   $("bg-upload-btn").onclick = () => $("bg-file").click();
   $("bg-file").onchange = (e) => { const f = e.target.files[0]; if (f) uploadBackground(f); e.target.value = ""; };
-  $("bg-modal").addEventListener("mousedown", (e) => { if (e.target === $("bg-modal")) closeBgPicker(); });
+  $("bg-modal").addEventListener("pointerdown", (e) => { if (e.target === $("bg-modal")) closeBgPicker(); });
   // 성구 모달
   $("bibleref-btn").onclick = openBibleRef;
   $("bibleref-close").onclick = closeBibleRef;
@@ -3591,7 +3613,7 @@ function init() {
   $("bibleref-pdf-btn").onclick = () => $("bibleref-pdf-file").click();
   $("bibleref-pdf-file").onchange = (e) => { const f = e.target.files[0]; if (f) extractBibleRefsFromPdf(f); e.target.value = ""; };
   $("bibleref-add").onclick = addBibleRefSlides;
-  $("bibleref-modal").addEventListener("mousedown", (e) => { if (e.target === $("bibleref-modal")) closeBibleRef(); });
+  $("bibleref-modal").addEventListener("pointerdown", (e) => { if (e.target === $("bibleref-modal")) closeBibleRef(); });
   $("tpl-save").onclick = saveCurrentAsTemplate;
   $("tpl-edit-save").onclick = saveTemplateEdit;
   $("tpl-edit-cancel").onclick = cancelTemplateEdit;

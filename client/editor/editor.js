@@ -531,7 +531,7 @@ function renderList() {
     // 더블클릭/두 번 탭 → 발표로 보내기. 휴대폰·아이패드의 "순서" 탭에는 캔버스 하단의
     // 📺 버튼이 안 보여서 목록에서 바로 띄울 방법이 없었다(타일 뷰는 원래 더블클릭 지원).
     row.ondblclick = () => presentIndex(i);
-    wireDoubleTap(row, () => presentIndex(i));
+    wireDoubleTap(row, () => presentIndex(i), { key: s.id });
     wireDrag(row);
     root.appendChild(row);
   });
@@ -540,13 +540,24 @@ function renderList() {
 // 터치 기기의 "두 번 탭" → fn(). 아이패드는 네이티브 dblclick이 안 오거나 늦게 오는 경우가
 // 있어 직접 감지한다. 터치 포인터에서만 동작하므로 마우스(데스크톱) 경로는 dblclick 그대로.
 // 버튼(숨기기·삭제·순서이동) 위에서 시작한 탭은 무시한다 — 그 버튼의 동작이 우선.
-function wireDoubleTap(node, fn, { ms = 400 } = {}) {
-  let lastAt = 0;
+// 두 번 탭 → 발표. 상태를 **요소 바깥(모듈 스코프)** 에 둔다.
+// 첫 탭은 onRowClick → render()로 목록을 통째로 다시 그린다 → 두 번째 탭은 방금 만들어진
+// **새 요소**에 떨어진다. 그래서 노드 클로저에 lastAt을 두면 값이 항상 0이라 영영 안 먹었다
+// (데스크톱은 dblclick이 브라우저 기본 이벤트고 위치·시간으로 판정해서 멀쩡했다).
+// key는 슬라이드 id — 다시 그려도 같은 슬라이드면 같은 키다.
+let lastTap = { key: null, at: 0 };
+function wireDoubleTap(node, fn, { ms = 400, key = null } = {}) {
   node.addEventListener("pointerup", (e) => {
     if (e.pointerType !== "touch") return;
-    if (e.target.closest("button")) { lastAt = 0; return; }
-    if (e.timeStamp - lastAt < ms) { lastAt = 0; e.preventDefault(); fn(); }
-    else lastAt = e.timeStamp;
+    if (e.target.closest("button")) { lastTap = { key: null, at: 0 }; return; }
+    const k = key ?? node;
+    if (lastTap.key === k && e.timeStamp - lastTap.at < ms) {
+      lastTap = { key: null, at: 0 };
+      e.preventDefault();
+      fn();
+    } else {
+      lastTap = { key: k, at: e.timeStamp };
+    }
   });
 }
 
@@ -1781,7 +1792,7 @@ function renderTiles() {
     tile.append(buildThumb(s), cap);
     tile.onclick = (e) => onRowClick(s, e);   // same multi-select model as the list
     tile.ondblclick = () => presentIndex(i);
-    wireDoubleTap(tile, () => presentIndex(i));   // 터치: 타일도 두 번 탭으로 발표
+    wireDoubleTap(tile, () => presentIndex(i), { key: s.id });   // 터치: 타일도 두 번 탭으로 발표
     wireDrag(tile);
     grid.appendChild(tile);
   });

@@ -2177,7 +2177,10 @@ async function addSlide(where = "end") {
       params: collectParams(tpl), position, style: collectStyle(),
     });
     await refresh();
-    if (res?.slide_ids?.[0]) { setSingleSelection(res.slide_ids[0]); render(); }
+    // 마지막 장을 고른다 — 연달아 추가할 때 다음 것이 방금 넣은 것들 **뒤에** 붙는다
+    // (첫 장을 고르면 다음 추가분이 방금 넣은 장들 사이에 끼어든다). 라이브러리 가져오기와 같은 규칙.
+    const last = res?.slide_ids?.at(-1);
+    if (last) { setSingleSelection(last); render(); }
     closeAddSlide();
     toast(`“${tpl.name}” ${res?.slide_ids?.length || 1}장 추가됨`);
   } catch (e) { msg("add-msg", e.message, true); }
@@ -2868,7 +2871,10 @@ async function addSongToService() {
       position: idx >= 0 ? idx + 1 : undefined,
     });
     await refresh();
-    if (r.slide_ids?.[0]) { setSingleSelection(r.slide_ids[0]); render(); }
+    // **마지막** 장으로 옮긴다 — 다음 곡은 이 뒤에 붙으므로 모달을 닫았다 열지 않고
+    // 연달아 여러 곡을 넣을 수 있다. 첫 장으로 가면 다음 곡이 방금 넣은 곡들 사이에 끼어든다.
+    const last = r.slide_ids?.at(-1);
+    if (last) { setSingleSelection(last); render(); }
     const name = $("song-title").value.trim() || "가사";
     msg("song-status", `“${name}” ${r.slide_ids?.length || 0}장 추가됨`);
     toast(`${r.slide_ids?.length || 0}장 추가됨`);

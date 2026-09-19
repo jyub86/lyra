@@ -1,6 +1,9 @@
 // 편집 UI 컨트롤러. 예배(순서) > 슬라이드 평면 구조. 모든 동작은 Tool 호출.
 import { callTool, loadServiceTheme, uploadFile, BUILTIN_THEMES, CLIENT_ID } from "/shared/api.js";
 import { renderSlideWithLayers, renderElements } from "/shared/layer-renderer.js";
+// core/lib/element-match.js 를 그대로 받는다(서버가 이 경로로 내려준다) — 서식 복사와
+// 일괄 수정이 반드시 같은 규칙으로 요소를 짝지어야 한다.
+import { matchKeys, keyLabel } from "/shared/element-match.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -16,6 +19,9 @@ const state = {
   editEl: null,         // primary selected element index (design panel/resize)
   editElSet: new Set(), // selected element indices (drag-marquee multi-select)
   inlineEdit: null,     // 캔버스에서 인라인 편집 중인 텍스트 요소 index (null=아님)
+  // 요소 일괄 편집: 켜면 지금 고른 요소에 가한 변경이 다른 장의 "같은 요소"에도 간다.
+  // scope=null이면 선택을 따른다(여러 장 선택 → 그 장들만). batchScope() 참고.
+  batchEl: { on: false, onFor: null, scope: null, scopeFor: null },
   templates: [],        // design templates (cached)
   editingTemplate: null, // { id, name, kind, draft } while editing a template's design
   styleSource: null,    // 서식 복사기: 서식을 가져올 원본 슬라이드 id
@@ -953,7 +959,7 @@ function startMove(e, i) {
   };
   // 움직였을 때만 저장. 단순 클릭/더블클릭에서 commit→비동기 refresh가
   // 디자인 패널을 다시 그려 '내용' 입력 포커스를 뺏는 것을 막는다.
-  const up = () => { draggingEls--; document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); if (moved) commitEls(); };
+  const up = () => { draggingEls--; document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); if (moved) commitEls(["x", "y", "w", "h"]); };
   draggingEls++;   // 끄는 동안엔 남의 변경 반영을 미룬다(작업이 날아가지 않게)
   document.addEventListener("mousemove", mv);
   document.addEventListener("mouseup", up);
@@ -974,18 +980,98 @@ function startResize(e, i, pos) {
     if (pos.includes("n")) { const t = snapEdge(o.y + dy); el.y = t; el.h = Math.max(0.03, o.y + o.h - t); if (t !== o.y + dy) activeGuides.h = t; }
     repaintEls(); renderGuides();
   };
-  const up = () => { draggingEls--; document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); commitEls(); };
+  const up = () => { draggingEls--; document.removeEventListener("mousemove", mv); document.removeEventListener("mouseup", up); clearGuides(); commitEls(["x", "y", "w", "h"]); };
   draggingEls++;
   document.addEventListener("mousemove", mv);
   document.addEventListener("mouseup", up);
 }
 
-async function commitEls() {
+// fields = 이번에 바뀐 필드 이름들. 일괄 편집이 켜져 있으면 **그 필드만** 다른 장의
+// 같은 요소에 전파한다. 요소를 통째로 복사하면 안 된다 — 가사처럼 장마다 내용이 다른
+// 요소까지 같은 글로 덮어써 버린다.
+async function commitEls(fields = null) {
   if (state.editingTemplate) { repaintEls(); return; } // draft: local only
   const slide = selectedSlide();
   if (!slide) return;
   await callTool("set_slide_elements", { slide_id: slide.id, elements: slide.elements || [] });
+  if (fields?.length) await propagateEl(fields);
   await refresh();
+}
+
+// 지금 고른 요소의 짝짓기 키 (없으면 null)
+function currentElKey() {
+  const slide = selectedSlide();
+  if (!slide || state.editEl == null) return null;
+  return matchKeys(slide.elements || [])[state.editEl] ?? null;
+}
+
+// 지금 고른 슬라이드들의 서명. 선택이 바뀌면 값이 달라진다 → 아래에서 "사용자가 고른 범위"를
+// 언제 버려야 하는지 판단하는 데 쓴다.
+function selectionSig() { return [...state.selectedSet].sort().join(","); }
+
+// 실제로 적용될 범위.
+// **기본은 선택을 따른다** — 여러 장을 골라 뒀으면 "선택한 장만", 아니면 "이 예배 전체".
+// 여러 장 고르는 행위 자체가 "이 장들에 하겠다"는 뜻이므로 그게 기본이어야 한다.
+// 사용자가 드롭다운으로 직접 고른 값은 **그 선택 상태에서만** 유지한다(scopeFor) —
+// 선택이 바뀌면 다시 기본으로 돌아간다. 안 그러면 예전 선택에 맞춰 고른 범위가
+// 새 선택에 눌러앉아 엉뚱한 장을 건드린다.
+function batchScope() {
+  if (state.batchEl.scope && state.batchEl.scopeFor === selectionSig()) return state.batchEl.scope;
+  return state.selectedSet.size > 1 ? "selected" : "service";
+}
+function setBatchScope(v) {
+  state.batchEl.scope = v;
+  state.batchEl.scopeFor = selectionSig();
+}
+
+// 켜져 있는가. **여러 장을 골라 뒀으면 기본으로 켜진다** — 배경(set_slide_background)이 이미
+// 멀티셀렉만으로 전체에 적용되는데 요소만 체크박스를 요구하면 일관성이 없고, 사용자는
+// "골라 놨으니 당연히 이 장들에 적용되겠지"로 읽는다(실제로 그렇게 기대했다).
+// 한 장만 선택했을 때는 끈다 — 그 상태의 범위는 "예배 전체"라, 켜져 있으면 한 장을
+// 만졌는데 44장이 조용히 바뀐다.
+// 사용자가 직접 끄거나 켠 값은 그 선택 상태에서만 유지한다(scope와 같은 규칙).
+function batchOn() {
+  if (state.batchEl.onFor === selectionSig()) return state.batchEl.on;
+  return state.selectedSet.size > 1;
+}
+function setBatchOn(v) {
+  state.batchEl.on = v;
+  state.batchEl.onFor = selectionSig();
+}
+
+// 범위 안의 슬라이드들. 범위는 **엄격히** 지킨다 — "선택한 장만"인데 선택이 1장으로
+// 줄었다면 대상 0장(아무 일도 안 일어남)이 맞다. 조용히 "예배 전체"로 되돌리면
+// 의도와 정반대로 번진다.
+function batchPool(scope = batchScope()) {
+  return scope === "selected"
+    ? slides().filter((s) => state.selectedSet.has(s.id))
+    : slides();
+}
+
+// 일괄 편집 대상 슬라이드 id들 — 현재 장은 이미 저장했으므로 뺀다.
+function batchTargetIds() {
+  const cur = selectedSlide()?.id;
+  return batchPool().map((s) => s.id).filter((id) => id !== cur);
+}
+
+// 이 키를 가진 장이 몇 장인지(현재 장 포함) — 패널에 "N장에 있음"으로 보여준다.
+function keyCount(key, scope = batchScope()) {
+  return batchPool(scope).filter((s) => matchKeys(s.elements || []).includes(key)).length;
+}
+
+async function propagateEl(fields) {
+  if (!batchOn() || state.editingTemplate) return;
+  const key = currentElKey();
+  const el = els()[state.editEl];
+  if (!key || !el) return;
+  const ids = batchTargetIds();
+  if (!ids.length) return;
+  const patch = {};
+  for (const f of fields) patch[f] = el[f] === undefined ? null : el[f];
+  try {
+    const r = await callTool("update_elements", { slide_ids: ids, key, patch });
+    if (r.changed) toast(`${r.changed}장에 함께 적용 · ${keyLabel(key)}`);
+  } catch (e) { toast("일괄 적용 실패: " + e.message); }
 }
 
 const ADD_DEFAULTS = {
@@ -1195,6 +1281,74 @@ function wireStaticGroups() {
   }
 }
 
+// "여러 장에 함께" — 고른 요소와 같은 역할의 요소가 다른 장에도 있을 때 뜬다.
+// 켜면 이후의 이동·크기·색·글꼴 변경이 그 장들에 함께 간다.
+// **글자(text)는 자동 전파에서 뺀다** — 가사 상자를 옮기려고 켜 둔 채 가사를 고치면
+// 12장이 전부 같은 가사가 된다. 글자는 아래 별도 버튼으로만, 확인을 받고 보낸다.
+function renderBatchEl(body) {
+  if (state.editingTemplate) return;
+  const key = currentElKey();
+  if (!key) return;
+  // 보일지 말지는 **예배 전체 기준**으로 정한다. 범위 기준으로 정하면 "선택한 장만"으로
+  // 둔 채 한 장만 클릭했을 때 패널이 통째로 사라져, 왜 안 번지는지 알 수 없게 된다.
+  if (keyCount(key, "service") <= 1) return;   // 이 장에만 있는 요소 → 보여줄 이유가 없다
+  const n = keyCount(key);                      // 지금 범위에서 실제 대상 장수
+
+  const on = batchOn();
+  const box = elx("div", "batch-el" + (on ? " on" : ""));
+  box.append(elx("div", "batch-title", `🔗 ${keyLabel(key)} · ${n}장에 있음`));
+
+  const toggle = elx("label", "batch-toggle");
+  const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = on;
+  cb.onchange = () => { setBatchOn(cb.checked); renderDesignPanel(); };
+  toggle.append(cb, elx("span", null, "바꾸는 값을 이 장들에 함께 적용"));
+  box.appendChild(toggle);
+
+  // 대상 범위 — 선택이 1장으로 줄어도 **계속 보여준다**. 감추면 "선택한 장만"인 채로
+  // 왜 아무 일도 안 일어나는지 알 수 없다(그렇다고 전체로 되돌리는 건 더 위험하다).
+  const sel = document.createElement("select");
+  for (const [v, t] of [["service", `이 예배 전체 (${keyCount(key, "service")}장)`],
+    ["selected", `선택한 장만 (${keyCount(key, "selected")}장)`]]) {
+    const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o);
+  }
+  sel.value = batchScope();
+  sel.onchange = () => { setBatchScope(sel.value); renderDesignPanel(); };
+  const wrap = elx("label", "batch-scope", "대상"); wrap.appendChild(sel);
+  box.appendChild(wrap);
+
+  const row = elx("div", "batch-acts");
+  const el = els()[state.editEl];
+  // 글자 맞추기: 캡션("다 같 이")처럼 여러 장에 같은 문구를 쓸 때. 가사에는 쓰면 안 되므로 확인을 받는다.
+  if (el?.type === "text" && (el.text ?? "").trim()) {
+    const b = elx("button", "mini", "글자도 똑같이");
+    b.title = "이 요소의 글자를 나머지 장에도 그대로 넣는다 (가사처럼 장마다 달라야 하는 글에는 쓰지 마세요)";
+    b.onclick = async () => {
+      const ids = batchTargetIds();
+      const preview = (el.text || "").slice(0, 20);
+      // 세는 단위는 **이 요소가 실제로 있는 장**(n)이어야 한다. 대상 id 수(= 나머지 전부)를
+      // 쓰면 "85장을 바꿉니다"라고 겁을 주고 실제로는 24장만 바뀐다(실측으로 걸림).
+      if (!confirm(`이 요소가 있는 ${n}장의 "${keyLabel(key)}" 글자를 모두\n\n“${preview}”\n\n로 바꿉니다. 장마다 다르던 글은 사라집니다. 계속할까요?`)) return;
+      const r = await callTool("update_elements", { slide_ids: ids, key, patch: { text: el.text, html: el.html ?? null } });
+      await refresh(); render();
+      toast(`${r.changed}장의 글자를 맞췄습니다`);
+    };
+    row.appendChild(b);
+  }
+  const del = elx("button", "mini danger", `${n}장에서 삭제`);
+  del.title = "이 요소를 같은 역할끼리 찾아 한 번에 지운다";
+  del.onclick = async () => {
+    if (!confirm(`"${keyLabel(key)}" 요소를 ${n}장에서 지웁니다. 계속할까요?`)) return;
+    const ids = [...batchTargetIds(), selectedSlide().id];
+    const r = await callTool("remove_elements", { slide_ids: ids, key });
+    state.editEl = null; state.editElSet = new Set();
+    await refresh(); render();
+    toast(`${r.changed}장에서 지웠습니다`);
+  };
+  row.appendChild(del);
+  box.appendChild(row);
+  body.appendChild(box);
+}
+
 function renderDesignPanel() {
   const empty = $("el-empty"), body = $("el-props");
   // 편집할 때마다 commitEls→refresh→render로 이 패널을 다시 그리는데, 그때 스크롤이
@@ -1217,6 +1371,8 @@ function renderDesignPanel() {
   if (!el) { empty.hidden = false; body.hidden = true; return; }
   empty.hidden = true; body.hidden = false;
   body.replaceChildren();
+
+  renderBatchEl(body);   // 맨 위: 여러 장에 함께 적용
 
   // 아래 입력들은 모두 "현재 그룹"(target)에 담긴다. group()을 부르면 그 다음 입력부터
   // 새 접이식 그룹으로 들어간다. group을 한 번도 안 부르면 예전처럼 평평하게 쌓인다.
@@ -1249,7 +1405,7 @@ function renderDesignPanel() {
     const apply = (commit) => {
       el[fieldName] = type === "check" ? input.checked : (type === "range" || opts.num ? Number(input.value) : input.value);
       repaintEls();
-      if (commit) { commitEls(); if (type === "color") pushRecentColor(el[fieldName]); }
+      if (commit) { commitEls([fieldName]); if (type === "color") pushRecentColor(el[fieldName]); }
     };
     input.addEventListener("input", () => apply(false));
     input.addEventListener("change", () => apply(true));
@@ -1270,7 +1426,7 @@ function renderDesignPanel() {
     const range = document.createElement("input"); range.type = "range"; range.min = min; range.max = max; range.step = 0.1;
     const num = document.createElement("input"); num.type = "number"; num.min = min; num.max = max; num.step = 0.1;
     range.value = num.value = el.size ?? def;
-    const apply = (v, commit) => { el.size = Number(v); range.value = num.value = el.size; repaintEls(); if (commit) commitEls(); };
+    const apply = (v, commit) => { el.size = Number(v); range.value = num.value = el.size; repaintEls(); if (commit) commitEls(["size"]); };
     range.addEventListener("input", () => apply(range.value, false));
     range.addEventListener("change", () => apply(range.value, true));
     num.addEventListener("input", () => apply(num.value, false));
@@ -1285,7 +1441,7 @@ function renderDesignPanel() {
     const range = document.createElement("input"); range.type = "range"; range.min = min; range.max = max; range.step = step;
     const num = document.createElement("input"); num.type = "number"; num.min = min; num.max = max; num.step = step;
     range.value = num.value = el[fieldName] ?? def;
-    const apply = (v, commit) => { el[fieldName] = Number(v); range.value = num.value = el[fieldName]; repaintEls(); if (commit) commitEls(); };
+    const apply = (v, commit) => { el[fieldName] = Number(v); range.value = num.value = el[fieldName]; repaintEls(); if (commit) commitEls([fieldName]); };
     range.addEventListener("input", () => apply(range.value, false));
     range.addEventListener("change", () => apply(range.value, true));
     num.addEventListener("input", () => apply(num.value, false));
@@ -1298,7 +1454,7 @@ function renderDesignPanel() {
     const wrap = elx("label", null, "글꼴");
     const sel = document.createElement("select");
     fillFontSelect(sel, el.font || "");
-    sel.addEventListener("change", () => { el.font = sel.value; repaintEls(); commitEls(); });
+    sel.addEventListener("change", () => { el.font = sel.value; repaintEls(); commitEls(["font"]); });
     wrap.appendChild(sel); target.appendChild(wrap);
   };
 
@@ -1375,7 +1531,7 @@ function renderDesignPanel() {
   const effectFields = () => {
     { const wrap = elx("label", null, "그림자");
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!el.shadow;
-      cb.onchange = () => { el.shadow = cb.checked; repaintEls(); commitEls(); renderDesignPanel(); };
+      cb.onchange = () => { el.shadow = cb.checked; repaintEls(); commitEls(["shadow"]); renderDesignPanel(); };
       wrap.appendChild(cb); target.appendChild(wrap); }
     if (el.shadow) {
       field("그림자 색", "color", "shadow_color", { def: "#000000" });
@@ -1421,14 +1577,14 @@ function renderDesignPanel() {
       const input = document.createElement("input"); input.type = "text"; input.value = el.url || "";
       input.placeholder = "https://…  또는 아래에서 파일 선택";
       input.oninput = () => { el.url = input.value; };
-      input.onchange = () => { el.url = input.value; repaintEls(); commitEls(); };
+      input.onchange = () => { el.url = input.value; repaintEls(); commitEls(["url"]); };
       wrap.appendChild(input); target.appendChild(wrap);
       // 로컬 파일 업로드
       const file = document.createElement("input"); file.type = "file"; file.accept = "video/*";
       file.onchange = async () => {
         if (!file.files[0]) return;
         msg("add-msg", "영상 업로드 중…");
-        try { const { url } = await uploadFile(file.files[0]); el.url = url; input.value = url; repaintEls(); commitEls(); msg("add-msg", "업로드 완료"); }
+        try { const { url } = await uploadFile(file.files[0]); el.url = url; input.value = url; repaintEls(); commitEls(["url"]); msg("add-msg", "업로드 완료"); }
         catch (e) { msg("add-msg", e.message, true); }
       };
       target.appendChild(file);
@@ -1437,7 +1593,7 @@ function renderDesignPanel() {
     // 소리: 체크 = 소리 켜짐(= muted:false). 소리는 발표 화면에서만 재생됨.
     { const wrap = elx("label", null, "소리 (발표 화면에서)");
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !el.muted;
-      cb.onchange = () => { el.muted = !cb.checked; repaintEls(); commitEls(); };
+      cb.onchange = () => { el.muted = !cb.checked; repaintEls(); commitEls(["muted"]); };
       wrap.appendChild(cb); target.appendChild(wrap);
     }
     field("채움", "select", "fit", { options: [["contain", "전체 보이기"], ["cover", "꽉 채우기"]] });

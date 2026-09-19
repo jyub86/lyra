@@ -24,6 +24,10 @@ function resolveStatic(pathname) {
   if (pathname === "/export" || pathname === "/export/") {
     return join(ROOT, "client/export/index.html");
   }
+  // 요소 짝짓기 규칙은 core에 원본 하나만 두고 편집기에도 **같은 파일**을 내려준다.
+  // 복사해 두면 서식 복사(copy_slide_style)와 일괄 수정(update_elements)이 서로 다른
+  // 요소를 건드리게 된다 — 규칙이 갈라지는 순간 디버깅이 매우 어려워지는 종류의 버그.
+  if (pathname === "/shared/element-match.js") return join(ROOT, "core/lib/element-match.js");
   let rel = null;
   if (pathname.startsWith("/shared/") || pathname.startsWith("/editor/") || pathname.startsWith("/presenter/") || pathname.startsWith("/export/")) {
     rel = "client" + pathname;

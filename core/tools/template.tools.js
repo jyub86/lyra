@@ -14,8 +14,8 @@ import { touchService, serviceIdForSlide, parseSlide } from "./_helpers.js";
 import { BUILTIN_IDS, seedBuiltins, paramsFromTool } from "../templates/builtins.js";
 import { getBiblePassage, getHymn, getReading } from "../db/content.js";
 import { splitBible, splitHymn, splitReading, bibleAutoCapacity } from "../splitter.js";
+import { CONTENT_TYPES, matchKeys } from "../lib/element-match.js";
 
-const CONTENT_TYPES = new Set(["bible", "hymn", "reading"]);
 const CONTENT_TOOL = { bible: "add_bible_slides", hymn: "add_hymn_slides", reading: "add_reading_slides" };
 
 // 서식(디자인)으로 취급하는 필드 — 내용은 건드리지 않고 이것만 덮어쓴다.
@@ -182,18 +182,6 @@ function stripForTemplate(elements) {
       return { ...rest, text: PLACEHOLDER[e.bind] || e.bind };
     }
     return e;
-  });
-}
-
-// 요소 짝짓기 키 — 같은 역할의 요소를 슬라이드끼리 맞춘다.
-// bind(가사 등) → 콘텐츠 종류+field(성경 본문/참조) → 종류+등장순서.
-function matchKeys(els) {
-  const seen = {};
-  return (els || []).map((e) => {
-    if (e.type === "text" && e.bind) return `bind:${e.bind}`;
-    if (CONTENT_TYPES.has(e.type)) return `content:${e.type}:${e.field || "all"}`;
-    const n = (seen[e.type] = (seen[e.type] || 0) + 1);
-    return `type:${e.type}:${n}`;
   });
 }
 

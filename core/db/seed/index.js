@@ -6,17 +6,16 @@
 //   bun run core/db/seed/index.js
 //   WORSHIP_DATA_DIR=/path/to/data bun run core/db/seed/index.js
 //   bun run core/db/seed/index.js --songs   # 찬양 가사만 다시 적재(가사 수정 반영)
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
+import { dataPath } from "../../lib/paths.js";
 import { getDb } from "../index.js";
 import { importBible } from "./import-bible.js";
 import { importHymns } from "./import-hymns.js";
 import { importReadings } from "./import-readings.js";
 import { importSongs } from "./import-songs.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = process.env.WORSHIP_DATA_DIR || join(__dirname, "../../../data/source");
+const DATA_DIR = process.env.WORSHIP_DATA_DIR || dataPath("source");
 
 function load(name) {
   const p = join(DATA_DIR, name);
@@ -40,6 +39,30 @@ export function seed(db = getDb()) {
   const readings = importReadings(db, load("readings.json"));
   const songs = seedSongs(db);
   return { bible, hymns, readings, songs };
+}
+
+// 첫 실행 자동 적재 — data/source 에 넣어둔 파일 중 **아직 DB에 없는 것만** 채운다.
+// 배포판(단일 실행파일)에는 저작권 자료가 들어 있지 않아서, 사용자가 파일을 넣고
+// 다시 켜면 알아서 등록되어야 한다. 이미 들어 있으면 건너뛰므로 매번 켜도 느려지지 않는다.
+const AUTO = [
+  ["bible.json", "bible_verses", importBible],
+  ["hymns.json", "hymns", importHymns],
+  ["readings.json", "responsive_readings", importReadings],
+  ["songs.json", "songs", importSongs],
+];
+
+export function autoSeed(db = getDb()) {
+  const done = {};
+  for (const [file, table, fn] of AUTO) {
+    const path = join(DATA_DIR, file);
+    if (!existsSync(path)) continue;
+    let empty = true;
+    try { empty = db.query(`SELECT COUNT(*) AS c FROM ${table}`).get().c === 0; } catch { continue; }
+    if (!empty) continue;
+    try { done[file] = fn(db, JSON.parse(readFileSync(path, "utf8"))); }
+    catch (e) { console.error(`  ⚠️  ${file} 등록 실패: ${e.message}`); }
+  }
+  return done;
 }
 
 if (import.meta.main) {

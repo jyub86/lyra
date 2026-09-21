@@ -17,13 +17,11 @@
 // 가져와도 디스크에 한 번만 저장되고, url 재매핑도 필요 없다.
 import { register, execute } from "./registry.js";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, normalize } from "node:path";
-import { fileURLToPath } from "node:url";
+import { basename, join, normalize } from "node:path";
 import { createHash } from "node:crypto";
 import { zipSync, unzipSync, strFromU8, strToU8 } from "fflate";
+import { DATA_DIR } from "../lib/paths.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
-const DATA_DIR = normalize(join(ROOT, "data"));
 const UPLOAD_DIR = join(DATA_DIR, "uploads");
 const OUT_DIR = join(DATA_DIR, "exports");
 const SHARE_FORMAT = "worship-service/v2";

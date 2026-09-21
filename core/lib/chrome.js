@@ -2,10 +2,10 @@
 // poppler.js·webp.js와 같은 방식: PATH → LYRA_CHROME → tools/ 드롭인 → 일반 설치 위치.
 // 크롬(또는 엣지·크로미움)은 이 앱을 쓰는 PC엔 이미 있으므로 새 의존성이 아니다.
 import { existsSync, readdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { APP_DIR } from "./paths.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const ROOT = APP_DIR;
 
 function bundleDirs() {
   const dirs = [];

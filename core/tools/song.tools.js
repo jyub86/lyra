@@ -9,11 +9,11 @@
 import { register } from "./registry.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { cleanTitle } from "../db/seed/import-songs.js";
+import { dataPath } from "../lib/paths.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
-const SONGS_JSON = join(ROOT, "data/source/songs.json");
+
+const SONGS_JSON = dataPath("source", "songs.json");
 
 // "빈 줄 = 장 구분" 텍스트 → [[줄,...], ...]
 export function parseLyrics(text) {

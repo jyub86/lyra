@@ -7,11 +7,10 @@ import { serviceIdForSlide, touchService } from "./_helpers.js";
 import { ulid } from "../lib/ulid.js";
 import { makeLoopVideo, probeVideo, extractFrame, ffmpegAvailable } from "../lib/ffmpeg.js";
 import { existsSync, mkdirSync, statSync } from "node:fs";
-import { join, dirname, normalize, extname, basename } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, normalize, extname, basename } from "node:path";
 import { keyFor } from "../lib/render-cache.js";
+import { DATA_DIR } from "../lib/paths.js";
 
-const DATA_DIR = normalize(join(dirname(fileURLToPath(import.meta.url)), "../../data"));
 // "/uploads/xxx.mp4"(서버 URL) 또는 절대 경로 → 실제 파일 경로. 경로 이탈(..)은 차단.
 function resolveVideoPath(pathOrUrl) {
   const s = String(pathOrUrl || "");

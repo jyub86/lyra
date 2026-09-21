@@ -3575,6 +3575,35 @@ async function loadNetwork() {
   } catch { box.textContent = "주소 확인 실패"; }
 }
 
+// 버전 표시 + 새 버전 확인. 배포판(단일 실행파일)에서만 의미가 있고,
+// 개발 모드나 인터넷이 없으면 조용히 버전만 보여준다 — 예배 준비를 방해하면 안 된다.
+async function loadVersion() {
+  const label = $("app-version"), btn = $("update-btn");
+  if (!label) return;
+  try {
+    const v = await callTool("get_version");
+    label.textContent = `Lyra ${v.version}${v.compiled ? "" : " (개발)"}`;
+    if (!v.compiled) return;
+    const u = await callTool("check_update");
+    if (!u.available) return;
+    btn.hidden = false;
+    btn.textContent = `새 버전 ${u.latest} 설치`;
+    btn.classList.add("accent");
+    btn.onclick = async () => {
+      if (!confirm(`Lyra ${u.latest} 로 업데이트합니다.\n예배·업로드 자료는 그대로 유지됩니다.\n\n설치 후 Lyra를 다시 시작해야 합니다. 계속할까요?`)) return;
+      btn.disabled = true; btn.textContent = "내려받는 중…";
+      try {
+        const r = await callTool("apply_update");
+        btn.textContent = r.updated ? "다시 시작하세요" : "이미 최신";
+        if (r.updated) alert(`${r.to} 설치 완료.\n\nLyra를 닫았다가 다시 실행해 주세요.`);
+      } catch (e) {
+        btn.disabled = false; btn.textContent = "업데이트 실패";
+        alert("업데이트 실패: " + e.message);
+      }
+    };
+  } catch { /* 버전 확인 실패는 무시 — 기능에 영향 없음 */ }
+}
+
 function init() {
   initThemeSelect();
   wireResponsive();      // 좁은 화면: 하단 탭 · 속성 서랍 · 터치용 ▲▼
@@ -3795,6 +3824,7 @@ function init() {
   loadFonts();
   loadBackgrounds();
   loadNetwork();
+  loadVersion();
   connectPresentWs();   // 발표 위치를 따라가 리스트·타일에 "발표중" 표시
 }
 

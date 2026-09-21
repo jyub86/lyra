@@ -2,13 +2,14 @@
 // Single local DB file. bun:sqlite bundles SQLite with FTS5.
 
 import { Database } from "bun:sqlite";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
 import { mkdirSync, readFileSync } from "node:fs";
+import { dataPath } from "../lib/paths.js";
+import { ASSETS } from "../assets.generated.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-export const DB_PATH = process.env.WORSHIP_DB || join(__dirname, "../../data/worship.db");
-const SCHEMA_PATH = join(__dirname, "schema.sql");
+export const DB_PATH = process.env.WORSHIP_DB || dataPath("worship.db");
+// schema.sql은 앱의 일부다(사용자 데이터 아님) → 단일 실행파일에 심어 둔 것을 읽는다.
+const SCHEMA_PATH = ASSETS.get("@schema.sql");
 
 let _db = null;
 

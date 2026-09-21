@@ -8,15 +8,14 @@
 //      크롬만 있으면 되니 윈도우에서도 바로 된다.
 // cwebp가 있으면 WebP로 저장(PNG 대비 7~8배 작음), 없으면 PNG.
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { tmpdir, cpus } from "node:os";
-import { fileURLToPath } from "node:url";
 import { findChrome } from "./chrome.js";
 import { findPoppler } from "./poppler.js";
 import { pngBuffersToWebp } from "./webp.js";
+import { dataPath } from "./paths.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
-export const EXPORT_DIR = join(ROOT, "data/exports");
+export const EXPORT_DIR = dataPath("exports");
 const WIDTH = 1920, HEIGHT = 1080;   // 16:9 기본. 프로젝터 1080p 기준.
 
 function run(cmd, timeoutMs = 120000) {

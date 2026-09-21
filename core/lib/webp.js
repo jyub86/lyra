@@ -2,11 +2,11 @@
 // 7~12배 작아진다(투명도 유지, Chrome 네이티브 렌더). cwebp는 선택 외부 도구로,
 // 없으면 null을 돌려 호출자가 PNG로 graceful fallback 한다(soffice/poppler와 동일 정책).
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { APP_DIR } from "./paths.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const ROOT = APP_DIR;
 
 function bundleBinDirs() {
   const dirs = [];

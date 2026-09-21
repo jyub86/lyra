@@ -8,11 +8,13 @@
     "worship": "./adapters/cli.js"
   },
   "scripts": {
-    "dev": "bun run server/index.js",
+    "dev": "bun run scripts/gen-assets.js && bun run server/index.js",
     "cli": "bun run adapters/cli.js",
     "mcp": "bun run adapters/mcp.js",
     "seed": "bun run core/db/seed/index.js",
-    "db:reset": "bun run core/db/index.js --reset"
+    "db:reset": "bun run core/db/index.js --reset",
+    "build": "bun run scripts/build.js",
+    "assets": "bun run scripts/gen-assets.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

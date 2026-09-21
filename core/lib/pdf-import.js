@@ -3,13 +3,13 @@
 // single images pass through. Each page/image becomes a slide with one full-bleed
 // image element on a black background. Shared by /api/import and import_pdf tool.
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, dirname, extname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { basename, extname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { saveUpload } from "./uploads.js";
 import { findPoppler } from "./poppler.js";
 import { getCachedImages, putCachedImages, isCached } from "./render-cache.js";
 import { pngBuffersToWebp } from "./webp.js";
+import { dataPath } from "./paths.js";
 
 const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]);
 const OFFICE_EXT = new Set([".pptx", ".ppt", ".odp", ".key", ".pdfx"]); // presentation docs LibreOffice can read
@@ -23,7 +23,7 @@ const WEBP_QUALITY = 90;
 
 // Persistent LibreOffice profile dir. Reusing it (instead of a fresh tmp profile
 // per import) skips the ~1.8s cold profile regeneration on every conversion.
-const LO_PROFILE_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../data/.lo-profile");
+const LO_PROFILE_DIR = dataPath(".lo-profile");
 
 // Run a subprocess async (doesn't block the server like spawnSync did), returning
 // { code, stderr }. stderr captured for error messages.

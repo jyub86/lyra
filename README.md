@@ -86,22 +86,43 @@ sudo apt install libreoffice poppler-utils webp
 
 ---
 
-## 쉬운 실행 (더블클릭) ⭐
+## 설치 ⭐
 
-터미널 없이 실행하려면 프로젝트 폴더의 실행 파일을 **더블클릭**하세요.
+목적에 따라 두 갈래입니다.
 
-- **macOS** — `Lyra-mac.command`
-- **Windows** — `Lyra-windows.bat`
+### A. 그냥 쓰고 싶다 — 배포판 (권장)
 
-더블클릭하면 자동으로 (1) Bun 런타임 설치(최초 1회, 인터넷 필요) → (2) 의존성 설치 →
-(3) `data/source/`에 콘텐츠 JSON이 있으면 시드 → (4) 서버 실행 → (5) 브라우저로 편집기를 엽니다.
-창을 닫으면 종료됩니다.
+[Releases](https://github.com/jyub86/lyra/releases)에서 내 운영체제용 zip을 받아 **압축을 풀고
+`Lyra`를 더블클릭**하면 끝입니다. Bun 설치도, 터미널도, 인터넷도 필요 없습니다.
 
-> macOS에서 “확인되지 않은 개발자” 경고가 뜨면: 파일 **우클릭 → 열기** 한 번이면 이후엔 더블클릭으로 됩니다.
-> (또는 터미널에서 `chmod +x Lyra-mac.command` 후 실행.)
+| 파일 | 대상 |
+|---|---|
+| `Lyra-<버전>-mac-apple-silicon.zip` | M1 이후 맥 |
+| `Lyra-<버전>-mac-intel.zip` | 인텔 맥 |
+| `Lyra-<버전>-windows.zip` | Windows 64비트 |
+
+예배·업로드 자료는 **실행파일 옆 `data/`** 에 쌓입니다(폴더째 USB로 옮겨도 그대로 이어집니다).
+쓰기가 막힌 위치(Program Files 등)에 두면 사용자 폴더로 자동 대피하며, 실행 시 경로를 알려줍니다.
+새 버전이 나오면 ⚙예배 메뉴 맨 아래에 설치 버튼이 뜹니다.
+
+> macOS에서 “확인되지 않은 개발자” 경고가 뜨면: **우클릭 → 열기** 를 한 번만 하면 됩니다.
+> Windows에서 “PC를 보호했습니다” 창이 뜨면: **추가 정보 → 실행**.
 >
 > 콘텐츠(성경·찬송·교독문)는 저작권 자료라 포함돼 있지 않습니다 — 아래 “콘텐츠 데이터 준비”대로
-> `data/source/`에 JSON을 두면 첫 실행 시 자동 시드됩니다. 없으면 편집·발표는 되지만 성경/찬송/교독문 생성만 비활성입니다.
+> `data/source/`에 JSON을 두고 다시 실행하면 자동 등록됩니다.
+> 없어도 편집·발표·이미지/PPT 가져오기는 그대로 쓸 수 있고, 성경/찬송/교독문 생성만 비활성입니다.
+
+### B. 소스에서 실행 — 코드를 고치거나 개발할 때
+
+```bash
+git clone https://github.com/jyub86/lyra.git
+cd lyra
+bun install
+bun run dev          # http://localhost:4321
+```
+
+`bun run dev` 가 정적 자산 목록을 새로 만든 뒤 서버를 띄웁니다(client 파일을 추가·삭제했을 때 필요).
+배포판을 직접 만들려면 `bun run build` → `dist/`.
 
 ---
 
@@ -281,6 +302,9 @@ lyra/
 | `bun run cli …` | CLI 어댑터 (`tools`/`schema`/`call`) |
 | `bun run mcp` | MCP 서버(stdio) |
 | `bun run db:reset` | DB 파일 삭제 후 스키마 재생성 |
+| `bun run assets` | 정적 자산 목록 재생성 (`dev`·`build`가 자동 실행) |
+| `bun run build [--all]` | 배포용 단일 실행파일 → `dist/` (`--all` = mac·Windows 전부) |
+| `bun run scripts/release.js` | `dist/`를 zip + `checksums.txt`로 묶기 |
 
 ---
 

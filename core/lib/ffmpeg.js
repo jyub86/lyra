@@ -4,9 +4,9 @@
 // ffmpeg는 선택 외부 도구 — 없으면 명확한 안내로 graceful (soffice/poppler/cwebp와 동일 정책).
 import { existsSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { APP_DIR } from "./paths.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
+const ROOT = APP_DIR;
 
 function bundleBinDirs() {
   const dirs = [];

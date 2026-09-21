@@ -1,44 +1,39 @@
 // 진입점 — adapters 조립 + 정적 파일 서빙 (design §3, §13).
 // Bun.serve owns one port for static files, the HTTP tool API, and the
 // presenter WebSocket. Tools themselves live in the registry; this only wires.
-import { join, normalize } from "node:path";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { normalize } from "node:path";
 import { existsSync, statSync } from "node:fs";
 import { handleApi } from "../adapters/http.js";
 import { websocket } from "../adapters/ws.js";
 import { closeDb } from "../core/db/index.js";
+import { ASSETS } from "../core/assets.generated.js";
+import { DATA_DIR, dataPath, COMPILED } from "../core/lib/paths.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT || 4321);
 
-// Map a URL path to a file on disk (with a traversal guard).
-function resolveStatic(pathname) {
-  if (pathname === "/" || pathname === "/editor" || pathname === "/editor/") {
-    return join(ROOT, "client/editor/index.html");
-  }
-  if (pathname === "/presenter" || pathname === "/presenter/") {
-    return join(ROOT, "client/presenter/index.html");
-  }
+const INDEX_OF = {
+  "/": "/editor/index.html", "/editor": "/editor/index.html", "/editor/": "/editor/index.html",
+  "/presenter": "/presenter/index.html", "/presenter/": "/presenter/index.html",
   // 헤드리스 크롬이 이미지/PDF로 굽는 전용 화면
-  if (pathname === "/export" || pathname === "/export/") {
-    return join(ROOT, "client/export/index.html");
+  "/export": "/export/index.html", "/export/": "/export/index.html",
+};
+
+// URL → 디스크 경로.
+// 앱 자산(편집기·발표·테마·폰트)은 ASSETS 표에서 찾는다. 개발 모드에선 디스크의 실제
+// 경로가, 단일 실행파일에선 바이너리에 심긴 경로가 나온다 — 서버 코드는 한 갈래로 유지.
+// 사용자 데이터(uploads·render-cache)만 실제 데이터 폴더에서 읽는다.
+function resolveStatic(pathname) {
+  const url = INDEX_OF[pathname] || pathname;
+
+  const asset = ASSETS.get(url);
+  if (asset) return asset;
+
+  // 사용자가 올린 파일·렌더 캐시 (데이터 폴더, 경로 이탈 방지)
+  if (url.startsWith("/uploads/") || url.startsWith("/render-cache/")) {
+    const full = normalize(dataPath(url));
+    return full.startsWith(DATA_DIR) ? full : null;
   }
-  // 요소 짝짓기 규칙은 core에 원본 하나만 두고 편집기에도 **같은 파일**을 내려준다.
-  // 복사해 두면 서식 복사(copy_slide_style)와 일괄 수정(update_elements)이 서로 다른
-  // 요소를 건드리게 된다 — 규칙이 갈라지는 순간 디버깅이 매우 어려워지는 종류의 버그.
-  if (pathname === "/shared/element-match.js") return join(ROOT, "core/lib/element-match.js");
-  let rel = null;
-  if (pathname.startsWith("/shared/") || pathname.startsWith("/editor/") || pathname.startsWith("/presenter/") || pathname.startsWith("/export/")) {
-    rel = "client" + pathname;
-  } else if (pathname.startsWith("/themes/")) {
-    rel = pathname.slice(1);
-  } else if (pathname.startsWith("/uploads/") || pathname.startsWith("/fonts/") || pathname.startsWith("/render-cache/")) {
-    rel = "data" + pathname;
-  }
-  if (!rel) return null;
-  const full = normalize(join(ROOT, rel));
-  return full.startsWith(ROOT) ? full : null;
+  return null;
 }
 
 // Serve a file with HTTP Range support — required for <video> playback in Chrome
@@ -110,8 +105,23 @@ function lanAddresses() {
   }
   return out;
 }
+// 지난 업데이트가 남긴 헌 실행파일 정리 (교체는 다음 실행 때 마무리된다)
+try { (await import("../core/tools/update.tools.js")).cleanupOldBinary(); } catch {}
+
+// 사용자가 data/source/ 에 넣어 둔 성경·찬송·교독문을 첫 실행에 등록한다.
+// (배포판엔 저작권 자료가 없으므로 "파일 넣고 다시 켜면 된다"가 성립해야 한다)
+try {
+  const { autoSeed } = await import("../core/db/seed/index.js");
+  const added = autoSeed();
+  for (const [file, r] of Object.entries(added)) console.log(`  · 콘텐츠 등록: ${file} ${JSON.stringify(r)}`);
+} catch (e) {
+  console.error("  ⚠️  콘텐츠 자동 등록 실패:", e.message);
+}
+
 console.log(`Lyra → http://localhost:${server.port}  (presenter: http://localhost:${server.port}/presenter)`);
 for (const ip of lanAddresses()) console.log(`  · 다른 기기(같은 네트워크): http://${ip}:${server.port}`);
+// 데이터가 어디에 쌓이는지 알려준다 — 배포판에서는 실행파일 옆이 아닐 수도 있다(쓰기 권한).
+console.log(`  · 데이터 폴더: ${DATA_DIR}${COMPILED ? "" : "  (개발 모드)"}`);
 
 // 종료 시 DB를 깨끗이 닫는다(창 닫기/Ctrl+C/종료 신호). 진행 중인 -journal도 정리.
 let closing = false;
@@ -122,8 +132,12 @@ function shutdown() {
 }
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) process.on(sig, shutdown);
 
-// LYRA_OPEN=1 이면 서버가 켜진 뒤 기본 브라우저로 편집기를 연다(더블클릭 런처용).
-if (process.env.LYRA_OPEN) {
+// 서버가 켜진 뒤 기본 브라우저로 편집기를 연다.
+// **배포판(단일 실행파일)은 기본으로 연다** — 더블클릭했는데 검은 창만 뜨고 아무 일도
+// 안 일어나면 쓸 수가 없다(런처가 하던 일을 여기서 물려받는다).
+// 개발 모드는 예전처럼 LYRA_OPEN=1 일 때만 — 서버를 자주 재시작하는데 매번 탭이 열리면 성가시다.
+// LYRA_OPEN=0 으로 배포판에서도 끌 수 있다.
+if (process.env.LYRA_OPEN ? process.env.LYRA_OPEN !== "0" : COMPILED) {
   const url = `http://localhost:${server.port}`;
   const cmd = process.platform === "darwin" ? ["open", url]
     : process.platform === "win32" ? ["cmd", "/c", "start", "", url]

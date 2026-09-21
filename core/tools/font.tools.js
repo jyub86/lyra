@@ -3,10 +3,9 @@
 // 요소(text/bible/hymn/reading)의 `font`=family 문자열, 서비스 기본은 theme_overrides.font.
 import { register } from "./registry.js";
 import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { ASSETS } from "../assets.generated.js";
 
-const MANIFEST = join(dirname(fileURLToPath(import.meta.url)), "../../data/fonts/fonts.json");
+const MANIFEST = ASSETS.get("/fonts/fonts.json");
 
 register({
   name: "list_fonts",

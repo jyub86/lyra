@@ -4,10 +4,10 @@
 // 키 = sha1(파일경로 + mtime + 렌더너비). 파일이 바뀌면(mtime) 새 키 → 새 폴더.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { dirname, extname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { extname, join } from "node:path";
+import { dataPath } from "./paths.js";
 
-const CACHE_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../data/render-cache");
+const CACHE_DIR = dataPath("render-cache");
 const DONE = ".done"; // 렌더 완료 표시(부분 렌더를 히트로 오인하지 않게)
 
 function fileMtime(path) {

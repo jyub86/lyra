@@ -4,12 +4,11 @@ import { register } from "./registry.js";
 import { ulid } from "../lib/ulid.js";
 import { nowIso, parseSlide } from "./_helpers.js";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { join, dirname, basename, normalize } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, basename, normalize } from "node:path";
 import { saveUpload } from "../lib/uploads.js";
+import { DATA_DIR } from "../lib/paths.js";
 
 const SHARE_FORMAT = "worship-service/v2";
-const DATA_DIR = normalize(join(dirname(fileURLToPath(import.meta.url)), "../../data"));
 // 서버가 서빙하는 첨부 경로들(모두 data/ 하위). 내보내기 번들 대상.
 const ASSET_PREFIXES = ["/uploads/", "/render-cache/"];
 

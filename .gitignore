@@ -32,3 +32,10 @@ data/exports/
 # Vision OCR 빌드 산출물 (scripts/ocr-vision.swift → 생성물)
 data/bin/
 data/.lyrics-work/
+
+# 배포 산출물(빌드 생성물)
+dist/
+
+# 생성물 (gen-assets.js가 만든다 — 진입점에서 항상 갱신)
+core/assets.generated.js
+client/shared/element-match.js

@@ -2,10 +2,10 @@
 // PATH 편집 없이도 쓰도록 여러 위치를 확인한다(특히 Windows에서 PATH 등록이 진입장벽):
 //   1) PATH  2) LYRA_POPPLER(=bin 폴더)  3) 프로젝트 tools/ 아래 압축 푼 poppler  4) 일반 설치 위치
 import { existsSync, readdirSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { APP_DIR } from "./paths.js";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../.."); // project root
+const ROOT = APP_DIR;
 
 // tools/ 안에 압축 푼 poppler의 bin 후보 (poppler-windows: <폴더>/Library/bin)
 function bundleBinDirs() {

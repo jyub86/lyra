@@ -28,6 +28,71 @@
 >   프로필은 `-env:UserInstallation`(OS 무관). 미설치 시 명확 안내로 graceful. Windows: LibreOffice/poppler 설치+PATH.
 > - DB 마이그레이션은 **비파괴**(services에 theme_overrides·transition 컬럼 ALTER 추가, `core/db/index.js` ensureColumn).
 
+> ⚠️ **v4.20 (포터블 배포 · 자동 업데이트)** — 구현 기준(현행)
+> - 왜: 다른 교회에도 나눠 주려면 "Bun 설치 → 터미널 → 시드"를 시킬 수 없다.
+>   **압축 풀고 더블클릭**이 되어야 한다. `bun build --compile`로 런타임까지 한 파일에 담는다.
+> - **경로는 `core/lib/paths.js` 하나로** — 컴파일하면 `import.meta.url`이 디스크가 아니라
+>   바이너리 속 가상 경로(`/$bunfs/root/…`)라 예전처럼 `../../data`를 계산하면 없는 곳을 본다
+>   (실측: 서버는 뜨는데 편집기가 404). `process.execPath`는 **진짜 위치**를 주므로 이걸 쓴다.
+>   `COMPILED` / `APP_DIR`(실행파일 옆) / `DATA_DIR`(쓰기 가능한 데이터) 셋만 기억하면 된다.
+>   DATA_DIR은 **실행파일 옆 data/** 가 원칙(폴더째 USB로 옮기는 포터블), 쓰기가 막힌 위치면
+>   OS 앱데이터로 대피한다. `LYRA_DATA`로 직접 지정 가능. 시작 로그에 항상 찍는다.
+>   - 쓰기 가능 판정은 **프로브 파일을 실제로 써 본다**. `accessSync(W_OK)`를 쓰면 안 된다 —
+>     Windows에서 디렉터리 ACL을 안 보고 읽기 전용 속성만 확인해서 Program Files를 통과시키고,
+>     앱은 멀쩡히 뜬 뒤 **첫 저장에서야** 실패한다(예배 준비 중 최악의 시점).
+>     실측: 555 권한 폴더에 두면 `~/Library/Application Support/Lyra` 로 대피하고 저장까지 정상.
+> - **자산은 바이너리에 심는다**: `scripts/gen-assets.js`가 client·themes·fonts·schema.sql·
+>   package.json을 훑어 `core/assets.generated.js`(import … with {type:"file"})를 만든다.
+>   개발 모드에선 같은 import가 **디스크 실제 경로**를 주므로 서버 코드는 한 갈래다(client 수정 즉시 반영).
+>   `bun run dev`가 이 생성을 먼저 돌린다.
+>   - **한 파일을 모듈이자 임베드 자산으로 동시에 쓸 수 없다**(Bun 번들러가 named export를 잃는다).
+>     그래서 `element-match.js`는 core가 원본이고 `client/shared/`로 **생성된 사본**을 둔다
+>     (gen-assets가 매번 동기화하므로 낡을 틈이 없다).
+> - **첫 실행 콘텐츠 등록**(`autoSeed`, `core/db/seed/index.js`): 저작권 자료는 배포판에 못 넣으므로
+>   사용자가 `data/source/`에 넣고 다시 켜면 **비어 있는 표만** 채운다. 있는 파일만, 한 번만.
+>   실측: hymns+readings만 넣으면 그 둘만 등록되고 성경은 명확한 오류, 2회차엔 재적재 없음.
+>   콘텐츠가 0이어도 편집·발표·템플릿·폰트는 정상 동작한다(공개 배포가 성립하는 근거).
+> - **런처(`Lyra-mac.command`·`Lyra-windows.bat`) 폐기** — 배포판이 그 역할을 대신한다.
+>   런처는 `bun run server/index.js`를 직접 불러서, 생성물(`core/assets.generated.js`)이 없는
+>   새 체크아웃에서는 **모듈을 못 찾고 죽었다**(실측). 소스 실행은 `bun install && bun run dev`.
+>   런처가 하던 **브라우저 자동 열기**는 서버가 물려받았다 — **배포판이면 기본으로 열고**
+>   개발 모드는 예전처럼 `LYRA_OPEN=1`일 때만(재시작이 잦아 매번 탭이 열리면 성가시다).
+>   `LYRA_OPEN=0`으로 배포판에서도 끌 수 있다. 네 조합 모두 실측 확인.
+>   더블클릭했는데 검은 창만 뜨고 아무 일도 안 일어나면 일반 사용자는 거기서 막힌다.
+> - **생성물은 저장소에 두지 않는다**(`core/assets.generated.js`·`client/shared/element-match.js`).
+>   진입점(`bun run dev`/`build`)이 항상 새로 만든다 — 커밋해 두면 client 파일을 더할 때마다
+>   diff가 지저분해지고, 낡은 채로 굳을 위험이 생긴다.
+> - **빌드/릴리스**: `scripts/build.js [--all]` → `dist/Lyra-<ver>-<mac-apple-silicon|mac-intel|windows>/`
+>   (64·70·117MB). `scripts/release.js` → zip + **checksums.txt**.
+>   - zip은 **실행 권한을 직접 기록**해야 한다(`attrs: mode << 16`, `os: 3`). 안 하면 압축을 푼
+>     사용자에게 `rw-r--r--`로 떨어져 더블클릭이 안 된다(실측).
+>   - 배포 파일명은 **ASCII만** — 한글 파일명은 zip에서 깨져 `unzip`이 거부한다(실측).
+> - **자동 업데이트**(`core/tools/update.tools.js`): `check_update` / `apply_update` / `get_version`.
+>   GitHub Releases에서 내 플랫폼 zip을 받아 교체한다. ⚙예배 메뉴 맨 아래에 버전 + 설치 버튼.
+>   - **교체는 OS별로 다르다**(`swapBinary`). POSIX는 기존 파일 **위로 rename이 원자적**이고
+>     실행 중인 프로세스도 멀쩡하다(실측) → **한 번에 끝나 중간 상태가 없다**.
+>     Windows만 실행 중 파일 위로 못 옮기므로 `.old`로 비켜 두는 2단계를 쓰고, 두 번째 rename이
+>     실패하면 되돌린다(실측: 모의 실패 시 원래 실행파일 복구됨). `.old`는 다음 실행 때 삭제.
+>     초안은 POSIX에서도 2단계를 밟아, 그 사이에 죽으면 **실행파일이 아예 사라지는** 구간이 있었다.
+>   - 실측 경고: **macOS에서 기존 파일에 "써 넣으면" 안 된다.** 쓰기 자체는 그냥 되지만
+>     (4바이트로 잘리는 것도 확인), 그렇게 바꾼 바이너리는 **코드 서명이 깨져 커널이 SIGKILL**
+>     한다(실측: 종료코드 137, 로그 한 줄 없이 죽는다). rename은 새 inode라 멀쩡하다 —
+>     즉 rename은 "더 안전한 방법"이 아니라 macOS에서 **유일하게 되는 방법**이다.
+>   - **전 구간 실측 완료**(가짜 릴리스 서버 + 실제 zip): 0.1.0 실행 → 0.2.0 감지 →
+>     `apply_update` 1.1초 → 실행 중 서버 정상 → 재시작하니 0.2.0 · 폰트 14종 · `data/` 보존.
+>     1바이트 변조한 zip은 "체크섬이 맞지 않습니다"로 거부하고 실행파일·찌꺼기 모두 무사.
+>     테스트 이음새는 `LYRA_UPDATE_API`(LYRA_REPO와 같은 성격 — 사용자 문서에 넣지 말 것).
+>   - **checksums.txt가 없으면 설치를 거부**한다. 받은 것을 그대로 실행하는 경로라 여기서 타협하면 안 된다.
+>   - 버전 비교는 **숫자로**(`isNewer`) — 문자열 비교면 1.2.10 < 1.2.9 가 된다. 10건 단위 검증.
+>   - 릴리스 조회는 **6시간 캐시**(`force`로 무시). GitHub 비인증 API는 IP당 시간당 60회라,
+>     편집기를 새로고침할 때마다 부르면 한도에 걸려 **조용히** 실패한다(원인 찾기 어려운 증상).
+>     설치 직전에는 캐시를 믿지 않고 다시 조회한다.
+>   - fetch에 타임아웃(조회 8초·내려받기 10분)과 크기 상한(400MB)을 둔다 — 불안정한 와이파이에서
+>     무한정 매달리지 않게. 개발 모드에서는 확인·설치 모두 하지 않는다.
+>   - `LYRA_REPO`는 개발용 — 업데이트 출처를 바꾸는 값이라 **사용자 문서에 넣지 말 것**.
+> - 미확인(정직하게): **Windows 실제 실행·업데이트 교체는 이 맥에서 검증 못 했다.** rename 방식은
+>   Windows에서 허용되는 것으로 알려져 있으나 실기 확인이 필요하다. macOS 서명·공증도 미적용.
+
 > ⚠️ **v4.19 (여러 슬라이드의 같은 요소를 한 번에 수정)** — 구현 기준(현행)
 > - 왜: 44장에 깔린 띠 도형 색, 25장의 제목 위치, 19장의 캡션 문구를 장마다 고치고 있었다.
 >   `copy_slide_style`은 **서식 12개 필드(STYLE_FIELDS)** 만 다뤄서 도형 `fill`·이미지 `url`·

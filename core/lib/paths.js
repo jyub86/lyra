@@ -4,13 +4,24 @@
 // 가상 경로(`/$bunfs/root/…`)를 가리킨다. 예전처럼 거기서 `../../data`를 계산하면
 // 존재하지 않는 곳을 보게 되고, 서버는 뜨는데 편집기가 404가 난다(실측으로 확인).
 // 반면 `process.execPath`는 컴파일된 바이너리의 **진짜 위치**를 준다.
-import { dirname, join, normalize } from "node:path";
+import { basename, dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 
 // 컴파일된 단일 실행파일인가. (bun build --compile 산출물에서만 참)
-export const COMPILED = import.meta.url.includes("/$bunfs/");
+//
+// 판정은 **실행파일 이름**으로 한다 — 개발이면 런타임인 `bun`(윈도우는 `bun.exe`)이 돌고,
+// 배포판이면 바이너리 자신(`Lyra`/`Lyra.exe`)이 돈다. 플랫폼과 무관해서 제일 안전하다.
+//
+// ⚠️ 내장 파일시스템 경로로 판정하면 안 된다: macOS는 `/$bunfs/root/…` 인데
+// **Windows는 `B:/~BUN/root/…`** 라 `/$bunfs/`만 보면 배포판을 "개발 모드"로 오인한다.
+// 그러면 DATA_DIR이 읽기 전용 가상 드라이브(`B:\data`)를 가리켜 `EPERM: mkdir '\'` 로 죽고,
+// 브라우저 자동 열기와 자동 업데이트도 함께 꺼진다(0.1.0 Windows 실기에서 실제로 발생).
+// 경로 검사는 보조 신호로만 남기고 두 형식을 모두 본다.
+const EXE = basename(process.execPath).toLowerCase();
+const BUNFS = /(\/\$bunfs\/|[/\\]~BUN[/\\])/i;
+export const COMPILED = !/^bun(-debug|-profile)?(\.exe)?$/.test(EXE) || BUNFS.test(import.meta.url);
 
 // 앱이 놓인 폴더. 배포판에서는 실행파일 옆, 개발에서는 저장소 루트.
 // 번들해 둔 외부 도구(tools/ffmpeg 등)를 찾을 때 기준이 된다.
@@ -50,8 +61,12 @@ function resolveDataDir() {
     mkdirSync(p, { recursive: true });
     return p;
   }
+  // 쓰기 검사는 **모드와 무관하게 항상** 한다. 개발 모드에선 저장소 폴더라 그냥 통과하고,
+  // 혹시 COMPILED 판정이 틀려 엉뚱한 곳(예: 읽기 전용 내장 FS)을 가리키더라도
+  // 앱이 죽는 대신 사용자 폴더로 물러난다 — 0.1.0 Windows에서 `EPERM: mkdir '\'` 로
+  // 시작조차 못 하던 사고를 한 겹 더 막는다.
   const side = join(APP_DIR, "data");
-  if (!COMPILED || canWrite(side)) return side;
+  if (canWrite(side)) return side;
   const fallback = osDataDir();
   mkdirSync(fallback, { recursive: true });
   return fallback;

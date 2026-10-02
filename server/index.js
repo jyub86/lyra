@@ -2,7 +2,7 @@
 // Bun.serve owns one port for static files, the HTTP tool API, and the
 // presenter WebSocket. Tools themselves live in the registry; this only wires.
 import { normalize } from "node:path";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readSync, statSync } from "node:fs";
 import { handleApi } from "../adapters/http.js";
 import { websocket } from "../adapters/ws.js";
 import { closeDb } from "../core/db/index.js";
@@ -66,8 +66,39 @@ function serveFile(path, req) {
   return new Response(f, { headers: { "Accept-Ranges": "bytes" } });
 }
 
-const server = Bun.serve({
-  port: PORT,
+// 치명적 오류로 끝날 때, 더블클릭으로 연 터미널 창이 **읽기도 전에 닫히는 것**을 막는다.
+// (Finder에서 실행파일을 더블클릭하면 `… ; exit;` 로 돌아서, 프로세스가 죽는 순간 창이 사라진다.
+//  사용자는 "열었는데 아무 일도 안 일어난다"로만 받아들인다 — 실기에서 실제로 겪었다.)
+function dieVisibly(message, hint) {
+  console.error(`\n❌ ${message}`);
+  if (hint) console.error(`   ${hint}`);
+  if (process.stdin.isTTY) {
+    console.error("\n   이 창을 닫으려면 Enter 를 누르세요.");
+    try { readSync(0, Buffer.alloc(1)); } catch {}
+  }
+  process.exit(1);
+}
+
+// 포트가 이미 쓰이고 있으면 **다음 번호로 비켜간다**.
+// 예전엔 EADDRINUSE 로 그냥 죽었는데, 4321을 쓰는 다른 프로그램이 있거나 Lyra를 두 번 열면
+// 창이 번쩍 닫히고 끝이라 원인을 알 수 없었다. 포트는 시작 로그와 브라우저 자동 열기에
+// 그대로 반영되므로 번호가 바뀌어도 쓰는 데 지장이 없다.
+function serveOnFreePort(options, firstPort, tries = 20) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      return Bun.serve({ ...options, port: firstPort + i });
+    } catch (e) {
+      if (e?.code !== "EADDRINUSE") throw e;
+      if (i === 0) console.log(`  · 포트 ${firstPort} 이(가) 사용 중 → 다른 번호를 찾는 중…`);
+    }
+  }
+  dieVisibly(
+    `포트 ${firstPort}~${firstPort + tries - 1} 이 모두 사용 중이라 시작할 수 없습니다.`,
+    "Lyra가 이미 실행 중인지 확인하거나, 다른 포트로 실행하세요 (예: PORT=5000).",
+  );
+}
+
+const server = serveOnFreePort({
   idleTimeout: 120,
   // 큰 예배 내보내기(JSON에 이미지 base64 포함, 수백 MB)도 가져올 수 있게 본문 한도 상향.
   // (기본 128MB) — 이미지 다수/고해상도 덱은 이를 쉽게 넘긴다.
@@ -92,7 +123,7 @@ const server = Bun.serve({
     return new Response("not found", { status: 404 });
   },
   websocket,
-});
+}, PORT);
 
 // LAN 주소도 함께 안내 (같은 네트워크의 다른 기기에서 접속용).
 import { networkInterfaces } from "node:os";

@@ -38,6 +38,8 @@ const README = `Lyra — 주일예배 프레젠테이션
 
   · macOS에서 "확인되지 않은 개발자" 경고가 뜨면
     Lyra를 마우스 오른쪽 클릭 → [열기] → [열기] 를 한 번만 해주세요.
+    (터미널이 익숙하면: 이 폴더에서  xattr -dr com.apple.quarantine .  를 한 번 실행하면
+     경고 없이 바로 열립니다.)
   · Windows에서 "PC를 보호했습니다" 창이 뜨면
     [추가 정보] → [실행] 을 눌러주세요.
 
@@ -61,6 +63,26 @@ const README = `Lyra — 주일예배 프레젠테이션
 버전 ${version}
 `;
 
+// macOS 실행파일 서명.
+//
+// **반드시 해야 한다.** `bun build --compile` 은 자산을 Mach-O 뒤에 덧붙이는데 그게 링커의
+// ad-hoc 서명을 깨뜨린다(`codesign --verify` → "code or signature have been modified").
+// 내 맥에서는 격리 속성이 없어 그냥 실행되지만, **인터넷에서 받으면 Gatekeeper가 전체 검증을
+// 돌려 "손상되었기 때문에 열 수 없습니다. 휴지통으로 이동"** 이라고 띄운다(0.1.1 실기에서 발생).
+// 사용자는 이걸 보고 바이러스로 오해하고 지운다 — 배포에서 가장 치명적인 첫인상.
+//
+// LYRA_SIGN_IDENTITY 가 있으면 Developer ID로 서명한다(+ LYRA_NOTARY_PROFILE 이 있으면 공증까지).
+// 없으면 ad-hoc(`-`)으로 서명한다 — 서명은 유효해지지만 공증은 아니라서 첫 실행에
+// "확인되지 않은 개발자" 안내가 뜬다(우클릭 → 열기로 통과 가능).
+async function signMac(exe, label) {
+  const identity = process.env.LYRA_SIGN_IDENTITY || "-";
+  const adhoc = identity === "-";
+  await Bun.$`codesign --force --timestamp=${adhoc ? "none" : "http://timestamp.apple.com/ts01"} ${adhoc ? [] : ["--options", "runtime"]} --sign ${identity} ${exe}`.quiet();
+  // 서명이 실제로 유효한지 확인하고 넘어간다 — 조용히 깨진 채 배포되면 안 된다.
+  await Bun.$`codesign --verify --strict ${exe}`.quiet();
+  return adhoc ? "ad-hoc 서명" : `서명: ${identity.replace(/\(.*/, "").trim()}`;
+}
+
 for (const target of wanted) {
   const t = TARGETS[target];
   const outDir = join(DIST, `Lyra-${version}-${t.name}`);
@@ -72,9 +94,19 @@ for (const target of wanted) {
   const t0 = Date.now();
   await Bun.$`bun build ${join(ROOT, "server/index.js")} --compile --target=${target} --outfile=${exe}`
     .cwd(ROOT).quiet();
+
+  let note = "";
+  if (target.startsWith("bun-darwin")) {
+    if (process.platform !== "darwin") {
+      note = " ⚠️ 서명 안 됨(맥에서 빌드해야 함 — 받는 쪽에서 '손상됨'이 뜬다)";
+    } else {
+      note = " · " + await signMac(exe, t.name);
+    }
+  }
+
   writeFileSync(join(outDir, "README.txt"), README);   // 한글 파일명은 zip에서 깨진다(ASCII 유지)
   const mb = (statSync(exe).size / 1048576).toFixed(0);
-  console.log(`${mb}MB · ${((Date.now() - t0) / 1000).toFixed(1)}초 → ${outDir.replace(ROOT + "/", "")}`);
+  console.log(`${mb}MB · ${((Date.now() - t0) / 1000).toFixed(1)}초${note}`);
 }
 
 console.log("\n완료. dist/ 폴더를 압축해 배포하세요.");

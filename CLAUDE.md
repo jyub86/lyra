@@ -99,7 +99,19 @@
 >   6가지 조합(개발 mac/win/bun-debug · 배포 mac/win실측/이름변경) 검증.
 >   2차 방어선으로 **쓰기 검사를 모드와 무관하게 항상** 수행 — 판정이 틀려도 죽는 대신 사용자 폴더로 물러난다.
 >   교훈: 크로스 플랫폼 산출물은 **한 OS에서만 확인하고 넘어가면 안 된다**. 이 버그는 맥에서 100% 정상이었다.
-> - 미확인: macOS 서명·공증 미적용. Windows 업데이트 교체(잠긴 exe의 rename)는 여전히 실기 확인 필요.
+> - **v0.1.2 — macOS "손상되었기 때문에 열 수 없습니다"**(실기 보고): 받은 사람이 바이러스로 오해하고
+>   지우게 되는, 배포에서 가장 치명적인 첫인상이었다.
+>   원인은 손상이 아니라 **깨진 서명**이다 — `bun build --compile`이 자산을 Mach-O 뒤에 덧붙이면서
+>   링커의 ad-hoc 서명을 무효화한다(`codesign --verify` → "code or signature have been modified").
+>   **내 맥에서는 멀쩡히 실행된다** — 격리 속성(`com.apple.quarantine`)이 없어 Gatekeeper가
+>   전체 검증을 안 하기 때문. 인터넷에서 받아야만 드러난다.
+>   → `scripts/build.js`가 빌드 직후 **반드시 재서명**하고 `codesign --verify --strict`로 확인한다.
+>   `LYRA_SIGN_IDENTITY`가 있으면 Developer ID(+`--options runtime`+타임스탬프), 없으면 ad-hoc.
+>   맥이 아닌 곳에서 darwin 타깃을 빌드하면 서명을 못 하므로 경고를 찍는다.
+>   실측(격리 속성을 붙여 재현): 서명 전 `invalid signature …` → **"손상됨"**(우회 불가),
+>   서명 후 `rejected` → **"확인되지 않은 개발자"**(우클릭→열기로 통과). 사용자 경험이 갈리는 지점.
+> - 미확인: **공증(notarization) 미적용** — 인증서를 이 맥에 설치하면 `LYRA_SIGN_IDENTITY` +
+>   `notarytool`로 붙일 수 있다. Windows 업데이트 교체(잠긴 exe의 rename)도 여전히 실기 확인 필요.
 
 > ⚠️ **v4.19 (여러 슬라이드의 같은 요소를 한 번에 수정)** — 구현 기준(현행)
 > - 왜: 44장에 깔린 띠 도형 색, 25장의 제목 위치, 19장의 캡션 문구를 장마다 고치고 있었다.

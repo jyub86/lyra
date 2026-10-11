@@ -25,9 +25,9 @@ function walk(dir, base = dir, out = []) {
   return out;
 }
 
-const builds = readdirSync(DIST).filter((n) => n.startsWith(`Lyra-${version}-`) && statSync(join(DIST, n)).isDirectory());
+const builds = readdirSync(DIST).filter((n) => /^Lyra-(mac-apple-silicon|mac-intel|windows)$/.test(n) && statSync(join(DIST, n)).isDirectory());
 if (!builds.length) {
-  console.error(`dist/ 에 Lyra-${version}-* 폴더가 없습니다. 먼저 'bun run scripts/build.js --all' 을 실행하세요.`);
+  console.error(`dist/ 에 Lyra-<플랫폼> 폴더가 없습니다. 먼저 'bun run scripts/build.js --all' 을 실행하세요.`);
   process.exit(1);
 }
 
@@ -37,16 +37,20 @@ mkdirSync(OUT, { recursive: true });
 const sums = [];
 for (const name of builds) {
   const dir = join(DIST, name);
+  // zip **파일명**에만 버전을 넣고, 압축을 풀었을 때 생기는 **폴더 이름에는 넣지 않는다**.
+  // 업데이트는 실행파일만 교체하므로(데이터를 지키려면 폴더를 그대로 둬야 한다) 폴더에
+  // 버전이 박혀 있으면 "0.1.4 폴더인데 0.1.6이 돌아가는" 상태가 되어 업데이트가 안 된 줄 안다.
+  const inner = name;                                   // Lyra-mac-apple-silicon
+  const zipName = `Lyra-${version}-${name.replace(/^Lyra-/, "")}.zip`;
   const files = {};
   for (const rel of walk(dir)) {
     // 실행 권한을 zip에 **직접 기록**해야 한다. 안 그러면 압축을 푼 사용자에게
     // rw-r--r-- 로 떨어져 더블클릭이 안 된다(실측으로 걸렸다).
     // zip의 외부속성 상위 16비트 = unix 모드, os=3 은 Unix 표기를 뜻한다.
     const mode = rel.endsWith(".txt") ? 0o644 : 0o755;
-    files[`${name}/${rel}`] = [new Uint8Array(readFileSync(join(dir, rel))), { attrs: mode << 16, os: 3 }];
+    files[`${inner}/${rel}`] = [new Uint8Array(readFileSync(join(dir, rel))), { attrs: mode << 16, os: 3 }];
   }
   const zipped = zipSync(files, { level: 6 });
-  const zipName = `${name}.zip`;
   writeFileSync(join(OUT, zipName), zipped);
   const sha = new Bun.CryptoHasher("sha256").update(zipped).digest("hex");
   sums.push(`${sha}  ${zipName}`);

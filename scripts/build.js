@@ -62,7 +62,11 @@ const README = `Lyra — 주일예배 프레젠테이션
   · poppler     PDF 가져오기·내용 검색
   · ffmpeg      배경 영상 루프 굽기
 
-버전 ${version}
+■ 버전 확인 / 업데이트
+  이 파일이 만들어진 버전: ${version}
+  지금 실행 중인 버전은 Lyra를 켠 뒤 편집기 ⚙예배 메뉴 맨 아래에서 볼 수 있습니다.
+  새 버전이 나오면 상단에 초록색 [⬆ 새 버전] 버튼이 뜹니다 — 누르면 자동으로 설치됩니다.
+  (업데이트해도 이 폴더 이름과 data/ 는 그대로입니다. 실행파일만 교체됩니다.)
 `;
 
 // macOS 실행파일 서명.
@@ -87,7 +91,10 @@ async function signMac(exe, label) {
 
 for (const target of wanted) {
   const t = TARGETS[target];
-  const outDir = join(DIST, `Lyra-${version}-${t.name}`);
+  // 폴더 이름에 버전을 넣지 않는다. 업데이트는 실행파일만 바꾸므로(데이터를 지키려면
+  // 폴더를 그대로 둬야 한다) 이름에 버전이 박혀 있으면 "0.1.4 폴더인데 0.1.6이 돌아가는"
+  // 상태가 되어 사용자가 업데이트가 안 된 줄 안다. zip 파일명에는 버전이 남는다.
+  const outDir = join(DIST, `Lyra-${t.name}`);
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(join(outDir, "data"), { recursive: true });
 

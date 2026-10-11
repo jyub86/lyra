@@ -3586,15 +3586,17 @@ async function loadVersion() {
     if (!v.compiled) return;
     const u = await callTool("check_update");
     if (!u.available) return;
+    // 상단바에 띄운다 — 예전엔 ⚙예배 메뉴 맨 아래(스크롤 732px 지점)에만 있어서
+    // "업데이트가 있다고 알려주지 않는다"는 보고가 왔다. 새 버전이 있을 때만 보인다.
     btn.hidden = false;
-    btn.textContent = `새 버전 ${u.latest} 설치`;
-    btn.classList.add("accent");
+    btn.textContent = `⬆ 새 버전 ${u.latest}`;
+    btn.title = `지금 ${u.current} → ${u.latest} 로 업데이트합니다`;
     btn.onclick = async () => {
       if (!confirm(`Lyra ${u.latest} 로 업데이트합니다.\n예배·업로드 자료는 그대로 유지됩니다.\n\n설치 후 Lyra를 다시 시작해야 합니다. 계속할까요?`)) return;
       btn.disabled = true; btn.textContent = "내려받는 중…";
       try {
         const r = await callTool("apply_update");
-        btn.textContent = r.updated ? "다시 시작하세요" : "이미 최신";
+        btn.textContent = r.updated ? "✓ 다시 시작하세요" : "이미 최신";
         if (r.updated) alert(`${r.to} 설치 완료.\n\nLyra를 닫았다가 다시 실행해 주세요.`);
       } catch (e) {
         btn.disabled = false; btn.textContent = "업데이트 실패";

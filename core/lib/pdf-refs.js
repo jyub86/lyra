@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { parseParts, extractGlobalContext } from "./bible-ref.js";
 import { findPoppler } from "./poppler.js";
+import { COMPILED } from "./paths.js";
 
 // 주 본문(책·장) 감지는 "읽기 순서" 텍스트가 필요하다. pdf.js의 그리기 순서 텍스트는
 // 복잡한 레이아웃(CJK 주보)에서 뒤섞이므로, 있으면 poppler pdftotext -layout 로 정확히
@@ -52,17 +53,73 @@ async function layoutTextFromPage(page) {
 }
 
 let _pdfjs = null;
+// 배포판(bun build --compile)에서 pdf.js를 살리는 두 가지 손질.
+// 둘 다 "번들러가 정적으로 볼 수 있는가"의 문제다 — 소스 실행에선 없어도 그냥 됐다.
+//
+// 1) DOMMatrix — pdf.js는 Node에서 @napi-rs/canvas로 폴리필하는데, 그건 네이티브
+//    바인딩(.node)이라 바이너리에 안 들어간다. 모듈 최상위의 `new DOMMatrix()`가
+//    바로 터져서 import 자체가 실패한다("DOMMatrix is not defined").
+//    우리는 텍스트·오퍼레이터만 읽고 캔버스 렌더링은 하지 않으므로, 모듈이 로드될
+//    정도의 껍데기면 충분하다(렌더링 경로에서만 실제 연산에 쓰인다).
+// 2) 워커 — pdf.js는 `import(this.workerSrc)` 로 **변수**를 넘겨 워커를 찾는다.
+//    번들러가 정적 분석을 못 해 워커가 바이너리에 안 들어가고, 실행 시
+//    `/$bunfs/root/pdf.worker.mjs` 를 찾다 실패한다.
+//    pdf.js가 열어 둔 `globalThis.pdfjsWorker` 에 미리 넣어 두면 그 import를 건너뛴다.
+//    여기서는 **문자열 리터럴** 동적 import라 번들에 포함된다(지연 로딩도 유지).
+function ensurePdfjsEnv() {
+  if (typeof globalThis.DOMMatrix === "undefined") {
+    globalThis.DOMMatrix = class DOMMatrix {
+      constructor(init) {
+        const m = Array.isArray(init) ? init : [1, 0, 0, 1, 0, 0];
+        [this.a, this.b, this.c, this.d, this.e, this.f] = m;
+      }
+      // 렌더링 경로 전용 — 텍스트 추출에서는 호출되지 않는다.
+      multiply() { return this; }
+      multiplySelf() { return this; }
+      preMultiplySelf() { return this; }
+      translate() { return this; }
+      scale() { return this; }
+      invertSelf() { return this; }
+    };
+  }
+  // Path2D도 같은 이유(캔버스 폴리필 실패)로 비어 있다. 없으면 pdf.js가
+  // "rendering may be broken" 경고를 띄우는데, 우리는 렌더링을 안 하므로 사실이 아니다.
+  if (typeof globalThis.Path2D === "undefined") {
+    globalThis.Path2D = class Path2D { addPath() {} };
+  }
+}
+
+// pdf.js가 import 시점에 띄우는 캔버스 경고를 가린다.
+// 사용자가 보는 콘솔 창에 "npm has a bug … Please try `npm i` again" 이 그대로 떠서
+// 배포판 사용자가 할 수도 없는 조치를 하라는 꼴이었다. 아는 두 줄만 지우고 나머지는 통과시킨다.
+async function importQuietly(load) {
+  const orig = console.warn;
+  console.warn = (...a) =>
+    /@napi-rs\/canvas|Cannot polyfill `(DOMMatrix|Path2D)`/.test(String(a[0] ?? "")) ? undefined : orig(...a);
+  try {
+    return await load();
+  } finally {
+    console.warn = orig;
+  }
+}
+
 async function pdfjs() {
   if (_pdfjs) return _pdfjs;
+  ensurePdfjsEnv();
   try {
-    _pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    globalThis.pdfjsWorker ??= await importQuietly(() => import("pdfjs-dist/legacy/build/pdf.worker.mjs"));
+    _pdfjs = await importQuietly(() => import("pdfjs-dist/legacy/build/pdf.mjs"));
   } catch (e) {
     // 설치가 덜 된 PC(특히 새로 옮긴 윈도우)에서 "Cannot find module …" 원문이 그대로
     // 떠서 원인을 알기 어려웠다 → 무엇을 하면 되는지로 바꿔 준다.
+    // 배포판에서는 `bun install` 을 할 수 없으니 안내를 갈라야 한다 —
+    // 예전에는 배포판에서도 "bun install 하세요"가 떠서 할 수 있는 일이 없었다.
     if (/Cannot find (module|package)|ERR_MODULE_NOT_FOUND/i.test(e.message)) {
       throw new Error(
-        "PDF 처리 모듈(pdfjs-dist)이 설치돼 있지 않습니다. Lyra 폴더에서 `bun install`을 실행하세요. " +
-        "그래도 안 되면 프로젝트를 OneDrive 안이 아닌 짧은 경로(예: C:\\lyra)로 옮긴 뒤 다시 `bun install` 하세요.",
+        COMPILED
+          ? "이 배포판에 PDF 처리 모듈이 빠져 있습니다. 빌드 문제이니 배포한 사람에게 알려 주세요."
+          : "PDF 처리 모듈(pdfjs-dist)이 설치돼 있지 않습니다. Lyra 폴더에서 `bun install`을 실행하세요. " +
+            "그래도 안 되면 프로젝트를 OneDrive 안이 아닌 짧은 경로(예: C:\\lyra)로 옮긴 뒤 다시 `bun install` 하세요.",
       );
     }
     throw e;

@@ -122,6 +122,18 @@
 >   모두 실제 포트를 따라가므로 번호가 바뀌어도 지장 없다(실측: 4321 점유 시 4322, 자동 열기도 4324 추종).
 >   → `dieVisibly()`가 치명적 오류에 **Enter 를 받을 때까지 창을 유지**한다(TTY일 때만).
 >   교훈: 개발 중 띄워 둔 서버가 사용자 환경에선 "원인 모를 실행 실패"로 나타난다.
+> - **v0.1.5 — 배포판에서 주보 PDF 성구 추출이 죽던 문제**: `DOMMatrix is not defined`.
+>   둘 다 **번들러가 정적으로 볼 수 있는가**의 문제라 소스 실행에선 멀쩡했다.
+>   ① pdf.js는 Node에서 `@napi-rs/canvas`로 DOMMatrix를 폴리필하는데 그건 네이티브
+>      바인딩(.node)이라 바이너리에 안 들어간다 → 모듈 최상위 `new DOMMatrix()`에서 import 자체가 실패.
+>      텍스트·오퍼레이터만 읽고 캔버스 렌더는 안 하므로 **껍데기 DOMMatrix/Path2D**로 충분하다.
+>   ② 워커는 `import(this.workerSrc)` 처럼 **변수**를 넘겨서 번들에 안 담긴다
+>      → `globalThis.pdfjsWorker`에 **문자열 리터럴 동적 import**로 미리 넣어 그 경로를 건너뛴다.
+>   ③ import 시점의 `@napi-rs/canvas` 경고("npm has a bug … try `npm i` again")가 사용자 콘솔에
+>      그대로 떴다 — 배포판 사용자는 할 수 있는 일이 없다 → 아는 두 줄만 가린다.
+>   ④ 모듈 누락 안내도 `COMPILED`로 갈랐다(배포판에서 "bun install 하세요"는 무의미).
+>   실측: 빨강 성구 PDF로 수정 전 배포판 `DOMMatrix is not defined` → 수정 후 **2개 정확히 추출**,
+>   개발 모드도 2개 유지. 바이너리 64→67MB(워커 포함).
 > - 미확인: **공증(notarization) 미적용** — 인증서를 이 맥에 설치하면 `LYRA_SIGN_IDENTITY` +
 >   `notarytool`로 붙일 수 있다. Windows 업데이트 교체(잠긴 exe의 rename)도 여전히 실기 확인 필요.
 

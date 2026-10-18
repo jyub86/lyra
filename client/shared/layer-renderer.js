@@ -272,6 +272,11 @@ export function renderElements(root, elements, opts = {}) {
           leader_color: e.leader_color, congregation_color: e.congregation_color, unison_color: e.unison_color, show_tags: e.show_tags,
         });
         applyWholeColor(n, e.color);   // 전체 색을 참조·절번호까지 적용(부분 색상은 유지)
+        // 절 번호 색은 전체 색보다 **나중에** 칠한다. 전체 색을 주면 번호까지 같은 색이 되어
+        // 여러 절이 한 장에 흐를 때 어디서 절이 바뀌는지 분간이 안 된다(실제 예배 덱이 그 상태였다).
+        if (e.type === "bible" && e.verse_no_color) {
+          for (const x of n.querySelectorAll(".ce-verse-no")) x.style.color = e.verse_no_color;
+        }
       }
       applyTextEffects(n, e);   // 성경/가사도 그림자·외곽선(영상 위 가독성)
     } else {

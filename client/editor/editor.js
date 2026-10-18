@@ -1651,6 +1651,10 @@ function renderDesignPanel() {
       field("절 번호", "select", "show_numbers", {
         options: [["auto", "여러 절일 때만"], ["always", "항상"], ["never", "표시 안 함"]],
       });
+      // 본문 색을 주면 절 번호까지 같은 색이 되어 절 경계가 안 보인다 → 번호만 따로 지정.
+      if (el.show_numbers !== "never") {
+        field("절 번호 색", "color", "verse_no_color", { def: "#e0af68" });
+      }
     }
     // ── 글자 ──
     group("ce-type", "글자");

@@ -3,7 +3,7 @@
 // single images pass through. Each page/image becomes a slide with one full-bleed
 // image element on a black background. Shared by /api/import and import_pdf tool.
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { basename, extname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { saveUpload } from "./uploads.js";
 import { findPoppler } from "./poppler.js";
@@ -27,8 +27,8 @@ const LO_PROFILE_DIR = dataPath(".lo-profile");
 
 // Run a subprocess async (doesn't block the server like spawnSync did), returning
 // { code, stderr }. stderr captured for error messages.
-async function run(cmd) {
-  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "pipe" });
+async function run(cmd, env) {
+  const proc = Bun.spawn(cmd, { stdout: "ignore", stderr: "pipe", ...(env ? { env: { ...process.env, ...env } } : {}) });
   const stderr = await new Response(proc.stderr).text();
   const code = await proc.exited;
   return { code, stderr };
@@ -51,6 +51,78 @@ function findSoffice() {
 }
 export function officeImportAvailable() { return !!findSoffice(); }
 
+// 한국 PPT가 쓰는 Windows 전용 글꼴 → 이 컴퓨터에 있는 한글 글꼴로 대체.
+//
+// 왜 필요한가(실측): 교회 PPT는 거의 다 **맑은 고딕**을 쓴다. 맥·리눅스에는 그 글꼴이 없고,
+// fontconfig은 이름만 보고 `Malgun Gothic` → **Verdana**로 떨어뜨린다. Verdana엔 한글
+// 글리프가 없으므로 가사가 통째로 **빈칸·검은 네모**로 변환된다
+// (변환된 PDF의 임베드 글꼴이 `LiberationSans` + WinAnsi 하나뿐인 것으로 확인).
+// 악보·도형은 멀쩡히 나오고 글자만 사라져서 원인을 짐작하기 어렵다.
+//
+// 글리프 폴백에 기대지 않고 **요청 단계에서 이름을 바꿔** 확실히 한글 글꼴을 쓰게 한다.
+const WIN_KO_FONTS = {
+  // 고딕 계열
+  sans: ["Malgun Gothic", "맑은 고딕", "Gulim", "굴림", "Dotum", "돋움",
+    "GulimChe", "굴림체", "DotumChe", "돋움체", "HY중고딕", "HY견고딕", "HCR Dotum"],
+  // 명조 계열
+  serif: ["Batang", "바탕", "BatangChe", "바탕체", "Gungsuh", "궁서", "GungsuhChe", "궁서체",
+    "HY신명조", "HY중명조", "HCR Batang"],
+};
+
+// 이 컴퓨터에서 실제로 쓸 수 있는 한글 글꼴을 고른다(설치 여부를 파일로 확인).
+function pickKoreanFonts() {
+  const candidates = {
+    sans: [
+      ["/System/Library/Fonts/AppleSDGothicNeo.ttc", "Apple SD Gothic Neo"],
+      ["/System/Library/Fonts/Supplemental/AppleGothic.ttf", "AppleGothic"],
+      ["/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc", "Noto Sans CJK KR"],
+      ["/usr/share/fonts/truetype/nanum/NanumGothic.ttf", "NanumGothic"],
+    ],
+    serif: [
+      ["/System/Library/Fonts/Supplemental/AppleMyungjo.ttf", "AppleMyungjo"],
+      ["/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc", "Noto Serif CJK KR"],
+      ["/usr/share/fonts/truetype/nanum/NanumMyeongjo.ttf", "NanumMyeongjo"],
+    ],
+  };
+  const out = {};
+  for (const [kind, list] of Object.entries(candidates)) {
+    const hit = list.find(([path]) => existsSync(path));
+    if (hit) out[kind] = hit[1];
+  }
+  return out;
+}
+
+// fontconfig 설정 파일을 만들고 경로를 돌려준다(없으면 null → 평소대로 동작).
+// 시스템 설정을 **include 해야 한다** — 안 하면 글꼴 경로 자체가 비어 더 나빠진다(실측).
+let _fcFile = null;
+function koreanFontconfig() {
+  if (_fcFile !== null) return _fcFile || null;
+  _fcFile = "";
+  if (process.platform === "win32") return null;   // 윈도우엔 원래 글꼴이 있다
+  const picked = pickKoreanFonts();
+  if (!picked.sans && !picked.serif) return null;  // 대체할 글꼴이 없으면 손대지 않는다
+
+  const rule = (from, to) =>
+    `  <match target="pattern">\n` +
+    `    <test name="family"><string>${from}</string></test>\n` +
+    `    <edit name="family" mode="prepend" binding="strong"><string>${to}</string></edit>\n` +
+    `  </match>`;
+  const rules = [];
+  for (const [kind, names] of Object.entries(WIN_KO_FONTS)) {
+    const to = picked[kind] || picked.sans || picked.serif;
+    for (const from of names) rules.push(rule(from, to));
+  }
+  const xml = `<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "urn:fontconfig:fonts.dtd">\n<fontconfig>\n` +
+    ["/opt/homebrew/etc/fonts/fonts.conf", "/usr/local/etc/fonts/fonts.conf", "/etc/fonts/fonts.conf"]
+      .map((p) => `  <include ignore_missing="yes">${p}</include>`).join("\n") + "\n" +
+    rules.join("\n") + "\n</fontconfig>\n";
+
+  const path = dataPath("lo-fonts.conf");
+  try { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, xml); _fcFile = path; }
+  catch { return null; }
+  return _fcFile;
+}
+
 // Convert an office presentation file (bytes) → PDF bytes via soffice headless.
 async function officeToPdf(filename, bytes) {
   const soffice = findSoffice();
@@ -66,8 +138,11 @@ async function officeToPdf(filename, bytes) {
     const lock = join(LO_PROFILE_DIR, ".lock");
     if (existsSync(lock)) { try { rmSync(lock, { force: true }); } catch { /* ignore */ } }
     const profileUrl = "file://" + (process.platform === "win32" ? "/" + LO_PROFILE_DIR.replace(/\\/g, "/") : LO_PROFILE_DIR);
+    // 한글 글꼴 대체 규칙을 걸고 변환한다(맑은 고딕 등 → 이 컴퓨터의 한글 글꼴).
+    const fcFile = koreanFontconfig();
     const { code, stderr } = await run([soffice, `-env:UserInstallation=${profileUrl}`,
-      "--headless", "--convert-to", "pdf", "--outdir", dir, inPath]);
+      "--headless", "--convert-to", "pdf", "--outdir", dir, inPath],
+      fcFile ? { FONTCONFIG_FILE: fcFile } : null);
     const pdf = readdirSync(dir).find((f) => f.toLowerCase().endsWith(".pdf"));
     if (code !== 0 || !pdf) {
       throw new Error("LibreOffice 변환 실패: " + (stderr ? stderr.slice(0, 200) : "unknown"));

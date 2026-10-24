@@ -148,6 +148,19 @@
 >   실사용 덱이 본문 `#e2e2e2`라 번호도 같은 색이 되어 있으나 마나였다(실측 확인).
 >   → `applyWholeColor` **다음에** 번호 색을 칠한다(순서가 핵심). 지정 안 하면 기존 동작 그대로.
 >   참고: 한 장에 한 절만 있으면 `show_numbers:"auto"`가 번호를 아예 숨기므로 색을 줘도 안 보인다.
+> - **v0.1.8 — PPT 가져오기에서 한글이 통째로 사라지던 문제**(실기 보고): 악보·도형은 나오는데
+>   **가사 글자만 빈칸·검은 네모**로 변환돼 원인을 짐작하기 어려웠다.
+>   원인: 한국 교회 PPT는 거의 다 **맑은 고딕**(Windows 전용)을 쓰는데 맥·리눅스엔 없고,
+>   fontconfig이 이름만 보고 `Malgun Gothic` → **Verdana**(한글 글리프 없음)로 떨어뜨린다.
+>   (확진: 변환된 PDF의 임베드 글꼴이 `LiberationSans` + **WinAnsi**(라틴 전용) 하나뿐.
+>    `fc-match "Malgun Gothic"` → `Verdana`. 반면 `fc-list :lang=ko`는 58개를 보고 있다 —
+>    글꼴이 없는 게 아니라 **이름 매칭이 라틴 글꼴로 떨어지는** 것이 문제다.)
+>   → `koreanFontconfig()`가 fontconfig 설정을 만들어 `FONTCONFIG_FILE`로 넘긴다.
+>   맑은고딕·굴림·돋움·바탕·궁서 등 **Windows 한글 글꼴 이름을 이 컴퓨터의 한글 글꼴로 치환**한다
+>   (mac: Apple SD Gothic Neo → AppleGothic, linux: Noto CJK → Nanum. 파일 존재로 확인).
+>   ⚠️ 설정 파일에 **시스템 fonts.conf를 반드시 include**해야 한다 — 빼면 글꼴 경로가 통째로
+>   비어 오히려 더 나빠진다(첫 시도가 그래서 실패했다). Windows에서는 원래 글꼴이 있으므로 건드리지 않는다.
+>   실측: 수정 전 8장 전부 가사 소실 → 수정 후 8장 전부 정상, PDF 임포트 경로 회귀 없음.
 > - 미확인: **공증(notarization) 미적용** — 인증서를 이 맥에 설치하면 `LYRA_SIGN_IDENTITY` +
 >   `notarytool`로 붙일 수 있다. Windows 업데이트 교체(잠긴 exe의 rename)도 여전히 실기 확인 필요.
 
